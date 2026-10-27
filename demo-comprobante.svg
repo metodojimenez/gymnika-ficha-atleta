@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1100" viewBox="0 0 720 1100" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <rect width="720" height="1100" fill="#fff"/>
+  <rect width="720" height="150" fill="#ececf0"/>
+  <text x="40" y="94" font-size="44" font-weight="800" fill="#35292F">CAPTURA DE EJEMPLO</text>
+  <text x="40" y="226" font-size="34" fill="#5B5155">Solo para la demo</text>
+  <text x="40" y="326" font-size="32" fill="#5B5155">Monto</text>
+  <text x="40" y="420" font-size="80" font-weight="800" fill="#35292F">US$ 40.00</text>
+  <g font-size="30" fill="#5B5155">
+    <line x1="40" y1="500" x2="680" y2="500" stroke="#e1e1e6" stroke-width="2"/>
+    <text x="40" y="550">Para</text><text x="40" y="596" font-size="38" font-weight="700" fill="#35292F">Gymnika</text>
+    <line x1="40" y1="620" x2="680" y2="620" stroke="#e1e1e6" stroke-width="2"/>
+    <text x="40" y="670">De</text><text x="40" y="716" font-size="38" font-weight="700" fill="#35292F">Lucía Demo</text>
+    <line x1="40" y1="740" x2="680" y2="740" stroke="#e1e1e6" stroke-width="2"/>
+    <text x="40" y="790">N.° de operación</text><text x="40" y="836" font-size="38" font-weight="700" fill="#35292F">00123456</text>
+    <line x1="40" y1="860" x2="680" y2="860" stroke="#e1e1e6" stroke-width="2"/>
+    <text x="40" y="910">Fecha</text><text x="40" y="956" font-size="38" font-weight="700" fill="#35292F">Hoy, 10:42</text>
+  </g>
+  <text x="40" y="1046" font-size="26" fill="#5B5155">Imagen ilustrativa · no es un comprobante real</text>
+</svg>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#F6F2EC">
+<title>Pago por revisar · Gymnika</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilos.css?v=4">
+<style>
+  .rv{ max-width:520px; margin:0 auto; padding:20px var(--gutter) 48px; }
+  .rv-top{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+  .rv-top .mark{ font-family:var(--font-display); font-weight:800; letter-spacing:.12em; font-size:18px; }
+  .rv h1{ font-family:var(--font-display); font-size:clamp(28px, 8vw, 36px); line-height:1.05; margin:4px 0 0; }
+  .rv-pack{ margin:8px 0 0; font-size:16px; color:var(--ink-soft); }
+  .rv-amount{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:18px 0 0; }
+  .rv-amount strong{ font-family:var(--font-display); font-size:40px; line-height:1; }
+  .rv-facts{ list-style:none; margin:14px 0 0; padding:0; border-top:1px solid var(--line); }
+  .rv-facts li{ display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); font-size:15px; }
+  .rv-facts span:first-child{ color:var(--ink-soft); }
+  .rv-facts span:last-child{ text-align:right; font-weight:700; }
+  .rv-shot{ display:block; margin:18px 0 0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--line); background:var(--paper-2); }
+  .rv-shot img{ display:block; width:100%; height:auto; max-height:70vh; object-fit:contain; background:#fff; }
+  .rv-noshot{ margin:18px 0 0; padding:16px; border-radius:var(--radius); border:1px dashed var(--line-strong); color:var(--ink-soft); font-size:15px; }
+  .rv-qty{ margin:22px 0 0; }
+  .rv-qty-row{ display:flex; align-items:center; gap:10px; margin-top:6px; }
+  .rv-qty-row button{ flex:0 0 48px; height:48px; border-radius:12px; border:1px solid var(--line-strong); background:var(--surface); font-size:24px; font-weight:700; color:var(--ink); cursor:pointer; }
+  .rv-qty-row input{ flex:1; height:48px; text-align:center; font-size:22px; font-weight:700; margin:0; }
+  .rv-actions{ display:grid; gap:10px; margin-top:18px; }
+  .rv-actions .btn-primary{ min-height:54px; font-size:17px; margin:0; }
+  .rv-reject{ margin-top:6px; }
+  .rv-done{ text-align:center; padding:28px 18px; border-radius:var(--radius); background:var(--ok-bg); border:1px solid var(--ok-line); margin-top:18px; }
+  .rv-done.bad{ background:var(--danger-bg); border-color:var(--danger-line); }
+  .rv-done .ic{ display:inline-grid; place-items:center; width:56px; height:56px; border-radius:50%; background:var(--ok); color:#fff; font-size:28px; font-weight:800; }
+  .rv-done.bad .ic{ background:var(--danger); }
+  .rv-done h2{ font-family:var(--font-display); margin:12px 0 6px; font-size:24px; }
+  .rv-done p{ margin:0; }
+  .rv-status{ display:inline-block; padding:4px 10px; border-radius:999px; font-size:13px; font-weight:700; background:var(--accent-tint); color:var(--accent-deep); }
+  .rv-status.ok{ background:var(--ok-bg); color:var(--ok); } .rv-status.bad{ background:var(--danger-bg); color:var(--danger); }
+</style>
+</head>
+<body>
+<main class="rv" id="rv" aria-live="polite">
+  <div class="rv-top"><span class="mark">GYMNIKA</span><span class="muted">Recepción</span></div>
+  <div role="status" aria-label="Cargando">
+    <div class="skel skel-line" style="width:40%"></div>
+    <div class="skel" style="height:40px;width:80%;margin:10px 0 20px"></div>
+    <div class="skel" style="height:280px"></div>
+  </div>
+</main>
+<script>
+(function(){
+  const SUPABASE_URL = "https://ucsogyvrplsonqpmufty.supabase.co";
+  const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjc29neXZycGxzb25xcG11ZnR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5ODA0NDUsImV4cCI6MjEwNzU1NjQ0NX0.XZ_enfBu30iFH9nUiKnpB4LDJDHvQIvbu2WSIAFV_tc";
+  const METODOS = { yape: "Yape", plin: "Plin", transferencia: "Transferencia" };
+  const MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  const rv = document.getElementById("rv");
+  const token = new URLSearchParams(location.search).get("t") || "";
+  const top = rv.querySelector(".rv-top").outerHTML;
+
+  const esc = (s)=> String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  const dinero = (n, moneda)=> (moneda === "PEN" ? "S/ " : "US$ ") + Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const fecha = (iso)=>{ const d = new Date(iso); if(isNaN(d)) return ""; return `${d.getDate()} ${MESES[d.getMonth()]} · ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+  const fechaCorta = (iso)=>{ const d = new Date(iso + "T00:00:00"); return isNaN(d) ? iso : `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`; };
+  const plural = (n, a, b)=> `${n} ${n === 1 ? a : b}`;
+
+  async function rpc(fn, args){
+    let res;
+    try{
+      res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+        method: "POST",
+        headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, "Content-Type": "application/json" },
+        body: JSON.stringify(args)
+      });
+    } catch { throw new Error("Sin conexión. Revisa tu internet e inténtalo de nuevo."); }
+    const data = await res.json().catch(()=> null);
+    if(!res.ok) throw new Error((data && data.message) || "No se pudo completar. Inténtalo de nuevo.");
+    return data;
+  }
+
+  function pantallaFinal(ok, titulo, texto){
+    rv.innerHTML = `${top}<div class="rv-done${ok ? "" : " bad"}" role="status"><span class="ic" aria-hidden="true">${ok ? "✓" : "!"}</span><h2>${esc(titulo)}</h2><p>${texto}</p></div>`;
+  }
+
+  function render(p){
+    const terapia = p.categoria === "terapia";
+    const base = terapia ? p.sesiones : p.dias;
+    const unidad = (n)=> terapia ? (n === 1 ? "sesión" : "sesiones") : (n === 1 ? "día" : "días");
+    const pendiente = p.estado === "pendiente" && !p.vencido;
+    const estado = p.estado === "aprobada" ? `<span class="rv-status ok">Aprobado</span>`
+      : p.estado === "rechazada" ? `<span class="rv-status bad">Rechazado</span>`
+      : p.vencido ? `<span class="rv-status bad">Enlace vencido</span>` : `<span class="rv-status">Por revisar</span>`;
+    const captura = p.comprobante_url
+      ? (p.es_pdf
+        ? `<p class="rv-noshot"><a class="btn-outline" href="${esc(p.comprobante_url)}" target="_blank" rel="noopener noreferrer">Abrir comprobante (PDF)</a></p>`
+        : `<a class="rv-shot" href="${esc(p.comprobante_url)}" target="_blank" rel="noopener noreferrer" aria-label="Ver la captura en tamaño completo"><img src="${esc(p.comprobante_url)}" alt="Captura del pago de ${esc(p.nombre)}"></a>`)
+      : `<p class="rv-noshot">${p.tiene_comprobante ? "La captura ya no está disponible desde este enlace. Revísala en la app del coach, en Pagos." : "El alumno no subió captura. Verifica el pago con el número de operación."}</p>`;
+
+    rv.innerHTML = `${top}
+      <p class="eyebrow">${terapia ? "Terapia" : "Fortalecimiento"} · ${estado}</p>
+      <h1>${esc(p.nombre)}</h1>
+      <p class="rv-pack">${esc(p.paquete)}${String(p.paquete).includes(String(base)) ? "" : " · " + plural(base, unidad(1), unidad(2))}</p>
+      <div class="rv-amount"><strong class="num">${dinero(p.monto, p.moneda)}</strong>${p.moneda === "PEN" ? "" : `<span class="muted">o su equivalente en soles</span>`}</div>
+      <ul class="rv-facts">
+        <li><span>Pagó con</span><span>${esc(METODOS[p.metodo] || p.metodo)}</span></li>
+        ${p.operacion ? `<li><span>N.° de operación</span><span class="num">${esc(p.operacion)}</span></li>` : ""}
+        <li><span>Enviado</span><span>${fecha(p.creado)}</span></li>
+        ${terapia && p.saldo !== null && p.saldo !== undefined ? `<li><span>Sesiones que ya tiene</span><span class="num">${p.saldo}</span></li>` : ""}
+      </ul>
+      ${captura}
+      ${pendiente ? `
+        <div class="rv-qty">
+          <label for="rvCant" style="margin:0">${terapia ? "Sesiones a acreditar" : "Días de acceso"}</label>
+          <div class="rv-qty-row">
+            <button type="button" id="rvMenos" aria-label="Quitar una">−</button>
+            <input id="rvCant" type="number" inputmode="numeric" min="1" max="${terapia ? 200 : 400}" value="${base}">
+            <button type="button" id="rvMas" aria-label="Agregar una">+</button>
+          </div>
+        </div>
+        <div class="rv-actions">
+          <button type="button" class="btn-primary" id="rvAprobar"></button>
+          <button type="button" class="btn-link rv-reject" id="rvRechazar">El pago no llegó · rechazar</button>
+        </div>
+        <div id="rvRechazo" hidden>
+          <label for="rvMotivo">Motivo (el alumno lo verá)</label>
+          <textarea id="rvMotivo" rows="2">No encontramos el pago con esos datos.</textarea>
+          <button type="button" class="btn-primary danger-fill" id="rvConfirmarRechazo">Rechazar pago</button>
+        </div>
+        <div id="rvMsg" aria-live="polite"></div>`
+      : p.estado !== "pendiente"
+        ? `<p class="rv-noshot" style="border-style:solid">Este pago ya fue ${p.estado === "aprobada" ? "aprobado" : "rechazado"}${p.revisado_at ? " el " + fecha(p.revisado_at) : ""}${p.revisado_por ? " por " + esc(p.revisado_por) : ""}.${p.nota ? " " + esc(p.nota) : ""}</p>`
+        : `<p class="rv-noshot" style="border-style:solid">Este enlace venció. Revisa el pago desde la app del coach, en Pagos.</p>`}`;
+
+    if(!pendiente) return;
+    const cant = document.getElementById("rvCant");
+    const btn = document.getElementById("rvAprobar");
+    const valor = ()=> parseInt(cant.value, 10);
+    const pintarBoton = ()=>{ const n = valor(); btn.textContent = n > 0 ? `Aprobar y acreditar ${plural(n, unidad(1), unidad(2))}` : "Aprobar"; };
+    pintarBoton();
+    cant.oninput = pintarBoton;
+    document.getElementById("rvMenos").onclick = ()=>{ cant.value = Math.max(1, (valor() || base) - 1); pintarBoton(); };
+    document.getElementById("rvMas").onclick = ()=>{ cant.value = Math.min(terapia ? 200 : 400, (valor() || base) + 1); pintarBoton(); };
+    const msg = document.getElementById("rvMsg");
+    const error = (t)=>{ msg.innerHTML = `<div class="error" role="alert">${esc(t)}</div>`; };
+    const ocupado = async (b, texto, fn)=>{
+      if(b.disabled) return;
+      const antes = b.textContent; b.disabled = true; b.textContent = texto;
+      try { await fn(); } catch(e){ error(e.message); } finally { if(b.isConnected){ b.disabled = false; b.textContent = antes; } }
+    };
+    btn.onclick = ()=> ocupado(btn, "Aprobando…", async ()=>{
+      const n = valor();
+      if(!n || n < 1){ error("Escribe cuántas " + (terapia ? "sesiones" : "días") + " acreditar."); return; }
+      const r = await rpc("resolver_pago_por_link", { p_token: token, p_aprobar: true, p_cantidad: n, p_nota: null });
+      pantallaFinal(true, "Pago aprobado", terapia
+        ? `Se acreditaron <strong>${plural(r.sesiones, "sesión", "sesiones")}</strong> a ${esc(p.nombre)}. Ahora tiene <strong>${plural(r.saldo, "sesión", "sesiones")}</strong> para reservar. Ya le llegó el aviso en la app.`
+        : `El acceso de ${esc(p.nombre)} está activo del <strong>${fechaCorta(r.inicio)}</strong> al <strong>${fechaCorta(r.fin)}</strong>. Ya le llegó el aviso en la app.`);
+    });
+    document.getElementById("rvRechazar").onclick = ()=>{
+      document.getElementById("rvRechazo").hidden = false;
+      document.getElementById("rvMotivo").focus();
+    };
+    const br = document.getElementById("rvConfirmarRechazo");
+    br.onclick = ()=> ocupado(br, "Rechazando…", async ()=>{
+      await rpc("resolver_pago_por_link", { p_token: token, p_aprobar: false, p_cantidad: null, p_nota: document.getElementById("rvMotivo").value });
+      pantallaFinal(false, "Pago rechazado", `Le avisamos a ${esc(p.nombre)} en la app con el motivo que escribiste.`);
+    });
+  }
+
+  if(token.length < 20){ pantallaFinal(false, "Enlace incompleto", "Abre el botón del mensaje de WhatsApp otra vez."); return; }
+  rpc("pago_por_link", { p_token: token })
+    .then(render)
+    .catch(e => pantallaFinal(false, "No se pudo abrir el pago", esc(e.message)));
+})();
+</script>
+</body>
+</html>
