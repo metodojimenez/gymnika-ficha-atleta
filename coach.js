@@ -626,6 +626,8 @@ async function renderCoachHoy(main){
     <p class="eyebrow">${esc(ROLES_EQUIPO[state.profile.role] || "Panel del coach")}</p><h1>Hoy</h1>
     <p class="lede hoy-fecha">${esc(fechaLarga(todayStr()))}${area ? " · " + CATEGORIAS[area].nombre : ""}</p></header>
     <div class="grid">
+      ${area === "terapia" ? "" : `<section class="panel span-12 rt-hoy" aria-labelledby="hRt"><div class="panel-head"><h2 id="hRt">Rutina de hoy</h2><span class="muted">Fortalecimiento · según los días que viene cada uno</span></div>
+        <div id="hoyRutinas"><div class="skel skel-line" style="width:70%"></div></div></section>`}
       <section class="panel span-12 hoy-alertas" aria-labelledby="hAl"><div class="panel-head"><h2 id="hAl">Alertas</h2><span class="muted">${nota}</span></div>
         <div id="hoyAlertas"><div class="skel skel-block"></div></div></section>
       <section class="panel span-12" aria-labelledby="hCl"><div class="panel-head"><h2 id="hCl">Clases de hoy</h2><span class="muted" id="hoyResumen"></span></div>
@@ -644,13 +646,16 @@ async function pintarHoy(){
   if(!body) return;
   const iso = todayStr();
   const area = areaCoach();
-  const [todos, { data: res, error }, alertas] = await Promise.all([
+  const [todos, { data: res, error }, alertas, rh] = await Promise.all([
     cargarHorarios(true),
     sb.from("reservas").select("*").eq("fecha", iso).in("estado", ["confirmada", "espera", "asistio", "no_asistio"]).order("created_at"),
-    cargarAlertas()
+    cargarAlertas(),
+    area === "terapia" ? Promise.resolve(null) : cargarRutinasDeHoy()
   ]);
   if(!document.getElementById("hoyBody")) return;
   document.getElementById("hoyAlertas").innerHTML = alertasListaHTML(alertas);
+  const rtBox = document.getElementById("hoyRutinas");
+  if(rtBox){ rtBox.innerHTML = rutinasHoyHTML(rh); enlazarRutinasHoy(rtBox, false); }
   if(error){ body.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
   const dow = isoDow(parseFecha(iso));
   const horarios = todos.filter(h => h.dia_semana === dow && (!area || h.categoria === area) && (h.activo || (res || []).some(r => r.horario_id === h.id)))
@@ -675,7 +680,8 @@ async function pintarHoy(){
           const p = perfil(r.user_id);
           const tono = h.categoria === "terapia" ? `r-${(state.riesgo || {})[r.user_id] || "sin"}` : "fort";
           const marca = r.estado === "asistio" ? "✓ Llegó" : r.estado === "no_asistio" ? "No vino" : r.estado === "espera" ? "En espera" : momento ? "Por llegar" : "Reservó";
-          return `<li><button type="button" class="hoy-chip st-${r.estado}" data-res="${esc(r.id)}"><span class="hoy-sw ${tono}" aria-hidden="true"></span><span class="hoy-name">${esc(p.nombre || "Alumno")}</span><span class="hoy-st">${marca}</span></button></li>`;
+          const cod = rh && h.categoria === "fortalecimiento" ? rh.porReserva[r.id] : null;
+          return `<li><button type="button" class="hoy-chip st-${r.estado}" data-res="${esc(r.id)}"><span class="hoy-sw ${tono}" aria-hidden="true"></span><span class="hoy-name">${esc(p.nombre || "Alumno")}</span>${cod ? rutinaChipHTML(cod) : ""}<span class="hoy-st">${marca}</span></button></li>`;
         }).join("")}</ul>` : `<p class="muted" style="margin:2px 0 0">Sin reservas.</p>`}
       </div></li>`;
   }).join("")}</ol>`;

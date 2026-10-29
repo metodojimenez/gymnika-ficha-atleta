@@ -343,6 +343,75 @@ function repartoHTML(semana){
     </table></div>`;
 }
 
+/* ---------- Rutina que toca hoy ----------
+   R1, R2, R3… es el 1.º, 2.º, 3.º día que la persona entrena en la semana (lunes a domingo).
+   Cuenta las veces que ya vino esta semana + sus reservas de hoy y de los próximos días para saber
+   cuántos días viene (3, 4 o 5; con menos de 3 se usa la fila de 3, con más de 5 la de 5). */
+function codigoRutina(semana, total, n){
+  const f = Math.min(5, Math.max(3, total));
+  const fila = (semana === 6 || semana === 20) ? REPARTO_DESCARGA[f] : REPARTO[f][(semana - 1) % 3];
+  return fila[Math.min(n, fila.length) - 1];
+}
+async function cargarRutinasDeHoy(){
+  const w = semanaRutinas(0);
+  if(w.antes) return null;
+  const hoy = todayStr();
+  const lun = fechaISO(lunesDe(parseFecha(hoy)));
+  const [horarios, { data, error }] = await Promise.all([
+    cargarHorarios(),
+    sb.from("reservas").select("*").gte("fecha", lun).lte("fecha", fechaISO(sumarDias(parseFecha(lun), 6)))
+      .in("estado", ["confirmada", "asistio", "no_asistio"]).order("inicio")
+  ]);
+  if(error) return null;
+  const fort = new Set(horarios.filter(h => h.categoria === "fortalecimiento").map(h => h.id));
+  const porUsuario = {};
+  (data || []).filter(r => fort.has(r.horario_id)).forEach(r => { (porUsuario[r.user_id] = porUsuario[r.user_id] || []).push(r); });
+  const porReserva = {}, grupos = {};
+  Object.entries(porUsuario).forEach(([uid, rs]) => {
+    const antes = rs.filter(r => r.fecha < hoy && r.estado === "asistio").length;
+    const deHoy = rs.filter(r => r.fecha === hoy && r.estado !== "no_asistio");
+    const despues = rs.filter(r => r.fecha > hoy && r.estado === "confirmada").length;
+    const total = antes + deHoy.length + despues;
+    deHoy.forEach((r, i) => {
+      const cod = codigoRutina(w.semana, total, antes + i + 1);
+      porReserva[r.id] = cod;
+      (grupos[cod] = grupos[cod] || []).push(uid);
+    });
+  });
+  return { semana: w.semana, fase: faseDeSemana(w.semana), porReserva, grupos };
+}
+function rutinaChipHTML(cod){
+  return cod ? `<span class="rt-cod ${cod.slice(0, 2)}" title="${esc(RUTINAS[cod.slice(0, 2)].titulo)}${cod.endsWith("r") ? " (reducida)" : ""}">${cod.slice(0, 2)}${cod.endsWith("r") ? "<small>red.</small>" : ""}</span>` : "";
+}
+/* Bloque "Rutina de hoy": qué rutinas tocan hoy y a quién; cada una abre su detalle */
+function rutinasHoyHTML(rh){
+  if(!rh) return `<p class="muted" style="margin:0">El macrociclo aún no comienza.</p>`;
+  const nombre = (id)=> nombreCorto((state.athleteList.find(a => a.id === id) || {}).nombre);
+  const cods = Object.keys(rh.grupos).sort();
+  const cab = `<p class="rt-hoy-fase">Semana <strong>${rh.semana}</strong> de 20 · ${esc(FASE_NOMBRE[rh.fase])}${rh.semana === 6 || rh.semana === 20 ? " · Descarga" : ""}</p>`;
+  if(!cods.length) return cab + `<p class="muted" style="margin:6px 0 0">Hoy nadie de fortalecimiento tiene reserva. Toca una rutina para verla:</p>
+    <div class="rt-hoy-grid">${Object.keys(RUTINAS).map(k => `<button type="button" class="rt-hoy-item" data-ver-rt="${k}">${rutinaChipHTML(k)}<span class="rt-hoy-txt"><strong>${esc(RUTINAS[k].titulo)}</strong></span></button>`).join("")}</div>`;
+  return cab + `<div class="rt-hoy-grid">${cods.map(c => `
+    <button type="button" class="rt-hoy-item" data-ver-rt="${c}">
+      ${rutinaChipHTML(c)}
+      <span class="rt-hoy-txt"><strong>${esc(RUTINAS[c.slice(0, 2)].titulo)}${c.endsWith("r") ? " · reducida" : ""}</strong>
+        <span class="muted">${plural(rh.grupos[c].length, "persona", "personas")}: ${rh.grupos[c].map(id => esc(nombre(id))).join(", ")}</span></span>
+      <span class="rt-hoy-ver" aria-hidden="true">Ver →</span>
+    </button>`).join("")}</div>`;
+}
+function abrirRutina(cod){
+  rutinaUI.tab = cod.slice(0, 2); rutinaUI.desfase = 0; rutinaUI.elegida = true;
+  if(location.hash === "#/rutinas") showCoachRoute(); else location.hash = "#/rutinas";
+}
+function enlazarRutinasHoy(box, enRutinas, main){
+  box.querySelectorAll("[data-ver-rt]").forEach(b => {
+    b.onclick = ()=>{
+      if(enRutinas){ rutinaUI.tab = b.dataset.verRt.slice(0, 2); rutinaUI.elegida = true; renderCoachRutinas(main); main.querySelector(".rt-tabs").scrollIntoView({ behavior: "smooth", block: "start" }); }
+      else abrirRutina(b.dataset.verRt);
+    };
+  });
+}
+
 /* Vista general "Rutinas" del panel del coach */
 function renderCoachRutinas(main){
   const w = semanaRutinas(rutinaUI.desfase);
@@ -363,6 +432,8 @@ function renderCoachRutinas(main){
       <button type="button" class="icon-btn" id="rtNext" aria-label="Semana siguiente">›</button>
       ${w.esActual ? "" : `<button type="button" class="btn-link" id="rtHoy">Esta semana</button>`}
     </div>
+    ${w.esActual ? `<section class="panel rt-hoy" aria-labelledby="rtHoyT"><div class="panel-head"><h2 id="rtHoyT">Hoy toca</h2><span class="muted">${esc(fechaLarga(todayStr()))}</span></div>
+      <div id="rtHoyBox"><div class="skel skel-line" style="width:70%"></div></div></section>` : ""}
     <section class="panel rutina">
       <div class="panel-head"><div><p class="eyebrow">${esc(FASE_NOMBRE[fase])}${descarga ? " · Descarga" : ""}${w.ciclo > 1 ? " · Ciclo " + w.ciclo : ""}</p>
         <h2>${w.antes ? "El macrociclo aún no comienza" : esc(FASE_NOMBRE[fase].split(" · ").pop())}</h2></div></div>
@@ -386,6 +457,15 @@ function renderCoachRutinas(main){
   main.querySelector("#rtNext").onclick = ()=> ir(rutinaUI.desfase + 1);
   const bh = main.querySelector("#rtHoy"); if(bh) bh.onclick = ()=> ir(0);
   main.querySelectorAll("[data-rt]").forEach(b => {
-    b.onclick = ()=>{ rutinaUI.tab = b.dataset.rt; renderCoachRutinas(main); };
+    b.onclick = ()=>{ rutinaUI.tab = b.dataset.rt; rutinaUI.elegida = true; renderCoachRutinas(main); };
+  });
+  if(w.esActual) cargarRutinasDeHoy().then(rh => {
+    const box = main.querySelector("#rtHoyBox");
+    if(!box) return;
+    /* La primera vez se abre la rutina que más personas hacen hoy */
+    const masComun = rh && Object.keys(rh.grupos).sort((a, b) => rh.grupos[b].length - rh.grupos[a].length)[0];
+    if(masComun && !rutinaUI.elegida && masComun.slice(0, 2) !== rutinaUI.tab){ rutinaUI.tab = masComun.slice(0, 2); rutinaUI.elegida = true; renderCoachRutinas(main); return; }
+    box.innerHTML = rutinasHoyHTML(rh);
+    enlazarRutinasHoy(box, true, main);
   });
 }
