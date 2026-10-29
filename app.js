@@ -13,6 +13,47 @@ const MEDIDA_FIELDS = [
   ["muslo","Muslo (cm)"],["pantorrilla","Pantorrilla (cm)"]
 ];
 let state = { session: null, profile: null, viewingAthleteId: null, athleteList: [], search: "", renderToken: 0, detail: null };
+
+/* ====================== EQUIPO: ROLES ======================
+   coach = master coach (administra todo: pagos, ajustes, equipo); coach_terapia y coach_fortalecimiento solo ven a los alumnos de su área.
+   La base de datos aplica estas mismas reglas; aquí solo se ocultan las partes que cada uno no usa. */
+const ROLES_EQUIPO = { coach: "Master coach", coach_terapia: "Coach de terapia", coach_fortalecimiento: "Coach de fortalecimiento" };
+function esEquipo(p = state.profile){ return !!p && Object.prototype.hasOwnProperty.call(ROLES_EQUIPO, p.role); }
+function esMaster(p = state.profile){ return !!p && p.role === "coach"; }
+function areaCoach(p = state.profile){
+  return !p ? null : p.role === "coach_terapia" ? "terapia" : p.role === "coach_fortalecimiento" ? "fortalecimiento" : null;
+}
+/* Secciones del panel según el rol, en el orden del menú */
+const SECCIONES_COACH = {
+  hoy:         { t: "Hoy",      ico: "◉" },
+  agenda:      { t: "Horario",  ico: "◷" },
+  rutinas:     { t: "Rutinas",  ico: "R" },
+  pagos:       { t: "Pagos",    ico: "S/", master: true },
+  resumen:     { t: "Resumen",  ico: "▤", master: true },
+  equipo:      { t: "Equipo",   ico: "☰", master: true },
+  comunicados: { t: "Avisos",   ico: "✉" },
+  ajustes:     { t: "Ajustes",  ico: "⚙", master: true }
+};
+function seccionesPermitidas(p = state.profile){
+  return Object.keys(SECCIONES_COACH).filter(k => {
+    if(SECCIONES_COACH[k].master && !esMaster(p)) return false;
+    if(k === "rutinas" && areaCoach(p) === "terapia") return false;
+    return true;
+  });
+}
+/* Nombre de quien hizo un cambio (equipo o el propio alumno) */
+function nombreAutor(id, alumnoId){
+  if(!id) return "";
+  if(id === alumnoId) return "el alumno";
+  if(state.profile && id === state.profile.id) return "ti";
+  const m = (state.equipo || []).find(x => x.id === id);
+  return m ? (m.nombre || "un coach") : "un coach";
+}
+function autoriaHTML(id, fecha, alumnoId){
+  if(!id) return "";
+  const d = fecha ? new Date(fecha) : null;
+  return `<span class="autoria">Por ${esc(nombreAutor(id, alumnoId))}${d && !isNaN(d) ? " · " + esc(d.toLocaleDateString("es-PE", { day: "numeric", month: "short" })) : ""}</span>`;
+}
 /* Enlace del correo "olvidé mi contraseña": se detecta antes de que Supabase limpie la URL */
 let recoveryMode = /(^|[#&?])type=recovery(&|$)/.test(location.hash + "&" + location.search);
 let recoveryError = /error_code=|error_description=/.test(location.hash) && !recoveryMode;
@@ -607,7 +648,7 @@ async function bootAfterAuth(){
     return;
   }
   state.profile = profile;
-  if(profile.role === "coach"){ tomarCheckinPendiente(); renderCoachHome(); return; }
+  if(esEquipo(profile)){ tomarCheckinPendiente(); renderCoachHome(); return; }
   if(!isProfileComplete(profile)){ renderCompleteProfileGate(profile); return; }
   await renderAthleteHome();
   const codigo = tomarCheckinPendiente();
@@ -732,7 +773,7 @@ const inbox = { items: [], enabled: true, timer: null, open: false, cargando: fa
 const INBOX_SECCION = {
   consejos: "notasCard", plan: "nutricionCard", compensacion: "estiramientosCard", ficha: "fichaCard",
   medidas: "medidasCard", fuerza: "fuerzaCard", tiempos: "tiemposCard", eventos: "agendaCard",
-  pago: "planCard", reserva: "misReservasCard"
+  pago: "planCard", reserva: "misReservasCard", sesiones: "planCard"
 };
 function tiempoRelativo(iso){
   const d = new Date(iso); if(isNaN(d)) return "";
@@ -789,7 +830,7 @@ function renderInboxBadge(){
 function renderInboxPanel(){
   const panel = document.getElementById("inboxPanel");
   if(!panel) return;
-  const esCoach = state.profile && state.profile.role === "coach";
+  const esCoach = esEquipo();
   const sinLeer = inbox.items.some(x => !x.leida);
   panel.innerHTML = `
     <div class="inbox-head">
@@ -806,7 +847,8 @@ function renderInboxPanel(){
         </span>
       </button></li>`).join("")}</ul>`
     : `<div class="inbox-empty"><strong>Todo al día</strong>${esCoach
-        ? "Aquí te avisaremos cuando un alumno llegue, cree su cuenta o registre un pago."
+        ? (esMaster() ? "Aquí te avisaremos cuando un alumno llegue, cree su cuenta, registre un pago o se quede con pocas sesiones."
+                      : "Aquí te avisaremos cuando un alumno de tu área llegue o cree su cuenta.")
         : "Aquí verás los avisos del centro, tus pagos, tus reservas y los cambios de tu coach."}</div>`}
   `;
   const all = document.getElementById("btnInboxAll");
@@ -859,8 +901,8 @@ async function abrirNotificacion(id){
     openDialog(n.titulo, `<p class="muted">${esc(tiempoRelativo(n.created_at))}</p><div class="prose" style="margin-top:8px">${esc(n.mensaje || "")}</div>`);
     return;
   }
-  if(state.profile.role === "coach"){
-    if(n.tipo === "pago"){ if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos"; return; }
+  if(esEquipo()){
+    if(n.tipo === "pago" && esMaster()){ if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos"; return; }
     if(n.tipo === "checkin"){ if(location.hash === "#/agenda") showCoachRoute(); else location.hash = "#/agenda"; return; }
     if(!n.atleta_id) return;
     if(!state.athleteList.some(a => a.id === n.atleta_id)) await refreshCoachAside();
@@ -887,14 +929,24 @@ function routeAthleteId(){
   return m ? decodeURIComponent(m[1]) : null;
 }
 function routeCoachSeccion(){
-  const m = location.hash.match(/^#\/(agenda|rutinas|pagos|ajustes)\b/);
+  const m = location.hash.match(/^#\/(hoy|agenda|rutinas|pagos|resumen|equipo|comunicados|ajustes)\b/);
   return m ? m[1] : null;
+}
+/* Alertas del equipo (última semana de acceso en fortalecimiento, 2 o menos sesiones en terapia) */
+async function cargarAlertas(){
+  const { data, error } = await sb.rpc("alertas_equipo");
+  state.alertas = error ? [] : (data || []);
+  return state.alertas;
+}
+function alertaTexto(a){
+  if(a.tipo === "sesiones") return a.valor <= 0 ? "Sin sesiones" : a.valor === 1 ? "Le queda 1 sesión" : `Le quedan ${a.valor} sesiones`;
+  return a.valor <= 1 ? "Su acceso vence hoy" : `Última semana · vence en ${a.valor} días`;
 }
 
 async function renderCoachHome(){
   document.body.className = "";
   app.innerHTML = `
-    ${appbarHTML("panel del coach")}
+    ${appbarHTML((ROLES_EQUIPO[state.profile.role] || "panel del coach").toLowerCase())}
     <div class="coach-layout" id="coachLayout">
       <aside class="coach-aside" id="coachAside" aria-label="Atletas">
         <div class="skel skel-line" style="width:60%"></div>
@@ -908,31 +960,38 @@ async function renderCoachHome(){
   if(routeAthleteId() || routeCoachSeccion()) document.getElementById("coachLayout").classList.add("has-selection");
   await refreshCoachAside();
   showCoachRoute();
-  actualizarBadgePagos();
+  if(esMaster()) actualizarBadgePagos();
 }
 
 async function refreshCoachAside(){
   const aside = document.getElementById("coachAside");
   if(!aside) return;
-  const [{ data: athletes, error }, { data: solicitudesPend }] = await Promise.all([
+  const [{ data: athletes, error }, { data: solicitudesPend }, { data: equipo }, { data: interna }] = await Promise.all([
     sb.from("profiles").select("*").eq("role","atleta").order("nombre"),
-    sb.from("solicitudes_nutricion").select("*").eq("atendida", false).order("fecha")
+    sb.from("solicitudes_nutricion").select("*").eq("atendida", false).order("fecha"),
+    sb.from("profiles").select("id,nombre,role").neq("role", "atleta"),
+    sb.from("ficha_interna").select("user_id,color_riesgo"),
+    cargarAlertas()
   ]);
   state.athleteList = athletes || [];
+  state.equipo = equipo || [];
+  state.riesgo = {};
+  (interna || []).forEach(x => { state.riesgo[x.user_id] = x.color_riesgo; });
+  const area = areaCoach();
+  if(area) state.catFiltro = "";
   const est = macrocicloEstado();
+  const secciones = seccionesPermitidas();
   aside.innerHTML = `
+    ${area === "terapia" ? `<div class="aside-week"><span class="week-num num" aria-hidden="true">T</span><div><div style="font-weight:700">Coach de terapia</div><div class="muted">Ves a los pacientes de terapia</div></div></div>` : `
     <div class="aside-week">
       <span class="week-num num">${est.antes ? "—" : est.semana}</span>
       <div>
         <div style="font-weight:700">${est.antes ? "El macrociclo aún no comienza" : "Semana " + est.semana + " de 20 del macrociclo"}</div>
         <div class="muted">${est.fase ? "Fase: " + esc(est.fase) : ""}${est.ciclo > 1 ? " · Ciclo " + est.ciclo : ""}</div>
       </div>
-    </div>
-    <nav class="coach-nav" aria-label="Secciones del coach">
-      <a href="#/agenda" data-nav="agenda"><span class="cn-ico" aria-hidden="true">◷</span>Horario</a>
-      <a href="#/rutinas" data-nav="rutinas"><span class="cn-ico" aria-hidden="true">R</span>Rutinas</a>
-      <a href="#/pagos" data-nav="pagos"><span class="cn-ico" aria-hidden="true">S/</span>Pagos<span class="cn-badge" id="navPagosBadge" hidden></span></a>
-      <a href="#/ajustes" data-nav="ajustes"><span class="cn-ico" aria-hidden="true">⚙</span>Ajustes</a>
+    </div>`}
+    <nav class="coach-nav n-${secciones.length}" aria-label="Secciones del coach">
+      ${secciones.map(k => `<a href="#/${k}" data-nav="${k}"><span class="cn-ico" aria-hidden="true">${SECCIONES_COACH[k].ico}</span>${SECCIONES_COACH[k].t}${k === "pagos" ? `<span class="cn-badge" id="navPagosBadge" hidden></span>` : k === "hoy" && state.alertas.length ? `<span class="cn-badge alerta" aria-label="${plural(state.alertas.length, "alerta", "alertas")}">${state.alertas.length}</span>` : ""}</a>`).join("")}
     </nav>
     ${error ? `<div class="error" role="alert">${esc(errorES(error))}</div>` : ""}
     ${(solicitudesPend && solicitudesPend.length) ? `
@@ -953,12 +1012,12 @@ async function refreshCoachAside(){
         <div id="solMsg"></div>
       </section>` : ""}
     <div class="aside-head">
-      <h1>Atletas</h1>
-      <span class="count">${state.athleteList.length} registrados</span>
+      <h1>${area === "terapia" ? "Pacientes" : "Atletas"}</h1>
+      <span class="count">${state.athleteList.length} ${area ? "de " + CATEGORIAS[area].nombre.toLowerCase() : "registrados"}</span>
     </div>
-    <div class="seg cat-filter" role="group" aria-label="Filtrar por programa">
+    ${area ? "" : `<div class="seg cat-filter" role="group" aria-label="Filtrar por programa">
       ${[["", "Todos"], ["terapia", "Terapia"], ["fortalecimiento", "Fortalecimiento"]].map(([k, t]) => `<button type="button" aria-pressed="${(state.catFiltro || "") === k}" data-filtro="${k}">${t}<span class="num">${k ? state.athleteList.filter(a => a.categoria === k).length : state.athleteList.length}</span></button>`).join("")}
-    </div>
+    </div>`}
     <label class="sr-only" for="searchAthlete">Buscar atleta</label>
     <input type="search" id="searchAthlete" placeholder="Buscar por nombre o deporte" value="${esc(state.search)}" autocomplete="off">
     <div class="athlete-list" id="athleteListCard"></div>
@@ -1007,7 +1066,9 @@ function renderAthleteListInto(list){
   }
   box.innerHTML = list.map(a => {
     const flags = [];
-    if(a.categoria) flags.push(`<span class="flag cat-${a.categoria}">${CATEGORIAS[a.categoria].nombre}</span>`);
+    const alerta = (state.alertas || []).find(x => x.user_id === a.id);
+    if(alerta) flags.push(`<span class="flag alerta">${esc(alertaTexto(alerta))}</span>`);
+    if(a.categoria && !areaCoach()) flags.push(`<span class="flag cat-${a.categoria}">${CATEGORIAS[a.categoria].nombre}</span>`);
     if(tieneLesion(a.lesiones)) flags.push(`<span class="flag warn">Lesión</span>`);
     if(a.autorizacion_medica === false) flags.push(`<span class="flag warn">Sin autorización médica</span>`);
     if(!isProfileComplete(a)) flags.push(`<span class="flag info">Ficha incompleta</span>`);
@@ -1041,10 +1102,20 @@ async function showCoachRoute(){
     state.renderToken++;
     document.querySelectorAll(".athlete-row").forEach(r=>{ r.classList.remove("is-active"); r.querySelector(".athlete-link").removeAttribute("aria-current"); });
     if(window.matchMedia("(max-width: 1023px)").matches) window.scrollTo(0, 0);
+    if(!seccionesPermitidas().includes(seccion)){
+      main.innerHTML = `<a class="back" href="#/">← Atletas</a>
+        <div class="empty" style="padding:48px 20px;margin-top:8px"><p class="empty-title">Esta sección no está en tu panel</p>
+        <p>${SECCIONES_COACH[seccion].master ? "Solo los master coach pueden verla." : "No corresponde a tu área."}</p></div>`;
+      return;
+    }
     main.innerHTML = `<div class="skel skel-line" style="width:120px"></div><div class="skel skel-block" style="margin-top:16px"></div>`;
     if(seccion === "pagos") await renderCoachPagos(main);
+    else if(seccion === "hoy") await renderCoachHoy(main);
     else if(seccion === "agenda") await renderCoachAgenda(main);
     else if(seccion === "rutinas") renderCoachRutinas(main);
+    else if(seccion === "resumen") await renderCoachResumen(main);
+    else if(seccion === "equipo") await renderCoachEquipo(main);
+    else if(seccion === "comunicados") await renderCoachComunicados(main);
     else await renderCoachAjustes(main);
     return;
   }
@@ -1056,11 +1127,12 @@ async function showCoachRoute(){
   });
   if(!athlete){
     state.renderToken++;
+    if(!id){ await renderCoachHoy(main); return; } // sin selección: en computadora se muestra "Hoy"
     main.innerHTML = `
-      ${id ? `<a class="back" href="#/">← Atletas</a>` : ""}
+      <a class="back" href="#/">← Atletas</a>
       <div class="empty" style="padding:48px 20px;margin-top:8px">
-        <p class="empty-title">${id ? "No encontramos este atleta" : "Elige un atleta"}</p>
-        <p>${id ? "Puede que se haya borrado. Vuelve a la lista." : "Selecciona un nombre de la lista para ver su ficha, o abre el Horario, las Rutinas, los Pagos o los Ajustes."}</p>
+        <p class="empty-title">No encontramos este atleta</p>
+        <p>${areaCoach() ? "Puede que se haya borrado o que no sea de tu área." : "Puede que se haya borrado. Vuelve a la lista."}</p>
       </div>`;
     return;
   }
@@ -1077,10 +1149,10 @@ window.addEventListener("hashchange", ()=>{
   const codigo = codigoCheckinDeURL();
   if(codigo){
     history.replaceState(null, "", location.pathname + location.search);
-    if(state.profile && state.profile.role !== "coach" && document.getElementById("athleteMain")) procesarCheckin(codigo);
+    if(state.profile && !esEquipo() && document.getElementById("athleteMain")) procesarCheckin(codigo);
     else guardarCheckinPendiente(codigo);
     return;
   }
-  if(state.profile && state.profile.role === "coach" && document.getElementById("coachLayout")) showCoachRoute();
+  if(esEquipo() && document.getElementById("coachLayout")) showCoachRoute();
 });
 

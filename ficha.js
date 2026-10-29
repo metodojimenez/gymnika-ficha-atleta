@@ -37,12 +37,13 @@ async function renderAthleteDetail(profile, isCoach, container){
     sb.from("ejercicios_fuerza").select("*").eq("user_id", uid).order("created_at"),
     sb.from("tiempos").select("*").eq("user_id", uid).order("fecha"),
     sb.from("eventos").select("*").eq("user_id", uid).order("fecha"),
-    sb.from("solicitudes_nutricion").select("*").eq("user_id", uid).order("fecha", { ascending: false })
+    sb.from("solicitudes_nutricion").select("*").eq("user_id", uid).order("fecha", { ascending: false }),
+    isCoach ? sb.from("ficha_interna").select("*").eq("user_id", uid).maybeSingle() : Promise.resolve({ data: null })
   ]);
   if(token !== state.renderToken) return; // el coach ya abrió otro atleta
-  const [{ data: medidas }, { data: fuerza }, { data: ejercicios }, { data: tiempos }, { data: eventos }, { data: solicitudes }] = results;
+  const [{ data: medidas }, { data: fuerza }, { data: ejercicios }, { data: tiempos }, { data: eventos }, { data: solicitudes }, { data: interna }] = results;
   const fallo = results.find(r => r.error);
-  state.detail = { medidas: medidas || [], fuerza: fuerza || [], eventos: eventos || [] };
+  state.detail = { medidas: medidas || [], fuerza: fuerza || [], eventos: eventos || [], interna: interna || null };
 
   const edad = calcEdad(profile.fecha_nacimiento);
   const chips = [
@@ -101,7 +102,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${datosPersonales}`;
   } else if(esTerapia){
     panels = `
-    ${panelHTML("planCard", "Plan y pagos", 12, { eyebrow: "Terapia" })}
+    ${panelHTML("planCard", esMaster() ? "Plan y pagos" : "Sesiones", 12, { eyebrow: "Terapia" })}
     ${panelHTML("notasCard", "Notas del coach", 6)}
     ${panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 6)}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
@@ -109,7 +110,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("fichaCard", "Datos personales", 12)}`;
   } else {
     panels = `
-    ${panelHTML("planCard", "Plan y pagos", 12, { eyebrow: cat ? "Fortalecimiento" : "Sin categoría" })}
+    ${panelHTML("planCard", esMaster() ? "Plan y pagos" : "Acceso", 12, { eyebrow: cat ? "Fortalecimiento" : "Sin categoría" })}
     ${macroHTML}
     ${resumenHTML}
     ${panelHTML("notasCard", "Notas del coach", 6)}
@@ -135,7 +136,7 @@ async function renderAthleteDetail(profile, isCoach, container){
             <h1>${esc(profile.nombre || (isCoach ? "(sin nombre)" : "Mi ficha"))}</h1>
             ${chips.length ? `<ul class="chips">${chips.join("")}</ul>` : ""}
           </div>
-          ${isCoach ? `<button type="button" class="btn-danger" id="btnDelAthlete">Borrar atleta</button>` : ""}
+          ${isCoach && esMaster() ? `<button type="button" class="btn-danger" id="btnDelAthlete">Borrar atleta</button>` : ""}
         </div>
         <div id="detailMsg">${fallo ? `<div class="error" role="alert">${esc("Parte de la ficha no cargó. " + errorES(fallo.error))}</div>` : ""}</div>
       </header>
@@ -145,7 +146,7 @@ async function renderAthleteDetail(profile, isCoach, container){
 
   if(isCoach){
     const delBtn = document.getElementById("btnDelAthlete");
-    delBtn.onclick = ()=>{
+    if(delBtn) delBtn.onclick = ()=>{
       if(!confirm(`¿Borrar a ${profile.nombre || "este atleta"} y todos sus registros? Esta acción no se puede deshacer.`)) return;
       withBusy(delBtn, "Borrando…", async ()=>{
         const { error } = await sb.from("profiles").delete().eq("id", uid);
@@ -318,25 +319,34 @@ function renderFichaForm(profile, uid, isCoach){
 function renderNotasCoach(profile, uid, isCoach){
   const box = document.getElementById("notasCard");
   if(isCoach){
+    const interna = (state.detail && state.detail.interna) || {};
     box.innerHTML = `
       <label for="n_consejos" style="margin-top:0">Consejos para el atleta <span class="muted">(el atleta sí los ve)</span></label>
       <textarea id="n_consejos" rows="3">${esc(profile.consejos_coach || "")}</textarea>
-      <label for="n_comentarios">Comentarios internos <span class="muted">(solo coaches)</span></label>
-      <textarea id="n_comentarios" rows="3">${esc(profile.comentarios_coach || "")}</textarea>
+      ${autoriaHTML(profile.consejos_por, profile.consejos_at, uid)}
+      <label for="n_comentarios">Comentarios internos <span class="muted">(solo el equipo)</span></label>
+      <textarea id="n_comentarios" rows="3">${esc(interna.comentarios || "")}</textarea>
+      ${autoriaHTML(interna.editado_por, interna.editado_at, uid)}
       <button type="button" class="btn-primary" id="btnSaveNotas">Guardar notas</button>
       <div id="notasMsg" aria-live="polite"></div>
     `;
     const btn = document.getElementById("btnSaveNotas");
     btn.onclick = ()=> withBusy(btn, "Guardando…", async ()=>{
-      const payload = {
-        consejos_coach: document.getElementById("n_consejos").value || null,
-        comentarios_coach: document.getElementById("n_comentarios").value || null
-      };
-      const { error } = await sb.from("profiles").update(payload).eq("id", uid);
+      const consejos = document.getElementById("n_consejos").value || null;
+      const comentarios = document.getElementById("n_comentarios").value || null;
       const msg = document.getElementById("notasMsg");
-      if(error){ showError(msg, error); return; }
-      Object.assign(profile, payload);
-      showMsg(msg, "ok", "Notas guardadas.");
+      if(consejos !== (profile.consejos_coach || null)){
+        const { error } = await sb.from("profiles").update({ consejos_coach: consejos }).eq("id", uid);
+        if(error){ showError(msg, error); return; }
+        Object.assign(profile, { consejos_coach: consejos, consejos_por: state.profile.id, consejos_at: new Date().toISOString() });
+      }
+      if(comentarios !== (interna.comentarios || null)){
+        const { data, error } = await sb.from("ficha_interna").upsert({ user_id: uid, comentarios }).select().maybeSingle();
+        if(error){ showError(msg, error); return; }
+        if(state.detail) state.detail.interna = data || { ...interna, comentarios, editado_por: state.profile.id, editado_at: new Date().toISOString() };
+      }
+      renderNotasCoach(profile, uid, isCoach);
+      showMsg(document.getElementById("notasMsg"), "ok", "Notas guardadas.");
     });
   } else {
     box.innerHTML = profile.consejos_coach
@@ -363,7 +373,7 @@ function renderMedidas(medidas, uid, isCoach){
         <tbody>
           ${orden.map(m => `
             <tr>
-              <th scope="row" class="sticky-col" style="font-size:14.5px;letter-spacing:0;color:var(--ink);background:var(--surface)">${fmtFecha(m.fecha)}</th>
+              <th scope="row" class="sticky-col" style="font-size:14.5px;letter-spacing:0;color:var(--ink);background:var(--surface)">${fmtFecha(m.fecha)}${isCoach ? autoriaHTML(m.editado_por, null, uid) : ""}</th>
               ${CAMPOS.map(([key])=>`<td>${fmt(m[key])}</td>`).join("")}
               ${isCoach ? `<td class="actions"><button type="button" class="btn-danger icon" data-delm="${esc(m.id)}" aria-label="Borrar medidas del ${fmtFecha(m.fecha)}">✕</button></td>` : ""}
             </tr>`).join("")}
@@ -375,7 +385,7 @@ function renderMedidas(medidas, uid, isCoach){
       ${orden.map(m => `
         <li class="medida-card">
           <header>
-            <h3>${fmtFecha(m.fecha)}</h3>
+            <h3>${fmtFecha(m.fecha)}${isCoach ? autoriaHTML(m.editado_por, null, uid) : ""}</h3>
             ${isCoach ? `<button type="button" class="btn-danger icon" data-delm="${esc(m.id)}" aria-label="Borrar medidas del ${fmtFecha(m.fecha)}">✕</button>` : ""}
           </header>
           <dl>${CAMPOS.map(([key,label])=>`<div><dt>${esc(label)}</dt><dd>${fmt(m[key])}</dd></div>`).join("")}</dl>

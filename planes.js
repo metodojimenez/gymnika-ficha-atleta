@@ -940,7 +940,7 @@ async function abrirEscanerQR(){
 }
 
 async function procesarCheckin(codigo){
-  if(!codigo || !state.profile || state.profile.role === "coach") return;
+  if(!codigo || !state.profile || esEquipo()) return;
   const { data, error } = await sb.rpc("registrar_checkin", { p_codigo: codigo });
   if(error){
     openDialog("No se registró tu asistencia", `<div class="checkin-res bad"><span class="ck-icon" aria-hidden="true">!</span><p>${esc(errorES(error))}</p></div>`);

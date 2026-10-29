@@ -3,10 +3,11 @@ async function renderPlanCoach(profile){
   const box = document.getElementById("planCard");
   if(!box) return;
   const cat = profile.categoria;
+  const master = esMaster();
   const catSelect = `
     <div class="inline-add" style="align-items:end;margin-bottom:6px">
-      <div style="flex:1"><label for="coachCat" style="margin-top:0">Categoría</label>
-        <select id="coachCat"><option value="">Sin definir</option>${Object.entries(CATEGORIAS).map(([k,c]) => `<option value="${k}" ${cat === k ? "selected" : ""}>${c.nombre}</option>`).join("")}</select></div>
+      ${master ? `<div style="flex:1"><label for="coachCat" style="margin-top:0">Categoría</label>
+        <select id="coachCat"><option value="">Sin definir</option>${Object.entries(CATEGORIAS).map(([k,c]) => `<option value="${k}" ${cat === k ? "selected" : ""}>${c.nombre}</option>`).join("")}</select></div>` : ""}
       <div style="flex:1"><label for="coachInicio" style="margin-top:0">Inicio en Gymnika</label>
         <input type="date" id="coachInicio" value="${esc(profile.fecha_inicio || "")}"></div>
       <button type="button" class="btn-outline" id="btnGuardarCat">Guardar</button>
@@ -14,7 +15,7 @@ async function renderPlanCoach(profile){
   if(!cat){ box.innerHTML = catSelect + `<p class="muted" style="margin-top:10px">Elige la categoría para ver sus sesiones o su acceso mensual.</p>`; bindCat(); return; }
   const plan = await cargarPlanDe(profile.id, cat);
   if(!document.getElementById("planCard")) return;
-  const comprasHTML = plan.compras.length ? `
+  const comprasHTML = master && plan.compras.length ? `
     <details class="records"><summary>Pagos (${plan.compras.length})</summary>
       <ul class="mov-list">${plan.compras.map(c => `<li><span class="mov-txt">${esc(c.paquete_nombre)} · ${dinero(c.monto, c.moneda)} · ${esc(METODOS_PAGO[c.metodo] || c.metodo)}</span>
         <span class="res-state st-${c.estado}">${c.estado === "pendiente" ? "Pendiente" : c.estado === "aprobada" ? "Aprobado" : "Rechazado"}</span>
@@ -28,11 +29,12 @@ async function renderPlanCoach(profile){
       <div class="plan-hero compact">
         <div class="plan-big"><span class="plan-num num">${plan.saldo}</span><span class="plan-unit">${plan.saldo === 1 ? "sesión disponible" : "sesiones disponibles"}</span></div>
       </div>
-      <div class="inline-add tokens-adj">
+      ${plan.saldo <= 2 ? `<p class="plan-alert warn" role="status">${plan.saldo <= 0 ? "No le quedan sesiones." : plan.saldo === 1 ? "Le queda 1 sesión." : "Le quedan 2 sesiones."}${master ? " Conviene ofrecerle un nuevo paquete." : ""}</p>` : ""}
+      ${master ? `<div class="inline-add tokens-adj">
         <input type="number" id="adjCant" inputmode="numeric" placeholder="+2 o −1" aria-label="Sesiones a sumar o restar">
         <input id="adjNota" placeholder="Motivo (ej: cortesía)" aria-label="Motivo del ajuste">
         <button type="button" class="btn-outline" id="btnAjustar">Ajustar</button>
-      </div>
+      </div>` : ""}
       <div id="adjMsg" aria-live="polite"></div>
       <h3 class="sub-h">Próximas reservas</h3>
       ${prox.length ? `<ul class="res-list">${prox.map(r => `
@@ -45,7 +47,7 @@ async function renderPlanCoach(profile){
     bindCat();
     bindRiesgo(profile);
     const ba = document.getElementById("btnAjustar");
-    ba.onclick = ()=> withBusy(ba, "…", async ()=>{
+    if(ba) ba.onclick = ()=> withBusy(ba, "…", async ()=>{
       const n = parseInt(document.getElementById("adjCant").value, 10);
       const msg = document.getElementById("adjMsg");
       if(!n){ showMsg(msg, "error", "Escribe cuántas sesiones sumar (ej: 2) o restar (ej: -1)."); return; }
@@ -76,7 +78,8 @@ async function renderPlanCoach(profile){
         : est.futura ? `<span class="plan-num plan-word">Programado</span><span class="plan-unit">del ${fmtFecha(est.futura.inicio)} al ${fmtFecha(est.finTotal, true)}</span>`
         : `<span class="plan-num plan-word off">${est.ultima ? "Vencido" : "Sin acceso"}</span><span class="plan-unit">${est.ultima ? "venció el " + fmtFecha(est.ultima.fin, true) : ""}</span>`}
     </div></div>
-    ${suscripcionHTML(plan, true)}
+    ${alertaAccesoHTML(profile.id)}
+    ${master ? suscripcionHTML(plan, true) : ""}
     <p class="muted">Asistencias registradas: <strong>${plan.asistencias.length}</strong>${plan.asistencias[0] ? " · última: " + fmtFecha(plan.asistencias[0].fecha) : ""}</p>
     ${plan.congelamientos.length ? `<details class="records"><summary>Congelamientos (${plan.congelamientos.length})</summary>
       <ul class="mov-list">${plan.congelamientos.map(c => `<li><span class="mov-txt">Del ${fmtFecha(c.desde)} al ${fmtFecha(c.hasta)}${c.motivo ? " · " + esc(c.motivo) : ""}</span></li>`).join("")}</ul></details>` : ""}
@@ -86,9 +89,10 @@ async function renderPlanCoach(profile){
   function bindCat(){
     const b = document.getElementById("btnGuardarCat");
     b.onclick = ()=> withBusy(b, "…", async ()=>{
-      const nueva = document.getElementById("coachCat").value || null;
+      const selCat = document.getElementById("coachCat");
+      const nueva = selCat ? (selCat.value || null) : profile.categoria;
       const inicio = document.getElementById("coachInicio").value || null;
-      const { error } = await sb.from("profiles").update({ categoria: nueva, fecha_inicio: inicio }).eq("id", profile.id);
+      const { error } = await sb.from("profiles").update(selCat ? { categoria: nueva, fecha_inicio: inicio } : { fecha_inicio: inicio }).eq("id", profile.id);
       if(error){ showError(document.getElementById("catMsg"), error); return; }
       profile.categoria = nueva; profile.fecha_inicio = inicio;
       const i = state.athleteList.findIndex(a => a.id === profile.id);
@@ -100,14 +104,15 @@ async function renderPlanCoach(profile){
 
 /* Color de riesgo o dificultad del alumno de terapia (rojo = más riesgo, azul = menos). Solo lo ve el equipo. */
 function riesgoPickerHTML(profile){
+  const actual = (state.riesgo || {})[profile.id] || null;
   return `
     <fieldset class="riesgo-picker">
       <legend>Color de riesgo <span class="muted">· rojo = más riesgo, azul = menos</span></legend>
       <div class="riesgo-ops">
         ${COLORES_RIESGO.map(([k, n]) => `
-          <label class="riesgo-op"><input type="radio" name="riesgo" value="${k}" ${profile.color_riesgo === k ? "checked" : ""}>
+          <label class="riesgo-op"><input type="radio" name="riesgo" value="${k}" ${actual === k ? "checked" : ""}>
             <span class="riesgo-sw r-${k}" aria-hidden="true"></span><span>${n}</span></label>`).join("")}
-        ${profile.color_riesgo ? `<button type="button" class="btn-link" id="btnQuitarRiesgo">Quitar</button>` : ""}
+        ${actual ? `<button type="button" class="btn-link" id="btnQuitarRiesgo">Quitar</button>` : ""}
       </div>
       <div id="riesgoMsg" aria-live="polite"></div>
     </fieldset>`;
@@ -115,11 +120,10 @@ function riesgoPickerHTML(profile){
 function bindRiesgo(profile){
   const guardar = async (valor)=>{
     const msg = document.getElementById("riesgoMsg");
-    const { error } = await sb.from("profiles").update({ color_riesgo: valor }).eq("id", profile.id);
+    const { error } = await sb.from("ficha_interna").upsert({ user_id: profile.id, color_riesgo: valor });
     if(error){ showError(msg, error); return; }
-    profile.color_riesgo = valor;
-    const a = state.athleteList.find(x => x.id === profile.id);
-    if(a) a.color_riesgo = valor;
+    state.riesgo = state.riesgo || {};
+    state.riesgo[profile.id] = valor;
     await renderPlanCoach(profile);
     showMsg(document.getElementById("riesgoMsg"), "ok", valor ? "Color guardado. Ya se ve en el horario general." : "Color quitado.");
   };
@@ -223,7 +227,7 @@ async function renderCoachAgenda(main){
   main.innerHTML = `<div class="detail"><header class="detail-head">
     <a class="back" href="#/">← Atletas</a>
     <div class="detail-title"><div><p class="eyebrow">Panel del coach</p><h1>Horario general</h1></div>
-      <button type="button" class="btn-outline" id="btnVerQR">QR de recepción</button></div></header>
+      ${esMaster() ? `<button type="button" class="btn-outline" id="btnVerQR">QR de recepción</button>` : ""}</div></header>
     <div class="agenda-bar">
       <button type="button" class="icon-btn" id="agPrev" aria-label="Semana anterior">‹</button>
       <span class="agenda-day">${titulo}</span>
@@ -231,15 +235,15 @@ async function renderCoachAgenda(main){
       ${agendaUI.semana === fechaISO(lunesDe(hoy)) ? "" : `<button type="button" class="btn-link" id="agHoy">Esta semana</button>`}
     </div>
     <p class="wk-leyenda">
-      <span class="wk-l-titulo">Terapia:</span>${COLORES_RIESGO.map(([k, n]) => `<span><i class="wk-sw r-${k}"></i>${n}</span>`).join("")}<span><i class="wk-sw r-sin"></i>Sin color</span>
-      <span class="wk-l-sep"><i class="wk-sw fort"></i>Fortalecimiento</span><span>✓ llegó</span>
+      ${areaCoach() === "fortalecimiento" ? "" : `<span class="wk-l-titulo">Terapia:</span>${COLORES_RIESGO.map(([k, n]) => `<span><i class="wk-sw r-${k}"></i>${n}</span>`).join("")}<span><i class="wk-sw r-sin"></i>Sin color</span>`}
+      ${areaCoach() === "terapia" ? "" : `<span class="${areaCoach() ? "" : "wk-l-sep"}"><i class="wk-sw fort"></i>Fortalecimiento</span>`}<span>✓ llegó</span>
     </p>
     <div id="wkBody"><div class="skel skel-block" style="height:320px"></div></div></div>`;
   const ir = (iso)=>{ agendaUI.semana = iso; renderCoachAgenda(main); };
   document.getElementById("agPrev").onclick = ()=> ir(fechaISO(sumarDias(lunes, -7)));
   document.getElementById("agNext").onclick = ()=> ir(fechaISO(sumarDias(lunes, 7)));
   const bh = document.getElementById("agHoy"); if(bh) bh.onclick = ()=> ir(fechaISO(lunesDe(hoy)));
-  document.getElementById("btnVerQR").onclick = abrirQRRecepcion;
+  const bqr = document.getElementById("btnVerQR"); if(bqr) bqr.onclick = abrirQRRecepcion;
   await pintarSemana(main);
   clearInterval(agendaUI.timer);
   agendaUI.timer = setInterval(()=>{
@@ -253,19 +257,21 @@ async function pintarSemana(main){
   if(!body) return;
   const lunes = parseFecha(agendaUI.semana);
   const dias = Array.from({ length: 7 }, (_, i) => sumarDias(lunes, i));
-  const [horarios, { data: res, error }] = await Promise.all([
+  const area = areaCoach();
+  const [todos, { data: res, error }] = await Promise.all([
     cargarHorarios(true),
     sb.from("reservas").select("*").gte("fecha", fechaISO(dias[0])).lte("fecha", fechaISO(dias[6]))
       .in("estado", ["confirmada", "espera", "asistio", "no_asistio"]).order("created_at")
   ]);
   if(!document.getElementById("wkBody")) return;
   if(error){ body.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
+  const horarios = area ? todos.filter(h => h.categoria === area) : todos;
   const activos = horarios.filter(h => h.activo);
   const conReserva = new Set((res || []).map(r => r.horario_id));
   const visibles = horarios.filter(h => h.activo || conReserva.has(h.id));
   const columnas = dias.filter(d => visibles.some(h => h.dia_semana === isoDow(d)));
   const horas = [...new Set(visibles.map(h => horaCorta(h.hora)))].sort();
-  if(!activos.length){ body.innerHTML = emptyHTML("No hay horarios publicados. Agrégalos en Ajustes."); return; }
+  if(!activos.length){ body.innerHTML = emptyHTML(esMaster() ? "No hay horarios publicados. Agrégalos en Ajustes." : "No hay horarios publicados para tu área."); return; }
   const hoyISO = todayStr();
   const ahora = new Date();
   const perfil = (id)=> state.athleteList.find(a => a.id === id) || {};
@@ -284,7 +290,7 @@ async function pintarSemana(main){
           <span class="wk-cap"><span class="sr-only">${CATEGORIAS[h.categoria].nombre}: </span>${h.categoria === "terapia" ? "Terapia" : "Fortalecimiento"} · <span class="num">${conf.length}/${h.aforo}</span>${llegaron ? ` · <span class="num">${llegaron}</span> ✓` : ""}</span>
           ${rs.length ? `<ul class="wk-people">${rs.map(r => {
             const p = perfil(r.user_id);
-            const tono = h.categoria === "terapia" ? `r-${p.color_riesgo || "sin"}` : "fort";
+            const tono = h.categoria === "terapia" ? `r-${(state.riesgo || {})[r.user_id] || "sin"}` : "fort";
             const marca = r.estado === "asistio" ? " ✓" : r.estado === "espera" ? " · espera" : "";
             return `<li><button type="button" class="wk-chip ${tono} st-${r.estado}" data-res="${esc(r.id)}" title="${esc(p.nombre || "Alumno")}">${esc(nombreCorto(p.nombre))}${marca}</button></li>`;
           }).join("")}</ul>` : ""}
@@ -314,20 +320,25 @@ async function pintarSemana(main){
   });
 }
 
+/* Después de marcar o cancelar: repinta la vista abierta (Horario u Hoy) */
+function alCambiarReserva(main){
+  if(document.getElementById("wkBody")) pintarSemana(main);
+  else if(document.getElementById("hoyBody")) pintarHoy();
+}
 function abrirReservaCoach(r, horarios, main){
   if(!r) return;
   const h = horarios.find(x => x.id === r.horario_id) || {};
   const p = state.athleteList.find(a => a.id === r.user_id) || {};
   const ini = new Date(r.inicio);
   const empezo = ini <= new Date();
-  const color = COLORES_RIESGO.find(([k]) => k === p.color_riesgo);
+  const color = COLORES_RIESGO.find(([k]) => k === (state.riesgo || {})[r.user_id]);
   const d = openDialog(p.nombre || "Alumno", `
     <div class="confirm-slot">
       <span class="cs-day">${fechaLarga(r.fecha)}</span>
       <span class="cs-time num">${horaCorta(h.hora)}</span>
       <span class="muted">${CATEGORIAS[h.categoria] ? CATEGORIAS[h.categoria].nombre : ""}${h.categoria === "terapia" ? ` · ${color ? "color " + color[1].toLowerCase() : "sin color de riesgo"}` : ""}</span>
     </div>
-    <p><strong>${ESTADO_RESERVA[r.estado]}</strong>${r.checkin_at ? ` · llegó a las ${new Date(r.checkin_at).toTimeString().slice(0, 5)}` : ""}</p>
+    <p><strong>${ESTADO_RESERVA[r.estado]}</strong>${r.checkin_at ? ` · llegó a las ${new Date(r.checkin_at).toTimeString().slice(0, 5)}` : ""}${r.asistencia_por ? ` · ${r.asistencia_por === r.user_id ? "registró su llegada con el QR" : "marcado por " + esc(nombreAutor(r.asistencia_por, r.user_id))}` : ""}</p>
     <div class="row" style="margin-top:6px">
       ${r.estado !== "espera" && (empezo || r.estado !== "confirmada") ? `
         <button type="button" class="btn-outline" data-asis="1" style="margin-top:0">✓ Asistió</button>
@@ -341,7 +352,7 @@ function abrirReservaCoach(r, horarios, main){
     b.onclick = ()=> withBusy(b, "…", async ()=>{
       const { error } = await sb.rpc("marcar_asistencia", { p_reserva: r.id, p_asistio: b.dataset.asis === "1" });
       if(error){ showError(d.el.querySelector("#rcMsg"), error); return; }
-      d.close(); pintarSemana(main);
+      d.close(); alCambiarReserva(main);
     });
   });
   const bc = d.el.querySelector("#rcCancelar");
@@ -350,7 +361,7 @@ function abrirReservaCoach(r, horarios, main){
     withBusy(bc, "…", async ()=>{
       const { error } = await sb.rpc("cancelar_reserva", { p_reserva: r.id });
       if(error){ showError(d.el.querySelector("#rcMsg"), error); return; }
-      d.close(); pintarSemana(main);
+      d.close(); alCambiarReserva(main);
     });
   };
 }
@@ -431,9 +442,8 @@ function estadoAvisoTexto(l){
   return `El último aviso no se envió (${fmtFechaHora(l.created_at)}): ${esc(l.error || "motivo desconocido")}`;
 }
 async function renderCoachAjustes(main){
-  const [aj, paquetes, horarios, { data: comunicados }, { data: avisos }, { data: links }] = await Promise.all([
+  const [aj, paquetes, horarios, { data: avisos }, { data: links }] = await Promise.all([
     cargarAjustes(true), cargarPaquetes(true), cargarHorarios(true),
-    sb.from("comunicados").select("*").order("created_at", { ascending: false }).limit(20),
     sb.from("avisos_config").select("*").eq("id", 1).maybeSingle(),
     sb.from("pago_links").select("enviado_a,enviado_at,error,created_at").order("created_at", { ascending: false }).limit(1)
   ]);
@@ -442,17 +452,6 @@ async function renderCoachAjustes(main){
     <a class="back" href="#/">← Atletas</a>
     <p class="eyebrow">Panel del coach</p><h1>Ajustes del centro</h1></header>
     <div class="grid">
-      <section class="panel span-6"><div class="panel-head"><h2>Comunicados</h2><span class="muted">Llegan al inbox de los alumnos</span></div>
-        <div class="form-grid">
-          <div class="full"><label for="comTitulo" style="margin-top:0">Título</label><input id="comTitulo" placeholder="Ej: Feriado del lunes"></div>
-          <div class="full"><label for="comMsg">Mensaje</label><textarea id="comMsg" rows="3" placeholder="Ej: El lunes 1 de noviembre no habrá sesiones."></textarea></div>
-          <div class="full"><label for="comDestino">Para</label><select id="comDestino"><option value="todos">Todos los alumnos</option><option value="terapia">Solo terapia</option><option value="fortalecimiento">Solo fortalecimiento</option></select></div>
-        </div>
-        <button type="button" class="btn-primary" id="btnPublicar">Publicar comunicado</button><div id="comMsgBox" aria-live="polite"></div>
-        ${(comunicados || []).length ? `<details class="records"><summary>Enviados (${comunicados.length})</summary><ul class="mov-list">${comunicados.map(c => `
-          <li><span class="mov-txt"><strong>${esc(c.titulo)}</strong> · ${esc(c.destino === "todos" ? "Todos" : CATEGORIAS[c.destino].nombre)}</span><span class="muted">${fmtFecha(String(c.created_at).slice(0,10))}</span>
-          <button type="button" class="btn-danger icon" data-del-com="${esc(c.id)}" aria-label="Borrar comunicado">✕</button></li>`).join("")}</ul></details>` : ""}
-      </section>
       <section class="panel span-6"><div class="panel-head"><h2>Pagos y reservas</h2></div>
         <div class="form-grid">
           <div><label for="ajYape" style="margin-top:0">Número de Yape</label><input id="ajYape" inputmode="tel" value="${esc(aj.yape_numero || "")}"></div>
@@ -545,21 +544,6 @@ async function renderCoachAjustes(main){
     planes.ajustes = { ...aj, terminos };
     showMsg(document.getElementById("termMsg"), "ok", "Términos guardados.");
   });
-  const bP = document.getElementById("btnPublicar");
-  bP.onclick = ()=> withBusy(bP, "Publicando…", async ()=>{
-    const titulo = document.getElementById("comTitulo").value.trim();
-    const mensaje = document.getElementById("comMsg").value.trim();
-    const box = document.getElementById("comMsgBox");
-    if(!titulo || !mensaje){ showMsg(box, "error", "Escribe título y mensaje."); return; }
-    const { error } = await sb.from("comunicados").insert({ titulo, mensaje, destino: document.getElementById("comDestino").value, autor: state.profile.id });
-    if(error){ showError(box, error); return; }
-    await renderCoachAjustes(main);
-    showMsg(document.getElementById("comMsgBox"), "ok", "Comunicado enviado al inbox de los alumnos.");
-  });
-  main.querySelectorAll("[data-del-com]").forEach(b => {
-    b.onclick = ()=>{ if(!confirm("¿Borrar este comunicado del historial?")) return;
-      withBusy(b, "…", async ()=>{ const { error } = await sb.from("comunicados").delete().eq("id", b.dataset.delCom); if(error){ alert(errorES(error)); return; } renderCoachAjustes(main); }); };
-  });
   const leerFila = (tr)=>{ const o = {}; tr.querySelectorAll("[data-f]").forEach(i => { o[i.dataset.f] = i.type === "checkbox" ? i.checked : i.value; }); return o; };
   main.querySelectorAll("[data-save-paq]").forEach(b => {
     b.onclick = ()=> withBusy(b, "…", async ()=>{
@@ -613,4 +597,271 @@ async function renderCoachAjustes(main){
       });
     };
   });
+}
+
+/* ====================== COACH: HOY ======================
+   Lo que pasa hoy en el área del coach (el master ve las dos) y las alertas:
+   fortalecimiento en su última semana de acceso, terapia con 2 sesiones o menos. Se actualiza cada 30 segundos. */
+const hoyUI = { timer: null };
+function alertaAccesoHTML(uid){
+  const a = (state.alertas || []).find(x => x.user_id === uid && x.tipo === "acceso");
+  return a ? `<p class="plan-alert warn" role="status"><strong>Última semana de acceso:</strong> vence el ${fmtFecha(a.fin, true)}${a.paquete ? " · " + esc(a.paquete) : ""}.</p>` : "";
+}
+function alertasListaHTML(alertas){
+  if(!alertas.length) return `<p class="muted" style="margin:0">Sin alertas por ahora.</p>`;
+  const orden = [...alertas].sort((a, b) => a.valor - b.valor || String(a.nombre).localeCompare(String(b.nombre)));
+  return `<ul class="alert-list">${orden.map(a => `
+    <li><a class="alert-item" href="#/atleta/${encodeURIComponent(a.user_id)}">
+      <span class="alert-dot" aria-hidden="true"></span>
+      <span class="alert-txt"><strong>${esc(a.nombre || "Alumno")}</strong><span>${esc(alertaTexto(a))}${a.tipo === "acceso" && a.paquete ? " · " + esc(a.paquete) : ""}</span></span>
+      ${areaCoach() ? "" : `<span class="flag cat-${a.categoria}">${CATEGORIAS[a.categoria].nombre}</span>`}
+    </a></li>`).join("")}</ul>`;
+}
+async function renderCoachHoy(main){
+  const area = areaCoach();
+  const nota = esMaster() ? "Fortalecimiento: última semana de acceso · Terapia: 2 sesiones o menos"
+    : area === "terapia" ? "Pacientes con 2 sesiones o menos" : "Alumnos en su última semana de acceso";
+  main.innerHTML = `<div class="detail"><header class="detail-head">
+    <a class="back" href="#/">← Atletas</a>
+    <p class="eyebrow">${esc(ROLES_EQUIPO[state.profile.role] || "Panel del coach")}</p><h1>Hoy</h1>
+    <p class="lede hoy-fecha">${esc(fechaLarga(todayStr()))}${area ? " · " + CATEGORIAS[area].nombre : ""}</p></header>
+    <div class="grid">
+      <section class="panel span-12 hoy-alertas" aria-labelledby="hAl"><div class="panel-head"><h2 id="hAl">Alertas</h2><span class="muted">${nota}</span></div>
+        <div id="hoyAlertas"><div class="skel skel-block"></div></div></section>
+      <section class="panel span-12" aria-labelledby="hCl"><div class="panel-head"><h2 id="hCl">Clases de hoy</h2><span class="muted" id="hoyResumen"></span></div>
+        <div id="hoyBody"><div class="skel skel-block"></div></div>
+        <p class="muted wk-nota">Toca un nombre para marcar asistencia, cancelar o abrir su ficha. Se actualiza solo cada 30 segundos.</p></section>
+    </div></div>`;
+  await pintarHoy();
+  clearInterval(hoyUI.timer);
+  hoyUI.timer = setInterval(()=>{
+    if(!document.getElementById("hoyBody")){ clearInterval(hoyUI.timer); hoyUI.timer = null; return; }
+    if(!document.querySelector(".overlay")) pintarHoy();
+  }, 30000);
+}
+async function pintarHoy(){
+  const body = document.getElementById("hoyBody");
+  if(!body) return;
+  const iso = todayStr();
+  const area = areaCoach();
+  const [todos, { data: res, error }, alertas] = await Promise.all([
+    cargarHorarios(true),
+    sb.from("reservas").select("*").eq("fecha", iso).in("estado", ["confirmada", "espera", "asistio", "no_asistio"]).order("created_at"),
+    cargarAlertas()
+  ]);
+  if(!document.getElementById("hoyBody")) return;
+  document.getElementById("hoyAlertas").innerHTML = alertasListaHTML(alertas);
+  if(error){ body.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
+  const dow = isoDow(parseFecha(iso));
+  const horarios = todos.filter(h => h.dia_semana === dow && (!area || h.categoria === area) && (h.activo || (res || []).some(r => r.horario_id === h.id)))
+    .sort((a, b) => String(a.hora).localeCompare(String(b.hora)) || a.categoria.localeCompare(b.categoria));
+  const delDia = (res || []).filter(r => horarios.some(h => h.id === r.horario_id));
+  const conf = delDia.filter(r => r.estado !== "espera");
+  const llegaron = conf.filter(r => r.estado === "asistio").length;
+  document.getElementById("hoyResumen").textContent = conf.length ? `${plural(conf.length, "reserva", "reservas")} · ${llegaron} ${llegaron === 1 ? "llegó" : "llegaron"}` : "";
+  if(!horarios.length){ body.innerHTML = emptyHTML(area ? "Hoy no hay clases de tu área." : "Hoy no hay clases."); return; }
+  const ahora = new Date();
+  const perfil = (id)=> state.athleteList.find(a => a.id === id) || {};
+  body.innerHTML = `<ol class="hoy-list">${horarios.map(h => {
+    const rs = delDia.filter(r => r.horario_id === h.id);
+    const ini = inicioLocal(iso, h.hora);
+    const fin = new Date(ini.getTime() + (h.duracion_min || 60) * 60000);
+    const momento = ahora >= fin ? "pasada" : ahora >= ini ? "ahora" : "";
+    return `<li class="hoy-slot ${h.categoria === "terapia" ? "ter" : "fort"} ${momento}">
+      <div class="hoy-hora"><span class="num">${horaCorta(h.hora)}</span>${momento === "ahora" ? `<span class="hoy-ahora">En curso</span>` : ""}</div>
+      <div class="hoy-info">
+        <p class="hoy-cap">${CATEGORIAS[h.categoria].nombre} · <span class="num">${rs.filter(r => r.estado !== "espera").length}/${h.aforo}</span></p>
+        ${rs.length ? `<ul class="hoy-people">${rs.map(r => {
+          const p = perfil(r.user_id);
+          const tono = h.categoria === "terapia" ? `r-${(state.riesgo || {})[r.user_id] || "sin"}` : "fort";
+          const marca = r.estado === "asistio" ? "✓ Llegó" : r.estado === "no_asistio" ? "No vino" : r.estado === "espera" ? "En espera" : momento ? "Por llegar" : "Reservó";
+          return `<li><button type="button" class="hoy-chip st-${r.estado}" data-res="${esc(r.id)}"><span class="hoy-sw ${tono}" aria-hidden="true"></span><span class="hoy-name">${esc(p.nombre || "Alumno")}</span><span class="hoy-st">${marca}</span></button></li>`;
+        }).join("")}</ul>` : `<p class="muted" style="margin:2px 0 0">Sin reservas.</p>`}
+      </div></li>`;
+  }).join("")}</ol>`;
+  body.querySelectorAll("[data-res]").forEach(b => {
+    b.onclick = ()=> abrirReservaCoach(delDia.find(r => r.id === b.dataset.res), todos, document.getElementById("coachMain"));
+  });
+}
+
+/* ====================== COACH: AVISOS (COMUNICADOS) ======================
+   El master escribe a todos o a un área; el coach de área solo a los alumnos de su área. */
+async function renderCoachComunicados(main){
+  const area = areaCoach();
+  const { data: comunicados, error } = await sb.from("comunicados").select("*").order("created_at", { ascending: false }).limit(30);
+  const destinos = area ? [[area, `Alumnos de ${CATEGORIAS[area].nombre.toLowerCase()}`]]
+    : [["todos", "Todos los alumnos"], ["terapia", "Solo terapia"], ["fortalecimiento", "Solo fortalecimiento"]];
+  const puedeBorrar = (c)=> esMaster() || c.autor === state.profile.id;
+  main.innerHTML = `<div class="detail"><header class="detail-head">
+    <a class="back" href="#/">← Atletas</a>
+    <p class="eyebrow">Panel del coach</p><h1>Avisos</h1>
+    <p class="lede" style="margin-top:6px">Los comunicados llegan a las notificaciones de los alumnos${area ? " de tu área" : ""}.</p></header>
+    <div class="grid">
+      <section class="panel span-6"><div class="panel-head"><h2>Nuevo comunicado</h2></div>
+        <div class="form-grid">
+          <div class="full"><label for="comTitulo" style="margin-top:0">Título</label><input id="comTitulo" placeholder="Ej: Feriado del lunes"></div>
+          <div class="full"><label for="comMsg">Mensaje</label><textarea id="comMsg" rows="4" placeholder="Ej: El lunes 1 de noviembre no habrá sesiones."></textarea></div>
+          <div class="full"><label for="comDestino">Para</label><select id="comDestino"${destinos.length === 1 ? " disabled" : ""}>${destinos.map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></div>
+        </div>
+        <button type="button" class="btn-primary" id="btnPublicar">Publicar comunicado</button><div id="comMsgBox" aria-live="polite"></div>
+      </section>
+      <section class="panel span-6"><div class="panel-head"><h2>Enviados</h2><span class="muted">${(comunicados || []).length ? plural(comunicados.length, "comunicado", "comunicados") : ""}</span></div>
+        ${error ? `<div class="error" role="alert">${esc(errorES(error))}</div>` : (comunicados || []).length ? `<ul class="mov-list com-list">${comunicados.map(c => `
+          <li><span class="mov-txt"><strong>${esc(c.titulo)}</strong> · ${esc(c.destino === "todos" ? "Todos" : CATEGORIAS[c.destino].nombre)}
+            <span class="autoria">${esc(fmtFecha(String(c.created_at).slice(0, 10)))} · por ${esc(nombreAutor(c.autor))}</span></span>
+            ${puedeBorrar(c) ? `<button type="button" class="btn-danger icon" data-del-com="${esc(c.id)}" aria-label="Borrar comunicado ${esc(c.titulo)}">✕</button>` : ""}</li>`).join("")}</ul>`
+          : `<p class="muted">Todavía no hay comunicados.</p>`}
+      </section>
+    </div></div>`;
+  const bP = document.getElementById("btnPublicar");
+  bP.onclick = ()=> withBusy(bP, "Publicando…", async ()=>{
+    const titulo = document.getElementById("comTitulo").value.trim();
+    const mensaje = document.getElementById("comMsg").value.trim();
+    const box = document.getElementById("comMsgBox");
+    if(!titulo || !mensaje){ showMsg(box, "error", "Escribe título y mensaje."); return; }
+    const { error: e2 } = await sb.from("comunicados").insert({ titulo, mensaje, destino: document.getElementById("comDestino").value, autor: state.profile.id });
+    if(e2){ showError(box, e2); return; }
+    await renderCoachComunicados(main);
+    showMsg(document.getElementById("comMsgBox"), "ok", "Comunicado enviado a las notificaciones de los alumnos.");
+  });
+  main.querySelectorAll("[data-del-com]").forEach(b => {
+    b.onclick = ()=>{ if(!confirm("¿Borrar este comunicado del historial?")) return;
+      withBusy(b, "…", async ()=>{ const { error: e3 } = await sb.from("comunicados").delete().eq("id", b.dataset.delCom); if(e3){ alert(errorES(e3)); return; } renderCoachComunicados(main); }); };
+  });
+}
+
+/* ====================== MASTER: RESUMEN DEL CENTRO ====================== */
+const resumenUI = { mes: null };
+async function renderCoachResumen(main){
+  const hoy = parseFecha(todayStr());
+  const mesActual = fechaISO(new Date(hoy.getFullYear(), hoy.getMonth(), 1));
+  resumenUI.mes = resumenUI.mes || mesActual;
+  const m = parseFecha(resumenUI.mes);
+  const titulo = `${MESES_LARGOS[m.getMonth()][0].toUpperCase()}${MESES_LARGOS[m.getMonth()].slice(1)} ${m.getFullYear()}`;
+  main.innerHTML = `<div class="detail"><header class="detail-head">
+    <a class="back" href="#/">← Atletas</a>
+    <p class="eyebrow">Solo master coach</p><h1>Resumen del centro</h1></header>
+    <div class="agenda-bar rt-bar">
+      <button type="button" class="icon-btn" id="rsPrev" aria-label="Mes anterior">‹</button>
+      <span class="agenda-day">${titulo}${resumenUI.mes === mesActual ? " · este mes" : ""}</span>
+      <button type="button" class="icon-btn" id="rsNext" aria-label="Mes siguiente"${resumenUI.mes >= mesActual ? " disabled" : ""}>›</button>
+    </div>
+    <div id="rsBody"><div class="skel skel-block" style="height:260px"></div></div></div>`;
+  const ir = (delta)=>{ resumenUI.mes = fechaISO(new Date(m.getFullYear(), m.getMonth() + delta, 1)); renderCoachResumen(main); };
+  document.getElementById("rsPrev").onclick = ()=> ir(-1);
+  document.getElementById("rsNext").onclick = ()=> ir(1);
+  const { data: r, error } = await sb.rpc("resumen_centro", { p_mes: resumenUI.mes });
+  const body = document.getElementById("rsBody");
+  if(!body) return;
+  if(error || !r){ body.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
+  const ingresos = r.ingresos || [];
+  const pagos = ingresos.reduce((s, x) => s + Number(x.pagos || 0), 0);
+  const nuevos = r.nuevos || {};
+  const tiles = [
+    statTile("Ingresos del mes", ingresos.length ? ingresos.map(x => `<span class="rs-money">${dinero(x.total, x.moneda)}</span>`).join("") : "—",
+      pagos ? plural(pagos, "pago aprobado", "pagos aprobados") : "Sin pagos aprobados"),
+    statTile("Fortalecimiento activos", `<span class="num">${r.activos_fortalecimiento || 0}</span>`, "con acceso vigente hoy"),
+    statTile("Terapia activos", `<span class="num">${r.activos_terapia || 0}</span>`, "con sesiones o reserva cercana"),
+    statTile("Nuevos en el mes", `<span class="num">${(nuevos.terapia || 0) + (nuevos.fortalecimiento || 0)}</span>`,
+      `${nuevos.terapia || 0} terapia · ${nuevos.fortalecimiento || 0} fortalecimiento`),
+    statTile("Asistencias del mes", `<span class="num">${r.asistencias_mes || 0}</span>`, "llegadas registradas")
+  ];
+  const oc = r.ocupacion || [];
+  const porDia = (cat)=> [1, 2, 3, 4, 5, 6, 7].map(d => {
+    const hs = oc.filter(o => o.categoria === cat && o.dia_semana === d);
+    if(!hs.length) return "";
+    const res = hs.reduce((s, o) => s + o.reservas, 0), cap = hs.reduce((s, o) => s + o.aforo, 0);
+    const pct = cap ? Math.round(res / cap * 100) : 0;
+    return `<li class="oc-row"><span class="oc-when">${DIAS_SEMANA[d].slice(0, 3)}</span>
+      <span class="oc-bar" role="img" aria-label="${pct}% ocupado"><i style="width:${Math.min(100, pct)}%"></i></span>
+      <span class="oc-num num">${res}/${cap}</span></li>`;
+  }).join("");
+  const top = [...oc].filter(o => o.reservas > 0).sort((a, b) => b.reservas / b.aforo - a.reservas / a.aforo).slice(0, 5);
+  const lunes = parseFecha(r.semana);
+  body.innerHTML = `
+    <div class="stats rs-stats">${tiles.join("")}</div>
+    <section class="panel" style="margin-top:var(--gap)"><div class="panel-head"><h2>Ocupación de esta semana</h2><span class="muted">Desde el lunes ${lunes.getDate()} de ${MESES_LARGOS[lunes.getMonth()]} · reservas sobre aforo</span></div>
+      <div class="oc-grid">
+        ${["fortalecimiento", "terapia"].map(cat => `<div><h3 class="sub-h">${CATEGORIAS[cat].nombre}</h3><ul class="oc-list">${porDia(cat) || `<li class="muted">Sin horarios activos.</li>`}</ul></div>`).join("")}
+      </div>
+      ${top.length ? `<h3 class="sub-h">Horarios más llenos</h3><ul class="mov-list">${top.map(o => `<li><span class="mov-txt">${DIAS_SEMANA[o.dia_semana]} ${o.hora} · ${CATEGORIAS[o.categoria].nombre}</span><span class="num">${o.reservas}/${o.aforo}</span></li>`).join("")}</ul>` : ""}
+    </section>`;
+}
+
+/* ====================== MASTER: EQUIPO ======================
+   Cada persona crea su cuenta en la app (Registrarme) y un master le asigna su rol aquí. */
+const ROL_OPCIONES = [["coach", "Master coach"], ["coach_terapia", "Coach de terapia"], ["coach_fortalecimiento", "Coach de fortalecimiento"]];
+function rolSelectHTML(id, actual, conQuitar){
+  return `<select data-rol-de="${esc(id)}" aria-label="Rol">
+    ${actual === "atleta" || !actual ? `<option value="" selected>Elegir rol…</option>` : ""}
+    ${ROL_OPCIONES.map(([k, t]) => `<option value="${k}"${k === actual ? " selected" : ""}>${t}</option>`).join("")}
+    ${conQuitar ? `<option value="atleta">Quitar del equipo (vuelve a ser alumno)</option>` : ""}
+  </select>`;
+}
+async function renderCoachEquipo(main){
+  main.innerHTML = `<div class="detail"><header class="detail-head">
+    <a class="back" href="#/">← Atletas</a>
+    <p class="eyebrow">Solo master coach</p><h1>Equipo</h1>
+    <p class="lede" style="margin-top:6px">El master ve todo y administra pagos, ajustes y el equipo. El coach de terapia y el de fortalecimiento solo ven a los alumnos de su área y no ven pagos.</p></header>
+    <div class="grid">
+      <section class="panel span-12"><div class="panel-head"><h2>Equipo actual</h2><span class="muted" id="eqCount"></span></div>
+        <div id="eqLista"><div class="skel skel-block"></div></div></section>
+      <section class="panel span-12"><div class="panel-head"><h2>Agregar al equipo</h2></div>
+        <p class="muted" style="margin:0 0 10px">La persona primero crea su cuenta en la app con «Registrarme». Luego búscala aquí por nombre o correo y elige su rol.</p>
+        <form class="inline-add" id="eqBuscarForm" role="search">
+          <input type="search" id="eqQ" placeholder="Nombre o correo" aria-label="Buscar cuenta por nombre o correo" autocomplete="off">
+          <button type="submit" class="btn-outline">Buscar</button>
+        </form>
+        <div id="eqResultados" aria-live="polite"></div></section>
+    </div></div>`;
+  const filaHTML = (c, conQuitar)=> `
+    <li class="eq-row" data-id="${esc(c.id)}">
+      <span class="avatar" aria-hidden="true">${esc(initials(c.nombre))}</span>
+      <span class="eq-info"><strong>${esc(c.nombre || "(sin nombre)")}${c.id === state.profile.id ? " <span class=\"muted\">(tú)</span>" : ""}</strong>
+        <span class="muted">${esc(c.email || "")}${c.role === "atleta" ? ` · alumno${c.categoria ? " de " + CATEGORIAS[c.categoria].nombre.toLowerCase() : ""}` : ""}</span></span>
+      <span class="eq-actions">${c.id === state.profile.id ? `<span class="badge">${ROLES_EQUIPO[c.role]}</span>`
+        : `${rolSelectHTML(c.id, c.role, conQuitar)}<button type="button" class="btn-outline sm" data-guardar-rol="${esc(c.id)}">${c.role === "atleta" ? "Agregar" : "Guardar"}</button>`}</span>
+      <span class="eq-msg" aria-live="polite"></span>
+    </li>`;
+  const enlazar = (box)=>{
+    box.querySelectorAll("[data-guardar-rol]").forEach(b => {
+      b.onclick = ()=>{
+        const li = b.closest(".eq-row");
+        const rol = li.querySelector("[data-rol-de]").value;
+        const nombre = li.querySelector("strong").textContent;
+        const msg = li.querySelector(".eq-msg");
+        if(!rol){ showMsg(msg, "error", "Elige un rol."); return; }
+        if(rol === "atleta" && !confirm(`¿Quitar a ${nombre} del equipo? Volverá a ser alumno y dejará de ver el panel.`)) return;
+        if(rol !== "atleta" && b.textContent === "Agregar" && !confirm(`¿Dar a ${nombre} el rol de ${ROLES_EQUIPO[rol].toLowerCase()}? Dejará de ver su ficha de alumno y verá el panel del coach.`)) return;
+        withBusy(b, "…", async ()=>{
+          const { error } = await sb.rpc("asignar_rol", { p_user: li.dataset.id, p_rol: rol });
+          if(error){ showError(msg, error); return; }
+          await refreshCoachAside();
+          await renderCoachEquipo(main);
+        });
+      };
+    });
+  };
+  const { data: equipo, error } = await sb.rpc("equipo_cuentas", { p_q: null });
+  const lista = document.getElementById("eqLista");
+  if(!lista) return;
+  if(error){ lista.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
+  const orden = { coach: 0, coach_terapia: 1, coach_fortalecimiento: 2 };
+  const eq = (equipo || []).sort((a, b) => (orden[a.role] - orden[b.role]) || String(a.nombre).localeCompare(String(b.nombre)));
+  document.getElementById("eqCount").textContent = plural(eq.length, "persona", "personas");
+  lista.innerHTML = `<ul class="eq-list">${eq.map(c => filaHTML(c, true)).join("")}</ul>`;
+  enlazar(lista);
+  document.getElementById("eqBuscarForm").onsubmit = async (e)=>{
+    e.preventDefault();
+    const q = document.getElementById("eqQ").value.trim();
+    const out = document.getElementById("eqResultados");
+    if(q.length < 2){ out.innerHTML = `<p class="muted">Escribe al menos 2 letras.</p>`; return; }
+    out.innerHTML = `<div class="skel skel-line" style="width:60%;margin-top:12px"></div>`;
+    const { data, error: e2 } = await sb.rpc("equipo_cuentas", { p_q: q });
+    if(e2){ out.innerHTML = `<div class="error" role="alert">${esc(errorES(e2))}</div>`; return; }
+    const nuevos = (data || []).filter(c => c.role === "atleta");
+    out.innerHTML = nuevos.length ? `<ul class="eq-list" style="margin-top:10px">${nuevos.map(c => filaHTML(c, false)).join("")}</ul>`
+      : `<p class="muted" style="margin-top:10px">${(data || []).length ? "Esa persona ya está en el equipo." : "No encontramos una cuenta con ese nombre o correo. Pídele que se registre primero."}</p>`;
+    enlazar(out);
+  };
 }
