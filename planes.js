@@ -948,6 +948,17 @@ async function procesarCheckin(codigo){
   }
   const res = typeof data === "string" ? JSON.parse(data) : (data || {});
   const esFort = state.profile.categoria === "fortalecimiento";
+  if(res.ok === false){
+    /* Horario equivocado: la base ya avisó al alumno y a los master */
+    openDialog("Horario equivocado", `
+      <div class="checkin-res bad"><span class="ck-icon" aria-hidden="true">!</span>
+        <p class="ck-name">No tienes ${esFort ? "un horario reservado" : "una sesión reservada"} a esta hora</p>
+        <p>${res.proxima ? `Tu próxima reserva es el <strong>${esc(fmtFechaHora(res.proxima))}</strong>.` : "No tienes reservas próximas. Reserva tu horario en la app antes de venir."}</p>
+        <p class="muted">Avisamos al equipo para que te ayude en recepción.</p>
+      </div>`);
+    loadInbox();
+    return;
+  }
   openDialog("Asistencia registrada", `
     <div class="checkin-res ok"><span class="ck-icon" aria-hidden="true">✓</span>
       <p class="ck-name">${esc(state.profile.nombre || "")}</p>

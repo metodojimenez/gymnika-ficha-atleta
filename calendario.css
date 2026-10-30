@@ -1,8 +1,8 @@
 /* ============ Calendario, ficha de sesiones, medidor y horario semanal ============ */
 :root{
   --r-rojo:#C62828; --r-anaranjado:#F97316; --r-amarillo:#FACC15; --r-verde:#15803D; --r-azul:#1D4ED8; --r-sin:#E4DDD3;
-  --fort-a:#D6006E; --fort-b:#6A1FD1;
-  --fort-bg:linear-gradient(118deg, var(--fort-a) 0%, #A1129F 48%, var(--fort-b) 100%);
+  --fort-a:#1E40AF; --fort-b:#0EA5E9;
+  --fort-bg:linear-gradient(118deg, var(--fort-a) 0%, #1D6FD8 50%, var(--fort-b) 100%);
   --m1:#22C55E; --m2:#166534; --m3:#EAB308; --m4:#EA580C; --m5:#C62828;
 }
 
@@ -185,7 +185,7 @@
 .wk-slot{ border-radius:8px; padding:5px; }
 .wk-slot + .wk-slot{ margin-top:6px; }
 .wk-slot.ter{ background:var(--accent-tint); }
-.wk-slot.fort{ background:#F6EAF6; }
+.wk-slot.fort{ background:#EAF3FD; }
 .wk-slot.pasado{ opacity:.7; }
 .wk-cap{ display:block; font-size:11.5px; font-weight:700; line-height:1.3; color:var(--ink-soft); margin:0 2px 4px; text-align:left; white-space:normal; overflow-wrap:anywhere; }
 /* Nombres compactos: 2 columnas, 8 personas entran en la hora como 4 + 4 */
@@ -218,11 +218,11 @@
 .rt-tabs button{ min-width:52px; justify-content:center; }
 .rt-titulo{ font-family:var(--font-display); font-size:19px; margin:4px 0 8px; }
 .rt-h{ font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin:14px 0 6px; }
-.rt-nota{ font-size:14px; background:#F6EAF6; border-radius:10px; padding:8px 12px; margin:0 0 10px; }
+.rt-nota{ font-size:14px; background:#EAF3FD; border-radius:10px; padding:8px 12px; margin:0 0 10px; }
 .rt-lista{ list-style:none; margin:0; padding:0; display:grid; gap:8px; }
 @media (min-width:760px){ .rt-lista{ grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 .rt-ej, .rt-bloque{ border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--surface); }
-.rt-ej.principal{ border-color:rgba(214,0,110,.35); box-shadow:inset 3px 0 0 var(--fort-a); }
+.rt-ej.principal{ border-color:rgba(30,64,175,.32); box-shadow:inset 3px 0 0 var(--fort-a); }
 .rt-ej-top{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
 .rt-ej-n{ font-weight:700; line-height:1.3; }
 .rt-star{ color:var(--fort-a); }
@@ -342,3 +342,5 @@ textarea + .autoria{ margin:-4px 0 4px; }
 @media (prefers-reduced-motion: reduce){ .emergente{ animation:none; } }
 @media (max-width:560px){ .emergentes{ top:12px; bottom:auto; left:16px; right:16px; width:auto; } }
 .avisos-sis{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.emergente.alerta{ border-left-color:var(--danger); }
+.emergente.alerta .em-ico{ background:var(--danger-bg); color:var(--danger); font-weight:800; }

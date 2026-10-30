@@ -204,9 +204,9 @@ function authShell(innerHTML){
       <section class="auth-brand" aria-label="Gymnika">
         ${BRAND_HTML}
         <div class="auth-hero">
-          <p class="eyebrow">Seguimiento de atletas</p>
-          <p class="auth-display">Medido.<br>Progresivo.<br><em>Tuyo.</em></p>
-          <p class="auth-lede">Tus sesiones, tus reservas, tus medidas y tu progreso, registrados semana a semana en una sola ficha.</p>
+          <p class="eyebrow">Gymnika Wellness Center</p>
+          <p class="auth-display">Wellness.<br>Recovery.<br><em>Performance.</em></p>
+          <p class="auth-lede">Tu terapia, tu entrenamiento y tu progreso en un solo lugar. Reserva tus sesiones, registra tu llegada y sigue tu evolución con tu coach.</p>
         </div>
         <ul class="auth-facts">
           <li><strong>20</strong><span>semanas por ciclo</span></li>
@@ -222,8 +222,8 @@ function authShell(innerHTML){
 
 function renderAuth(notice){
   authShell(`
-    <h1>Entra a tu ficha</h1>
-    <p class="lede" style="margin-top:10px">Registra tus marcas, revisa tu progresión y mantén tu ficha al día.</p>
+    <h1>Bienvenido a Gymnika</h1>
+    <p class="lede" style="margin-top:10px">Ingresa con tu correo o crea tu cuenta para reservar tus sesiones.</p>
     <div class="tabs" role="tablist" aria-label="Acceso">
       <button type="button" class="tab" role="tab" id="tabLogin" aria-controls="authCard">Iniciar sesión</button>
       <button type="button" class="tab" role="tab" id="tabSignup" aria-controls="authCard">Registrarme</button>
@@ -774,7 +774,7 @@ const inbox = { items: [], enabled: true, timer: null, open: false, cargando: fa
 const INBOX_SECCION = {
   consejos: "notasCard", plan: "nutricionCard", compensacion: "estiramientosCard", ficha: "fichaCard",
   medidas: "medidasCard", fuerza: "fuerzaCard", tiempos: "tiemposCard", eventos: "agendaCard",
-  pago: "planCard", reserva: "misReservasCard", sesiones: "planCard"
+  pago: "planCard", reserva: "misReservasCard", sesiones: "planCard", checkin_error: "misReservasCard"
 };
 function tiempoRelativo(iso){
   const d = new Date(iso); if(isNaN(d)) return "";
@@ -824,7 +824,7 @@ async function loadInbox(){
 /* ====================== VENTANAS EMERGENTES (MASTER) ======================
    Cuando un alumno reserva un horario, el master ve una ventana emergente en la app y, si dio permiso,
    una notificación del sistema en este dispositivo. Funciona mientras la app esté abierta (aunque esté en otra pestaña). */
-const TIPOS_EMERGENTES = ["reserva_nueva"];
+const TIPOS_EMERGENTES = ["reserva_nueva", "checkin_error"];
 function avisarNuevas(items){
   const primeraVez = !inbox.vistos;
   inbox.vistos = inbox.vistos || new Set();
@@ -841,8 +841,8 @@ function mostrarEmergente(n){
     document.body.appendChild(pila);
   }
   const el = document.createElement("div");
-  el.className = "emergente"; el.setAttribute("role", "status");
-  el.innerHTML = `<span class="em-ico" aria-hidden="true">◷</span>
+  el.className = "emergente" + (n.tipo === "checkin_error" ? " alerta" : ""); el.setAttribute("role", "status");
+  el.innerHTML = `<span class="em-ico" aria-hidden="true">${n.tipo === "checkin_error" ? "!" : "◷"}</span>
     <div class="em-txt"><strong>${esc(n.titulo)}</strong>${n.mensaje ? `<span>${esc(n.mensaje)}</span>` : ""}</div>
     <div class="em-acc"><button type="button" class="btn-link" data-ver>Ver horario</button><button type="button" class="icon-btn" data-cerrar aria-label="Cerrar aviso">✕</button></div>`;
   const cerrar = ()=>{ el.classList.add("sale"); setTimeout(()=> el.remove(), 220); };
@@ -956,7 +956,7 @@ async function abrirNotificacion(id){
   }
   if(esEquipo()){
     if(n.tipo === "pago" && esMaster()){ if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos"; return; }
-    if(n.tipo === "checkin" || n.tipo === "reserva_nueva"){ if(location.hash === "#/agenda") showCoachRoute(); else location.hash = "#/agenda"; return; }
+    if(n.tipo === "checkin" || n.tipo === "reserva_nueva" || n.tipo === "checkin_error"){ if(location.hash === "#/agenda") showCoachRoute(); else location.hash = "#/agenda"; return; }
     if(!n.atleta_id) return;
     if(!state.athleteList.some(a => a.id === n.atleta_id)) await refreshCoachAside();
     const destino = "#/atleta/" + encodeURIComponent(n.atleta_id);
