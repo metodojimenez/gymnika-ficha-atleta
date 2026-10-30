@@ -1303,3 +1303,63 @@ window.addEventListener("hashchange", ()=>{
   if(esEquipo() && document.getElementById("coachLayout")) showCoachRoute();
 });
 
+
+/* ====================== INSTALAR LA APP EN EL TELÉFONO ======================
+   Android (Chrome): botón "Instalar" que abre el aviso de instalación del navegador.
+   iPhone: Apple no permite instalar desde la página, así que se muestran los pasos (Compartir → Agregar a pantalla de inicio).
+   No sale si la app ya está instalada (abierta desde el ícono) ni durante 3 días después de tocar "Ahora no". */
+const instalar = { evento: null, el: null };
+const CLAVE_INSTALAR = "gymnika_instalar_cerrado";
+function appInstalada(){
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+function esIOS(){
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+function instalarPospuesto(){
+  try{ return Date.now() - Number(localStorage.getItem(CLAVE_INSTALAR) || 0) < 3 * 86400000; } catch { return false; }
+}
+function ocultarInstalar(posponer){
+  if(posponer){ try{ localStorage.setItem(CLAVE_INSTALAR, String(Date.now())); } catch { /* sin almacenamiento */ } }
+  instalar.el?.remove(); instalar.el = null;
+}
+function mostrarInstalar(modo){
+  if(instalar.el || appInstalada() || instalarPospuesto()) return;
+  const el = document.createElement("aside");
+  el.className = "instalar"; el.setAttribute("aria-label", "Instalar Gymnika");
+  const compartir = `<svg class="instalar-ico-compartir" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Compartir" role="img"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>`;
+  el.innerHTML = `
+    <img class="instalar-icono" src="/icono-192.png" alt="" width="44" height="44">
+    <div class="instalar-txt">
+      <strong>Instala Gymnika en tu teléfono</strong>
+      ${modo === "ios"
+        ? `<span>Toca ${compartir} <b>Compartir</b> y luego <b>Agregar a pantalla de inicio</b>.</span>`
+        : `<span>Ábrela desde tu pantalla de inicio, como cualquier app.</span>`}
+    </div>
+    <div class="instalar-acc">
+      ${modo === "ios" ? "" : `<button type="button" class="btn-primary" data-instalar>Instalar</button>`}
+      <button type="button" class="btn-link" data-instalar-cerrar>Ahora no</button>
+    </div>`;
+  el.querySelector("[data-instalar-cerrar]").onclick = ()=> ocultarInstalar(true);
+  const btn = el.querySelector("[data-instalar]");
+  if(btn) btn.onclick = async ()=>{
+    const ev = instalar.evento;
+    if(!ev){ ocultarInstalar(false); return; }
+    instalar.evento = null;
+    ev.prompt();
+    const { outcome } = await ev.userChoice;
+    ocultarInstalar(outcome !== "accepted");
+  };
+  document.body.appendChild(el);
+  instalar.el = el;
+}
+window.addEventListener("beforeinstallprompt", (e)=>{
+  e.preventDefault();
+  instalar.evento = e;
+  mostrarInstalar("android");
+});
+window.addEventListener("appinstalled", ()=>{ instalar.evento = null; ocultarInstalar(false); });
+if("serviceWorker" in navigator && location.protocol === "https:"){
+  window.addEventListener("load", ()=>{ navigator.serviceWorker.register("/sw.js").catch(e => console.warn("No se pudo activar la instalación:", e)); });
+}
+if(esIOS()) setTimeout(()=> mostrarInstalar("ios"), 1500);
