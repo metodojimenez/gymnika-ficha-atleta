@@ -400,6 +400,8 @@ async function doSignup(){
 
 async function doLogout(){
   stopInbox();
+  avisoPagos.vistos = null; avisoPagos.forzar = true;
+  document.getElementById("modalPago")?.remove();
   await sb.auth.signOut();
   state = { session: null, profile: null, viewingAthleteId: null, athleteList: [], search: "", renderToken: state.renderToken + 1, detail: null };
   if(location.hash) history.replaceState(null, "", location.pathname + location.search);
@@ -698,7 +700,9 @@ function appbarHTML(tag){
   return `
     <header class="appbar">
       <div class="appbar-inner">
-        <div class="brand">${LOGO_HTML}<span class="mark">GYMNIKA</span><span class="tag">${esc(tag)}</span></div>
+        ${esEquipo()
+          ? `<a class="brand brand-link" href="#/hoy" aria-label="Gymnika · ir a Hoy">${LOGO_HTML}<span class="mark">GYMNIKA</span><span class="tag">${esc(tag)}</span></a>`
+          : `<div class="brand">${LOGO_HTML}<span class="mark">GYMNIKA</span><span class="tag">${esc(tag)}</span></div>`}
         <div class="appbar-user">
           <div class="inbox-wrap">
             <button type="button" class="icon-btn inbox-btn" id="btnInbox" aria-haspopup="dialog" aria-expanded="false" aria-controls="inboxPanel" aria-label="Notificaciones" hidden>
@@ -818,6 +822,7 @@ async function loadInbox(){
     avisarNuevas(inbox.items);
     renderInboxBadge();
     if(inbox.open) renderInboxPanel();
+    if(esMaster()) await revisarAvisoPagos();
   } finally { inbox.cargando = false; }
 }
 /* ====================== VENTANAS EMERGENTES (MASTER) ======================
@@ -833,7 +838,7 @@ function avisarNuevas(items){
   nuevas.forEach(n => inbox.vistos.add(claveAviso(n)));
   if(primeraVez || !esMaster()) return;
   nuevas.filter(n => !n.leida).reverse().forEach(n => {
-    if(n.tipo === "pago") mostrarModalPago(n);
+    if(n.tipo === "pago" || n.tipo === "pago_aprobado") notificarSistema(n, "#/pagos");
     else if(TIPOS_EMERGENTES.includes(n.tipo)) mostrarEmergente(n);
   });
 }
@@ -845,45 +850,88 @@ function notificarSistema(n, destino){
     }
   } catch { /* algunos navegadores no permiten notificaciones aquí */ }
 }
-/* Compra nueva: aviso grande al centro de la pantalla del master (se queda hasta que lo cierran) */
-function mostrarModalPago(n){
-  notificarSistema(n, "#/pagos");
-  let fondo = document.getElementById("modalPago");
-  if(!fondo){
-    fondo = document.createElement("div");
-    fondo.id = "modalPago"; fondo.className = "modal-pago-fondo";
-    fondo.innerHTML = `<div class="modal-pago" role="alertdialog" aria-modal="true" aria-labelledby="mpTitulo" aria-describedby="mpLista">
-        <span class="mp-ico" aria-hidden="true">S/</span>
-        <p class="eyebrow">Compra nueva</p>
-        <h2 id="mpTitulo">Hay un pago por revisar</h2>
-        <ul class="mp-lista" id="mpLista"></ul>
-        <p class="muted">Revisa el comprobante y apruébalo para activar las sesiones o el acceso.</p>
-        <div class="mp-acc">
-          <button type="button" class="btn-primary" data-mp-revisar>Revisar pago</button>
-          <button type="button" class="btn-outline" data-mp-cerrar>Después</button>
-        </div>
-      </div>`;
-    document.body.appendChild(fondo);
-    const cerrar = ()=>{ document.removeEventListener("keydown", onKey); fondo.remove(); };
-    const onKey = (e)=>{ if(e.key === "Escape") cerrar(); };
-    document.addEventListener("keydown", onKey);
-    fondo.addEventListener("click", (e)=>{ if(e.target === fondo) cerrar(); });
-    fondo.querySelector("[data-mp-cerrar]").onclick = cerrar;
-    fondo.querySelector("[data-mp-revisar]").onclick = ()=>{
-      const ids = [...fondo.querySelectorAll("[data-mp-id]")].map(li => li.dataset.mpId);
-      cerrar(); marcarLeida(ids);
-      if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos";
-    };
-  }
-  const lista = fondo.querySelector("#mpLista");
-  if(lista.querySelector(`[data-mp-id="${CSS.escape(n.id)}"]`)) return;
-  const li = document.createElement("li");
-  li.dataset.mpId = n.id;
-  li.innerHTML = `<strong>${esc(n.titulo)}</strong>${n.mensaje ? `<span>${esc(n.mensaje)}</span>` : ""}`;
-  lista.prepend(li);
-  fondo.querySelector("#mpTitulo").textContent = lista.children.length > 1 ? `Hay ${lista.children.length} pagos por revisar` : "Hay un pago por revisar";
-  fondo.querySelector("[data-mp-revisar]").focus();
+
+/* ====================== AVISO DE PAGOS (MASTER, PRIORIDAD) ======================
+   Se arma con los pagos que siguen pendientes en la base, no con la campanita, así sale siempre:
+   al abrir la app o iniciar sesión, al volver a la app después de un rato, y cada vez que entra un pago nuevo.
+   También avisa cuando otro master aprobó pagos (aviso 'pago_aprobado').
+   Usa <dialog> nativo: queda por encima de todo y no lo frenan los bloqueadores de ventanas emergentes (no abre ventanas nuevas). */
+const avisoPagos = { vistos: null, forzar: true, ocultoDesde: 0 };
+async function revisarAvisoPagos(){
+  if(!esMaster()) return;
+  const { data, error } = await sb.from("compras").select("id,user_id,paquete_nombre,monto,moneda,metodo,created_at")
+    .eq("estado", "pendiente").order("created_at", { ascending: false });
+  if(error){ console.error(error); return; }
+  const pend = data || [];
+  const aprob = inbox.items.filter(n => n.tipo === "pago_aprobado" && !n.leida);
+  const claves = [...pend.map(c => "c" + c.id), ...aprob.map(n => "n" + claveAviso(n))];
+  const hayNuevos = !avisoPagos.vistos || claves.some(k => !avisoPagos.vistos.has(k));
+  avisoPagos.vistos = new Set(claves);
+  const badge = document.getElementById("navPagosBadge");
+  if(badge){ badge.hidden = !pend.length; badge.textContent = String(pend.length); }
+  const abierto = document.getElementById("modalPago");
+  const forzar = avisoPagos.forzar; avisoPagos.forzar = false;
+  if(!pend.length && !aprob.length){ if(abierto) cerrarAvisoPagos(abierto); return; }
+  if(abierto || forzar || hayNuevos) pintarAvisoPagos(pend, aprob);
 }
+function nombreAlumno(id){ return (state.athleteList.find(a => a.id === id) || {}).nombre || "Alumno"; }
+function listaNombres(nombres){ return nombres.length > 1 ? nombres.slice(0, -1).join(", ") + " y " + nombres[nombres.length - 1] : (nombres[0] || ""); }
+/* Se cierra quitándolo del todo en el mismo momento (sin esperar el evento "close"), para que un aviso nuevo nunca se mezcle con el que se cierra */
+function cerrarAvisoPagos(dlg){
+  const ids = (dlg.dataset.aprob || "").split(",").filter(Boolean);
+  if(dlg.open) dlg.close();
+  dlg.remove();
+  if(ids.length) marcarLeida(ids);
+}
+function pintarAvisoPagos(pend, aprob){
+  let dlg = document.getElementById("modalPago");
+  const nuevo = !dlg;
+  if(nuevo){
+    dlg = document.createElement("dialog");
+    dlg.id = "modalPago"; dlg.className = "modal-pago";
+    dlg.setAttribute("role", "alertdialog"); dlg.setAttribute("aria-labelledby", "mpTitulo");
+    document.body.appendChild(dlg);
+    dlg.addEventListener("cancel", (e)=>{ e.preventDefault(); cerrarAvisoPagos(dlg); });
+    dlg.addEventListener("click", (e)=>{
+      if(e.target.closest("[data-mp-cerrar]")) cerrarAvisoPagos(dlg);
+      else if(e.target.closest("[data-mp-revisar]")){
+        cerrarAvisoPagos(dlg);
+        if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos";
+      }
+    });
+  }
+  const n = pend.length;
+  const personas = [...new Set(aprob.map(x => x.atleta_id))];
+  dlg.dataset.aprob = aprob.map(x => x.id).join(",");
+  dlg.innerHTML = `
+    <span class="mp-ico" aria-hidden="true">S/</span>
+    <p class="eyebrow">${n ? "Pagos por revisar" : "Pagos revisados"}</p>
+    <h2 id="mpTitulo">${n ? (n === 1 ? "Hay un pago por revisar" : `Hay ${n} pagos por revisar`) : (aprob.length === 1 ? "Se aprobó un pago" : `Se aprobaron ${aprob.length} pagos`)}</h2>
+    ${n ? `<ul class="mp-lista">${pend.map(c => `
+      <li><strong>${esc(nombreAlumno(c.user_id))}</strong>
+        <span>${esc(c.paquete_nombre)} · <strong class="num">${dinero(c.monto, c.moneda)}</strong></span>
+        <span class="muted">${esc(METODOS_PAGO[c.metodo] || c.metodo)} · ${esc(tiempoRelativo(c.created_at))}</span></li>`).join("")}</ul>
+      <p class="muted">Revisa el comprobante y apruébalo para activar las sesiones o el acceso.</p>` : ""}
+    ${aprob.length ? `<div class="mp-aprob">
+      <p class="mp-aprob-tit">Se aprobaron los pagos de ${plural(personas.length, "persona", "personas")}: ${esc(listaNombres(personas.map(nombreAlumno)))}.</p>
+      <ul class="mp-lista">${aprob.map(x => `<li><span>${esc(x.mensaje || x.titulo)}</span><span class="muted">${esc(tiempoRelativo(x.created_at))}</span></li>`).join("")}</ul>
+    </div>` : ""}
+    <div class="mp-acc">
+      <button type="button" class="btn-primary" data-mp-revisar>${n ? (n === 1 ? "Revisar pago" : "Revisar pagos") : "Ver pagos"}</button>
+      <button type="button" class="btn-outline" data-mp-cerrar>${n ? "Después" : "Entendido"}</button>
+    </div>`;
+  if(!dlg.open){
+    try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
+  }
+  if(nuevo) dlg.querySelector("[data-mp-revisar]").focus();
+}
+/* Volver a la app después de 1 minuto o más cuenta como abrirla: el aviso de pagos pendientes vuelve a salir */
+document.addEventListener("visibilitychange", ()=>{
+  if(document.hidden){ avisoPagos.ocultoDesde = Date.now(); return; }
+  if(avisoPagos.ocultoDesde && Date.now() - avisoPagos.ocultoDesde >= 60000) avisoPagos.forzar = true;
+  avisoPagos.ocultoDesde = 0;
+  if(inbox.timer) loadInbox();
+});
 function mostrarEmergente(n){
   let pila = document.getElementById("emergentes");
   if(!pila){
@@ -1001,7 +1049,7 @@ async function abrirNotificacion(id){
     return;
   }
   if(esEquipo()){
-    if(n.tipo === "pago" && esMaster()){ if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos"; return; }
+    if((n.tipo === "pago" || n.tipo === "pago_aprobado") && esMaster()){ if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos"; return; }
     if(n.tipo === "checkin" || n.tipo === "reserva_nueva" || n.tipo === "checkin_error"){ if(location.hash === "#/agenda") showCoachRoute(); else location.hash = "#/agenda"; return; }
     if(!n.atleta_id) return;
     if(!state.athleteList.some(a => a.id === n.atleta_id)) await refreshCoachAside();
