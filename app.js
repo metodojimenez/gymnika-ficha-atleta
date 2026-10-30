@@ -15,9 +15,10 @@ const MEDIDA_FIELDS = [
 let state = { session: null, profile: null, viewingAthleteId: null, athleteList: [], search: "", renderToken: 0, detail: null };
 
 /* ====================== EQUIPO: ROLES ======================
-   coach = master coach (administra todo: pagos, ajustes, equipo); coach_terapia y coach_fortalecimiento solo ven a los alumnos de su área.
+   coach = master coach (administra todo: pagos, ajustes, equipo); coach_general ve terapia y fortalecimiento sin nada de administración;
+   coach_terapia y coach_fortalecimiento solo ven a los alumnos de su área.
    La base de datos aplica estas mismas reglas; aquí solo se ocultan las partes que cada uno no usa. */
-const ROLES_EQUIPO = { coach: "Master coach", coach_terapia: "Coach de terapia", coach_fortalecimiento: "Coach de fortalecimiento" };
+const ROLES_EQUIPO = { coach: "Master coach", coach_general: "Coach general", coach_terapia: "Coach de terapia", coach_fortalecimiento: "Coach de fortalecimiento" };
 function esEquipo(p = state.profile){ return !!p && Object.prototype.hasOwnProperty.call(ROLES_EQUIPO, p.role); }
 function esMaster(p = state.profile){ return !!p && p.role === "coach"; }
 function areaCoach(p = state.profile){
@@ -769,7 +770,7 @@ function tipDelDia(){
 
 /* ====================== INBOX DE NOTIFICACIONES ====================== */
 /* Las notificaciones las crea la base de datos (triggers). La app solo las lee y las marca como leídas. */
-const inbox = { items: [], enabled: true, timer: null, open: false, cargando: false };
+const inbox = { items: [], enabled: true, timer: null, open: false, cargando: false, vistos: null };
 const INBOX_SECCION = {
   consejos: "notasCard", plan: "nutricionCard", compensacion: "estiramientosCard", ficha: "fichaCard",
   medidas: "medidasCard", fuerza: "fuerzaCard", tiempos: "tiemposCard", eventos: "agendaCard",
@@ -793,12 +794,12 @@ function initInbox(){
   btn.hidden = false;
   btn.onclick = (e)=>{ e.stopPropagation(); inbox.open ? closeInbox(true) : openInbox(); };
   stopInbox();
-  inbox.timer = setInterval(loadInbox, 60000);
+  inbox.timer = setInterval(loadInbox, esMaster() ? 20000 : 60000);
   loadInbox();
 }
 function stopInbox(){
   if(inbox.timer){ clearInterval(inbox.timer); inbox.timer = null; }
-  inbox.items = []; inbox.open = false;
+  inbox.items = []; inbox.open = false; inbox.vistos = null;
 }
 async function loadInbox(){
   if(!state.profile || !inbox.enabled || inbox.cargando) return;
@@ -815,10 +816,61 @@ async function loadInbox(){
       return;
     }
     inbox.items = data || [];
+    avisarNuevas(inbox.items);
     renderInboxBadge();
     if(inbox.open) renderInboxPanel();
   } finally { inbox.cargando = false; }
 }
+/* ====================== VENTANAS EMERGENTES (MASTER) ======================
+   Cuando un alumno reserva un horario, el master ve una ventana emergente en la app y, si dio permiso,
+   una notificación del sistema en este dispositivo. Funciona mientras la app esté abierta (aunque esté en otra pestaña). */
+const TIPOS_EMERGENTES = ["reserva_nueva"];
+function avisarNuevas(items){
+  const primeraVez = !inbox.vistos;
+  inbox.vistos = inbox.vistos || new Set();
+  const nuevas = items.filter(n => !inbox.vistos.has(n.id));
+  nuevas.forEach(n => inbox.vistos.add(n.id));
+  if(primeraVez || !esMaster()) return;
+  nuevas.filter(n => !n.leida && TIPOS_EMERGENTES.includes(n.tipo)).reverse().forEach(mostrarEmergente);
+}
+function mostrarEmergente(n){
+  let pila = document.getElementById("emergentes");
+  if(!pila){
+    pila = document.createElement("div");
+    pila.id = "emergentes"; pila.className = "emergentes"; pila.setAttribute("aria-live", "polite");
+    document.body.appendChild(pila);
+  }
+  const el = document.createElement("div");
+  el.className = "emergente"; el.setAttribute("role", "status");
+  el.innerHTML = `<span class="em-ico" aria-hidden="true">◷</span>
+    <div class="em-txt"><strong>${esc(n.titulo)}</strong>${n.mensaje ? `<span>${esc(n.mensaje)}</span>` : ""}</div>
+    <div class="em-acc"><button type="button" class="btn-link" data-ver>Ver horario</button><button type="button" class="icon-btn" data-cerrar aria-label="Cerrar aviso">✕</button></div>`;
+  const cerrar = ()=>{ el.classList.add("sale"); setTimeout(()=> el.remove(), 220); };
+  el.querySelector("[data-cerrar]").onclick = cerrar;
+  el.querySelector("[data-ver]").onclick = ()=>{ cerrar(); marcarLeida([n.id]); if(location.hash === "#/agenda") showCoachRoute(); else location.hash = "#/agenda"; };
+  pila.prepend(el);
+  while(pila.children.length > 4) pila.lastElementChild.remove();
+  setTimeout(cerrar, 12000);
+  try{
+    if("Notification" in window && Notification.permission === "granted"){
+      const sis = new Notification(n.titulo, { body: n.mensaje || "", tag: n.id, icon: LOGO_URL });
+      sis.onclick = ()=>{ window.focus(); location.hash = "#/agenda"; sis.close(); };
+    }
+  } catch { /* algunos navegadores no permiten notificaciones aquí */ }
+}
+function avisosSistemaHTML(){
+  if(!esMaster() || !("Notification" in window) || Notification.permission !== "default") return "";
+  return `<div class="plan-alert avisos-sis" id="avisosSis"><span>Activa los avisos de reservas en este dispositivo para verlos aunque estés en otra pestaña.</span>
+    <button type="button" class="btn-outline sm" id="btnAvisosSis">Activar avisos</button></div>`;
+}
+function enlazarAvisosSistema(){
+  const b = document.getElementById("btnAvisosSis");
+  if(b) b.onclick = async ()=>{
+    try{ await Notification.requestPermission(); } catch { /* sin soporte */ }
+    const box = document.getElementById("avisosSis"); if(box) box.remove();
+  };
+}
+
 function renderInboxBadge(){
   const btn = document.getElementById("btnInbox"), badge = document.getElementById("inboxBadge");
   if(!btn || !badge) return;
@@ -847,8 +899,9 @@ function renderInboxPanel(){
         </span>
       </button></li>`).join("")}</ul>`
     : `<div class="inbox-empty"><strong>Todo al día</strong>${esCoach
-        ? (esMaster() ? "Aquí te avisaremos cuando un alumno llegue, cree su cuenta, registre un pago o se quede con pocas sesiones."
-                      : "Aquí te avisaremos cuando un alumno de tu área llegue o cree su cuenta.")
+        ? (esMaster() ? "Aquí te avisaremos cuando un alumno reserve, llegue, cree su cuenta, registre un pago o se quede con pocas sesiones."
+                      : areaCoach() ? "Aquí te avisaremos cuando un alumno de tu área llegue o cree su cuenta."
+                      : "Aquí te avisaremos cuando un alumno llegue o cree su cuenta.")
         : "Aquí verás los avisos del centro, tus pagos, tus reservas y los cambios de tu coach."}</div>`}
   `;
   const all = document.getElementById("btnInboxAll");
@@ -903,7 +956,7 @@ async function abrirNotificacion(id){
   }
   if(esEquipo()){
     if(n.tipo === "pago" && esMaster()){ if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos"; return; }
-    if(n.tipo === "checkin"){ if(location.hash === "#/agenda") showCoachRoute(); else location.hash = "#/agenda"; return; }
+    if(n.tipo === "checkin" || n.tipo === "reserva_nueva"){ if(location.hash === "#/agenda") showCoachRoute(); else location.hash = "#/agenda"; return; }
     if(!n.atleta_id) return;
     if(!state.athleteList.some(a => a.id === n.atleta_id)) await refreshCoachAside();
     const destino = "#/atleta/" + encodeURIComponent(n.atleta_id);

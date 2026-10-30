@@ -499,7 +499,7 @@ async function renderCoachAjustes(main){
         <div class="inline-add sched-add" data-cat="${cat}">
           <select data-f="dia" aria-label="Día">${[1,2,3,4,5,6,7].map(dw => `<option value="${dw}">${DIAS_SEMANA[dw]}</option>`).join("")}</select>
           <input type="time" data-f="hora" value="18:00" aria-label="Hora">
-          <input type="number" data-f="aforo" min="1" max="50" value="${cat === "terapia" ? 8 : 20}" aria-label="Aforo" title="Aforo">
+          <input type="number" data-f="aforo" min="1" max="50" value="${cat === "terapia" ? 6 : 10}" aria-label="Aforo" title="Aforo">
           <button type="button" class="btn-outline" data-add-h>Agregar</button>
         </div><div class="h-msg" aria-live="polite"></div>
       </section>`).join("")}
@@ -571,7 +571,7 @@ async function renderCoachAjustes(main){
     b.onclick = ()=> withBusy(b, "…", async ()=>{
       const box = b.closest(".sched-add"); const v = leerFila(box); const msg = box.parentElement.querySelector(".h-msg");
       if(!v.hora){ showMsg(msg, "error", "Elige la hora."); return; }
-      const { error } = await sb.from("horarios").insert({ categoria: box.dataset.cat, dia_semana: parseInt(v.dia, 10), hora: v.hora, aforo: parseInt(v.aforo, 10) || 8, duracion_min: 60 });
+      const { error } = await sb.from("horarios").insert({ categoria: box.dataset.cat, dia_semana: parseInt(v.dia, 10), hora: v.hora, aforo: parseInt(v.aforo, 10) || (box.dataset.cat === "terapia" ? 6 : 10), duracion_min: 60 });
       if(error){ showError(msg, error); return; }
       planes.horarios = null; renderCoachAjustes(main);
     });
@@ -619,12 +619,13 @@ function alertasListaHTML(alertas){
 }
 async function renderCoachHoy(main){
   const area = areaCoach();
-  const nota = esMaster() ? "Fortalecimiento: última semana de acceso · Terapia: 2 sesiones o menos"
+  const nota = !area ? "Fortalecimiento: última semana de acceso · Terapia: 2 sesiones o menos"
     : area === "terapia" ? "Pacientes con 2 sesiones o menos" : "Alumnos en su última semana de acceso";
   main.innerHTML = `<div class="detail"><header class="detail-head">
     <a class="back" href="#/">← Atletas</a>
     <p class="eyebrow">${esc(ROLES_EQUIPO[state.profile.role] || "Panel del coach")}</p><h1>Hoy</h1>
-    <p class="lede hoy-fecha">${esc(fechaLarga(todayStr()))}${area ? " · " + CATEGORIAS[area].nombre : ""}</p></header>
+    <p class="lede hoy-fecha">${esc(fechaLarga(todayStr()))}${area ? " · " + CATEGORIAS[area].nombre : ""}</p>
+    ${avisosSistemaHTML()}</header>
     <div class="grid">
       ${area === "terapia" ? "" : `<section class="panel span-12 rt-hoy" aria-labelledby="hRt"><div class="panel-head"><h2 id="hRt">Rutina de hoy</h2><span class="muted">Fortalecimiento · según los días que viene cada uno</span></div>
         <div id="hoyRutinas"><div class="skel skel-line" style="width:70%"></div></div></section>`}
@@ -634,6 +635,7 @@ async function renderCoachHoy(main){
         <div id="hoyBody"><div class="skel skel-block"></div></div>
         <p class="muted wk-nota">Toca un nombre para marcar asistencia, cancelar o abrir su ficha. Se actualiza solo cada 30 segundos.</p></section>
     </div></div>`;
+  enlazarAvisosSistema();
   await pintarHoy();
   clearInterval(hoyUI.timer);
   hoyUI.timer = setInterval(()=>{
@@ -796,7 +798,7 @@ async function renderCoachResumen(main){
 
 /* ====================== MASTER: EQUIPO ======================
    Cada persona crea su cuenta en la app (Registrarme) y un master le asigna su rol aquí. */
-const ROL_OPCIONES = [["coach", "Master coach"], ["coach_terapia", "Coach de terapia"], ["coach_fortalecimiento", "Coach de fortalecimiento"]];
+const ROL_OPCIONES = [["coach", "Master coach"], ["coach_general", "Coach general (terapia y fortalecimiento)"], ["coach_terapia", "Coach de terapia"], ["coach_fortalecimiento", "Coach de fortalecimiento"]];
 function rolSelectHTML(id, actual, conQuitar){
   return `<select data-rol-de="${esc(id)}" aria-label="Rol">
     ${actual === "atleta" || !actual ? `<option value="" selected>Elegir rol…</option>` : ""}
@@ -808,7 +810,7 @@ async function renderCoachEquipo(main){
   main.innerHTML = `<div class="detail"><header class="detail-head">
     <a class="back" href="#/">← Atletas</a>
     <p class="eyebrow">Solo master coach</p><h1>Equipo</h1>
-    <p class="lede" style="margin-top:6px">El master ve todo y administra pagos, ajustes y el equipo. El coach de terapia y el de fortalecimiento solo ven a los alumnos de su área y no ven pagos.</p></header>
+    <p class="lede" style="margin-top:6px">El master ve todo y administra pagos, ajustes y el equipo. El coach general ve terapia y fortalecimiento, sin pagos ni administración. El coach de terapia y el de fortalecimiento solo ven a los alumnos de su área.</p></header>
     <div class="grid">
       <section class="panel span-12"><div class="panel-head"><h2>Equipo actual</h2><span class="muted" id="eqCount"></span></div>
         <div id="eqLista"><div class="skel skel-block"></div></div></section>
@@ -852,7 +854,7 @@ async function renderCoachEquipo(main){
   const lista = document.getElementById("eqLista");
   if(!lista) return;
   if(error){ lista.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
-  const orden = { coach: 0, coach_terapia: 1, coach_fortalecimiento: 2 };
+  const orden = { coach: 0, coach_general: 1, coach_terapia: 2, coach_fortalecimiento: 3 };
   const eq = (equipo || []).sort((a, b) => (orden[a.role] - orden[b.role]) || String(a.nombre).localeCompare(String(b.nombre)));
   document.getElementById("eqCount").textContent = plural(eq.length, "persona", "personas");
   lista.innerHTML = `<ul class="eq-list">${eq.map(c => filaHTML(c, true)).join("")}</ul>`;

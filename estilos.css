@@ -57,14 +57,13 @@
     line-height:1.5;
     color:var(--ink);
     background-color:var(--paper);
-    /* Papel milimetrado + grano */
+    /* Papel cálido con grano y dos luces suaves (sin cuadrícula) */
     background-image:
       var(--noise),
-      linear-gradient(rgba(14,124,134,.075) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(14,124,134,.075) 1px, transparent 1px),
-      linear-gradient(rgba(14,124,134,.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(14,124,134,.035) 1px, transparent 1px);
-    background-size:160px 160px, 40px 40px, 40px 40px, 8px 8px, 8px 8px;
+      radial-gradient(70rem 42rem at -10% -12%, rgba(14,124,134,.10), transparent 62%),
+      radial-gradient(60rem 40rem at 112% 108%, rgba(183,132,26,.09), transparent 60%);
+    background-size:160px 160px, 100% 100%, 100% 100%;
+    background-attachment:scroll, fixed, fixed;
     -webkit-font-smoothing:antialiased;
     min-height:100vh;
   }
@@ -324,12 +323,9 @@
     background-color:var(--accent-deep);
     background-image:
       var(--noise),
-      linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px),
-      linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
-      radial-gradient(120% 90% at 0% 0%, #0E7C86 0%, transparent 60%);
-    background-size:160px 160px, 40px 40px, 40px 40px, 8px 8px, 8px 8px, 100% 100%;
+      radial-gradient(120% 90% at 0% 0%, #0E7C86 0%, transparent 60%),
+      radial-gradient(90% 80% at 100% 100%, rgba(183,132,26,.28) 0%, transparent 65%);
+    background-size:160px 160px, 100% 100%, 100% 100%;
     padding:18px var(--gutter) 28px;
     display:flex; flex-direction:column; gap:22px;
   }
