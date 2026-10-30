@@ -344,3 +344,7 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .avisos-sis{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .emergente.alerta{ border-left-color:var(--danger); }
 .emergente.alerta .em-ico{ background:var(--danger-bg); color:var(--danger); font-weight:800; }
+
+/* ---------- Paneles que se pueden minimizar ---------- */
+.panel-head .plegar{ margin-left:auto; flex:none; font-size:14px; padding:6px 10px; min-height:0; }
+.panel.plegado .panel-head{ margin-bottom:0; padding-bottom:0; background-image:none; }

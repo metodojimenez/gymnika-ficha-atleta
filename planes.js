@@ -599,8 +599,11 @@ async function renderReservasAlumno(profile){
     const misDelDia = mias.filter(r => r.fecha === iso).map(r => r.horario_id);
     const slots = delDia(iso).filter(h => inicioLocal(iso, h.hora) > ahora || misDelDia.includes(h.id));
     const sinAcceso = !esTer && !cubreAcceso(plan, iso);
+    /* Un solo horario por día: si ya tiene uno, los demás de ese día no se pueden reservar */
+    const yaTieneDia = mias.some(r => r.fecha === iso && ["confirmada", "espera", "asistio"].includes(r.estado));
     diaBox.innerHTML = `
       <h3 class="cal-dia-t">${fechaLarga(iso)}${iso === hoyISO ? " · hoy" : ""}</h3>
+      ${yaTieneDia && slots.some(h => !mias.some(r => r.horario_id === h.id && r.fecha === iso)) ? `<p class="plan-alert" role="status">Ya tienes un horario este día. Solo se puede reservar uno por día; si quieres cambiarlo, cancela el que tienes.</p>` : ""}
       ${!slots.length ? emptyHTML(iso < hoyISO ? "Este día ya pasó." : "No hay horarios disponibles este día. Elige otro.") : ""}
       ${slots.length && sinAcceso ? `<p class="plan-alert warn">Tu acceso mensual no cubre este día. <button type="button" class="link-inline" data-comprar>Renuévalo</button> para reservar.</p>` : ""}
       <ul class="slot-list">
@@ -615,6 +618,7 @@ async function renderReservasAlumno(profile){
           if(mia) accion = `<span class="slot-tag ${mia.estado === "espera" ? "wait" : "ok"}">${mia.estado === "espera" ? "En lista de espera" : mia.estado === "asistio" ? "Asististe ✓" : "Reservado ✓"}</span>`;
           else if(pasado) accion = `<span class="slot-tag off">Ya pasó</span>`;
           else if(sinAcceso) accion = `<span class="slot-tag off">Sin acceso</span>`;
+          else if(yaTieneDia) accion = `<span class="slot-tag off">Ya tienes otro</span>`;
           else if(lleno && !esTer) accion = `<span class="slot-tag off">Lleno</span>`;
           else accion = `<button type="button" class="${lleno ? "btn-outline" : "btn-primary"} slot-btn" data-reservar="${esc(h.id)}">${lleno ? "Lista de espera" : "Reservar"}</button>`;
           return `

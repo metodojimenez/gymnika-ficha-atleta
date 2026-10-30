@@ -1,14 +1,35 @@
 /* ====================== FICHA DEL ATLETA ====================== */
 function panelHTML(id, title, span, opts = {}){
-  const cls = ["panel", "span-" + span, opts.cls || ""].join(" ").trim();
+  const plegado = opts.plegable && panelPlegado(id);
+  const cls = ["panel", "span-" + span, opts.cls || "", opts.plegable ? "plegable" : "", plegado ? "plegado" : ""].join(" ").replace(/\s+/g, " ").trim();
   return `
     <section class="${cls}" aria-labelledby="h_${id}">
       <div class="panel-head">
         <div>${opts.eyebrow ? `<p class="eyebrow">${opts.eyebrow}</p>` : ""}<h2 id="h_${id}">${title}</h2></div>
         ${opts.note ? `<span class="muted">${opts.note}</span>` : ""}
+        ${opts.plegable ? `<button type="button" class="btn-link plegar" data-plegar="${id}" aria-expanded="${!plegado}" aria-controls="${id}">${plegado ? "Mostrar" : "Minimizar"}</button>` : ""}
       </div>
-      <div id="${id}">${opts.body || ""}</div>
+      <div id="${id}"${plegado ? " hidden" : ""}>${opts.body || ""}</div>
     </section>`;
+}
+/* Paneles que se pueden minimizar: el estado se recuerda en este dispositivo */
+function panelPlegado(id){
+  try{ return localStorage.getItem("gymnika_plegado_" + id) === "1"; } catch { return false; }
+}
+function enlazarPlegables(root){
+  root.querySelectorAll("[data-plegar]").forEach(b => {
+    b.onclick = ()=>{
+      const id = b.dataset.plegar;
+      const cuerpo = document.getElementById(id);
+      const plegar = !cuerpo.hidden;
+      cuerpo.hidden = plegar;
+      b.closest("section").classList.toggle("plegado", plegar);
+      b.textContent = plegar ? "Mostrar" : "Minimizar";
+      b.setAttribute("aria-expanded", String(!plegar));
+      try{ localStorage.setItem("gymnika_plegado_" + id, plegar ? "1" : "0"); } catch { /* sin almacenamiento */ }
+      if(!plegar && id === "medidasCard" && state.detail) renderPesoGrasaChart(state.detail.medidas || []);
+    };
+  });
 }
 
 function detailSkeleton(){
@@ -81,7 +102,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 12, { eyebrow: "Todos los días" })}
     ${panelHTML("notasCard", "Consejos de tu coach", 6, { cls: "coach-voice", eyebrow: "Tu coach" })}
     ${panelHTML("tipCard", esc(tip.titulo), 6, { cls: "coach-voice", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
-    ${panelHTML("medidasCard", "Medidas corporales", 12)}
+    ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
     ${datosPersonales}`;
   } else if(!isCoach){
     panels = `
@@ -94,7 +115,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("tipCard", esc(tip.titulo), 6, { cls: "coach-voice", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
     ${panelHTML("fuerzaCard", "Progresión de fuerza", 8, { note: "Carga el coach" })}
     ${graficoPeso(4)}
-    ${panelHTML("medidasCard", "Medidas corporales", 12)}
+    ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
     ${panelHTML("tiemposCard", "Tiempos deportivos", 6)}
     ${panelHTML("agendaCard", "Agenda: viajes y competencias", 6)}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
@@ -106,7 +127,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("notasCard", "Notas del coach", 6)}
     ${panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 6)}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
-    ${panelHTML("medidasCard", "Medidas corporales", 12)}
+    ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
     ${panelHTML("fichaCard", "Datos personales", 12)}`;
   } else {
     panels = `
@@ -117,7 +138,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("agendaCard", "Agenda: viajes y competencias", 6)}
     ${panelHTML("fuerzaCard", "Progresión de fuerza", 8)}
     ${graficoPeso(4)}
-    ${panelHTML("medidasCard", "Medidas corporales", 12)}
+    ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
     ${panelHTML("tiemposCard", "Tiempos deportivos", 6)}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
     ${panelHTML("estiramientosCard", "Compensación", 6)}
@@ -159,6 +180,7 @@ async function renderAthleteDetail(profile, isCoach, container){
   }
 
   const hay = (id)=> !!document.getElementById(id);
+  enlazarPlegables(container);
   renderMacro(state.detail.eventos, true);
   renderResumen();
   renderFichaForm(profile, uid, isCoach);
