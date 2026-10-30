@@ -347,8 +347,8 @@
   .auth-lede{ color:rgba(255,255,255,.86); font-size:17px; line-height:1.55; max-width:44ch; margin-top:14px; }
   .auth-facts{ list-style:none; margin:0; padding:0; display:none; gap:12px; }
   .auth-facts li{ border-top:1px solid rgba(255,255,255,.3); padding-top:10px; }
-  .auth-facts strong{ display:block; font-family:var(--font-display); font-weight:800; font-size:34px; line-height:1; }
-  .auth-facts span{ font-size:14px; color:rgba(255,255,255,.8); }
+  .auth-facts strong{ display:block; font-family:var(--font-display); font-weight:800; font-size:28px; line-height:1.1; }
+  .auth-facts span{ font-size:15px; color:rgba(255,255,255,.85); }
   .auth-form{ padding:28px var(--gutter) 56px; display:flex; justify-content:center; }
   .auth-form-inner{ width:100%; max-width:640px; }
   .auth-form .card{ margin-top:0; }
@@ -666,7 +666,7 @@
   @media (min-width: 700px){
     .overlay{ align-items:center; padding:24px; }
     .sheet{ border-radius:16px; padding:24px 28px 28px; }
-    .auth-facts{ display:grid; grid-template-columns:repeat(3, 1fr); }
+    .auth-facts{ display:grid; grid-template-columns:repeat(2, 1fr); }
   }
   @media (min-width: 960px){
     .auth{ grid-template-columns:minmax(0, 5fr) minmax(0, 6fr); }

@@ -206,12 +206,11 @@ function authShell(innerHTML){
         <div class="auth-hero">
           <p class="eyebrow">Gymnika Wellness Center</p>
           <p class="auth-display">Wellness.<br>Recovery.<br><em>Performance.</em></p>
-          <p class="auth-lede">Tu terapia, tu entrenamiento y tu progreso en un solo lugar. Reserva tus sesiones, registra tu llegada y sigue tu evolución con tu coach.</p>
+          <p class="auth-lede">Tu espacio para gestionar tu evolución. Reserva tus sesiones, registra tu llegada, revisa tus rutinas de ejercicios y sigue tu evolución con tu coach.</p>
         </div>
         <ul class="auth-facts">
-          <li><strong>20</strong><span>semanas por ciclo</span></li>
-          <li><strong>${MACRO_PHASES.length}</strong><span>bloques de entrenamiento</span></li>
-          <li><strong>${MEDIDA_FIELDS.length}</strong><span>medidas corporales</span></li>
+          <li><strong>Asesoría</strong><span>y reinserción deportiva</span></li>
+          <li><strong>Entrenamiento</strong><span>dirigido y planificado</span></li>
         </ul>
       </section>
       <main class="auth-form">
