@@ -6,9 +6,9 @@ async function renderPlanCoach(profile){
   const master = esMaster();
   const catSelect = `
     <div class="inline-add" style="align-items:end;margin-bottom:6px">
-      ${master ? `<div style="flex:1"><label for="coachCat" style="margin-top:0">Categoría</label>
+      ${master ? `<div style="flex:1 1 140px;min-width:0"><label for="coachCat" style="margin-top:0">Categoría</label>
         <select id="coachCat"><option value="">Sin definir</option>${Object.entries(CATEGORIAS).map(([k,c]) => `<option value="${k}" ${cat === k ? "selected" : ""}>${c.nombre}</option>`).join("")}</select></div>` : ""}
-      <div style="flex:1"><label for="coachInicio" style="margin-top:0">Inicio en Gymnika</label>
+      <div style="flex:1 1 140px;min-width:0"><label for="coachInicio" style="margin-top:0">Inicio en Gymnika</label>
         <input type="date" id="coachInicio" value="${esc(profile.fecha_inicio || "")}"></div>
       <button type="button" class="btn-outline" id="btnGuardarCat">Guardar</button>
     </div><div id="catMsg" aria-live="polite"></div>`;

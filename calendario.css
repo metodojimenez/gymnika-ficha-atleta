@@ -169,7 +169,7 @@
 .wk-l-sep{ padding-left:14px; border-left:1px solid var(--line-strong); }
 .wk-sw{ display:inline-block; width:14px; height:14px; border-radius:4px; }
 .wk-sw.fort{ background:var(--fort-bg); }
-.wk-scroll{ overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); box-shadow:var(--shadow); -webkit-overflow-scrolling:touch; }
+.wk-scroll{ position:relative; overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); box-shadow:var(--shadow); -webkit-overflow-scrolling:touch; }
 .wk-grid{ border-collapse:separate; border-spacing:0; width:100%; min-width:940px; table-layout:fixed; }
 .wk-grid th, .wk-grid td{ border-bottom:1px solid var(--line); border-right:1px solid var(--line); vertical-align:top; }
 .wk-grid tr > :last-child{ border-right:0; }
@@ -276,7 +276,7 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .hoy-ahora{ align-self:flex-start; white-space:nowrap; font-family:inherit; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:#fff; background:var(--accent); padding:3px 7px; border-radius:999px; }
 .hoy-slot.ahora{ background:linear-gradient(90deg, var(--accent-tint), transparent 70%); border-radius:10px; padding-left:8px; padding-right:8px; }
 .hoy-cap{ margin:0 0 6px; font-size:13px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; }
-.hoy-people{ list-style:none; margin:0; padding:0; display:grid; gap:6px; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); }
+.hoy-people{ list-style:none; margin:0; padding:0; display:grid; gap:6px; grid-template-columns:repeat(auto-fill, minmax(min(230px, 100%), 1fr)); }
 .hoy-chip{ display:flex; align-items:center; gap:8px; width:100%; min-height:40px; padding:6px 10px; border-radius:10px; border:1px solid var(--line); background:var(--surface); text-align:left; font-size:14.5px; }
 .hoy-chip:hover{ border-color:var(--accent); }
 .hoy-sw{ width:12px; height:28px; flex:none; border-radius:4px; background:var(--bg, var(--r-sin)); }
@@ -391,3 +391,15 @@ textarea + .autoria{ margin:-4px 0 4px; }
 @keyframes instalar-sube{ from{ opacity:0; transform:translateY(16px); } to{ opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce){ .instalar{ animation:none; } }
 .instalar-msg{ grid-column:1 / -1; margin:0; font-size:14px; color:var(--danger); }
+@media (max-width: 420px){
+  .hoy-slot{ grid-template-columns:62px minmax(0, 1fr); gap:10px; }
+  .hoy-hora{ font-size:18px; }
+  .hoy-ahora{ font-size:9.5px; letter-spacing:.02em; padding:3px 5px; }
+}
+/* Teléfonos: flechas a los lados del título de la semana, en una sola fila */
+@media (max-width: 560px){
+  .agenda-bar{ display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; }
+  .agenda-bar .agenda-day{ margin:0; text-align:center; font-size:15px; line-height:1.3; }
+  .agenda-bar .icon-btn{ border:1px solid var(--line); font-size:22px; }
+  .agenda-bar > .btn-link{ grid-column:1 / -1; justify-self:center; }
+}

@@ -3,8 +3,8 @@ const SUPABASE_URL = "https://ucsogyvrplsonqpmufty.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjc29neXZycGxzb25xcG11ZnR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5ODA0NDUsImV4cCI6MjEwNzU1NjQ0NX0.XZ_enfBu30iFH9nUiKnpB4LDJDHvQIvbu2WSIAFV_tc";
 let sb = null; // se crea al cargar la página (los scripts externos usan defer)
 /* El logo incrustado del archivo recibido estaba dañado; se usa el de gymnika.pe. Si no carga, se oculta y queda el texto. */
-const LOGO_URL = "https://assets.cdn.filesafe.space/meD3VpHRGa6RpJRNHfQd/media/6a3061ddd64da5ce6b762b80.png";
-const LOGO_HTML = `<img class="logo-img" src="${LOGO_URL}" alt="" height="30" decoding="async" onerror="this.remove()">`;
+const LOGO_URL = "/logo-g.png"; // símbolo G del logo de Gymnika
+const LOGO_HTML = `<img class="logo-img" src="${LOGO_URL}" alt="" width="44" height="30" decoding="async" onerror="this.remove()">`;
 const BRAND_HTML = `<div class="brand">${LOGO_HTML}<span class="mark">GYMNIKA</span></div>`;
 
 const MEDIDA_FIELDS = [
@@ -574,6 +574,7 @@ function renderMacro(eventos, animate){
     const semanas = [];
     for(let w = desde; w <= p.hasta; w++) semanas.push(w);
     const rango = desde === p.hasta ? `${desde}` : `${desde}–${p.hasta}`;
+    const rangoHTML = desde === p.hasta ? `${desde}` : `${desde}<span class="hasta">–${p.hasta}</span>`;
     desde = p.hasta + 1;
     const actual = !est.antes && p.nombre === est.fase;
     const celdas = semanas.map(w=>{
@@ -589,7 +590,7 @@ function renderMacro(eventos, animate){
         <div class="macro-cells" aria-hidden="true">${celdas}</div>
         <button type="button" class="macro-label" data-fase="${esc(p.nombre)}" aria-label="${esc(p.nombre)}, semanas ${rango}${actual ? ", fase actual" : ""}. Ver en qué consiste">
           <span class="macro-name"><span class="full">${esc(p.nombre)}</span><span class="short">${esc(PHASE_SHORT[p.nombre] || p.nombre)}</span></span>
-          <span class="macro-range"><span class="pre">Sem. </span>${rango}</span>
+          <span class="macro-range"><span class="pre">Sem. </span>${rangoHTML}</span>
         </button>
       </div>`;
   }).join("");
@@ -848,7 +849,7 @@ function notificarSistema(n, destino){
   if(pushUI.activo) return; // con push activo, el aviso del sistema ya llega por el service worker
   try{
     if("Notification" in window && Notification.permission === "granted"){
-      const sis = new Notification(n.titulo, { body: n.mensaje || "", tag: n.id, icon: LOGO_URL, requireInteraction: destino === "#/pagos" });
+      const sis = new Notification(n.titulo, { body: n.mensaje || "", tag: n.id, icon: "/icono-192.png", requireInteraction: destino === "#/pagos" });
       sis.onclick = ()=>{ window.focus(); location.hash = destino; sis.close(); };
     }
   } catch { /* algunos navegadores no permiten notificaciones aquí */ }

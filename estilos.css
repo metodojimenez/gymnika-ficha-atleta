@@ -115,7 +115,7 @@
   }
   .boot-mark{ font-family:var(--font-display); font-weight:800; font-size:22px; letter-spacing:.06em; }
 
-  /* ---------- Barra superior con regla ---------- */
+  /* ---------- Barra superior ---------- */
   .appbar{
     position:sticky; top:0; z-index:40;
     background:rgba(246,242,236,.9);
@@ -123,30 +123,24 @@
     backdrop-filter:saturate(1.2) blur(10px);
     border-bottom:1px solid var(--line);
   }
-  .appbar::before{
-    content:""; display:block; height:10px;
-    background-image:var(--ruler-major), var(--ruler-minor);
-    background-size:100% 10px, 100% 5px;
-    background-repeat:repeat-x;
-    background-position:var(--gutter) 0, var(--gutter) 0;
-    border-bottom:2px solid var(--accent);
-  }
+  .appbar::before{ content:""; display:block; height:3px; background:var(--accent); }
   .appbar-inner{
     display:flex; align-items:center; justify-content:space-between; gap:12px;
     padding:10px var(--gutter);
     padding-left:max(var(--gutter), env(safe-area-inset-left));
     padding-right:max(var(--gutter), env(safe-area-inset-right));
   }
-  .brand{ display:flex; align-items:center; gap:10px; min-width:0; }
-  .brand .logo-img{ height:30px; width:auto; display:block; }
+  .brand{ display:flex; align-items:center; gap:10px; min-width:0; flex:none; }
+  .brand .logo-img{ height:30px; width:auto; display:block; flex:none; }
   .brand .mark{ font-family:var(--font-display); font-weight:800; font-size:17px; letter-spacing:.06em; }
   .brand .tag{
     font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
     color:var(--accent-2); background:var(--accent-tint);
     padding:5px 10px; border-radius:999px; white-space:nowrap;
   }
-  .appbar-user{ display:flex; align-items:center; gap:6px; min-width:0; }
-  .user-name{ font-weight:700; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:28vw; }
+  .appbar-user{ display:flex; align-items:center; gap:6px; min-width:0; flex:0 1 auto; }
+  .appbar-user > *{ flex:none; }
+  .appbar-user .user-name{ font-weight:700; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:28vw; min-width:0; flex:0 1 auto; }
 
   /* ---------- Botones ---------- */
   button{ cursor:pointer; border:none; background:none; padding:0; }
@@ -220,7 +214,7 @@
   }
   .form-section:first-child{ margin-top:4px; padding-top:0; border-top:0; }
   .row{ display:grid; grid-template-columns:1fr; gap:0 12px; }
-  .inline-add{ display:flex; gap:8px; align-items:stretch; }
+  .inline-add{ display:flex; flex-wrap:wrap; gap:8px; align-items:stretch; }
   .inline-add input{ flex:1; min-width:0; }
   .inline-add .btn-outline{ flex:0 0 auto; }
 
@@ -291,7 +285,7 @@
   .skel-block{ height:180px; }
 
   /* ---------- Tablas ---------- */
-  .table-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; margin-top:12px; border:1px solid var(--line); border-radius:10px; }
+  .table-wrap{ position:relative; overflow-x:auto; -webkit-overflow-scrolling:touch; margin-top:12px; border:1px solid var(--line); border-radius:10px; }
   table{ width:100%; border-collapse:collapse; font-size:14.5px; font-variant-numeric:tabular-nums; }
   th,td{ padding:10px 12px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
   th:first-child,td:first-child{ text-align:left; }
@@ -328,11 +322,6 @@
     background-size:160px 160px, 100% 100%, 100% 100%;
     padding:18px var(--gutter) 28px;
     display:flex; flex-direction:column; gap:22px;
-  }
-  .auth-brand::before{
-    content:""; position:absolute; left:0; right:0; top:0; height:12px;
-    background-image:repeating-linear-gradient(90deg, rgba(255,255,255,.55) 0 1px, transparent 1px 40px), repeating-linear-gradient(90deg, rgba(255,255,255,.28) 0 1px, transparent 1px 8px);
-    background-size:100% 12px, 100% 6px; background-repeat:repeat-x;
   }
   .auth-brand .brand{ margin-top:8px; }
   .auth-brand .mark{ color:#fff; }
@@ -490,6 +479,10 @@
     .macro-cell{ height:24px; }
     .macro-cells{ gap:2px; }
     .macro-track{ gap:4px; }
+  }
+  /* Teléfonos angostos: las fases de 2 semanas no tienen espacio para "17–18"; se muestra solo la semana en que empieza */
+  @container macro (max-width: 440px){
+    .macro-range .hasta{ display:none; }
   }
   .macro-foot{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 16px; margin-top:14px; font-size:13.5px; }
   .macro-foot span{ display:inline-flex; align-items:center; gap:6px; }
@@ -662,6 +655,9 @@
   @media (max-width: 420px){
     .brand .tag{ display:none; }
     .brand .mark{ font-size:15px; }
+  }
+  @media (max-width: 380px){
+    .appbar .brand .mark{ display:none; } /* en teléfonos angostos queda solo la G del logo */
   }
   @media (min-width: 700px){
     .overlay{ align-items:center; padding:24px; }
@@ -886,7 +882,7 @@
   .agenda-bar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:var(--gap); }
   .agenda-bar input[type="date"]{ width:auto; min-height:40px; padding:6px 10px; }
   .agenda-day{ font-weight:700; margin-right:auto; }
-  .slot-board{ display:grid; gap:var(--gap); grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); }
+  .slot-board{ display:grid; gap:var(--gap); grid-template-columns:repeat(auto-fill, minmax(min(260px, 100%), 1fr)); }
   .slot-card .panel-head h2{ font-size:26px; }
   .att-list{ list-style:none; margin:0; padding:0; }
   .att-list li{ display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--line); }
