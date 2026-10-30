@@ -624,8 +624,7 @@ async function renderCoachHoy(main){
   main.innerHTML = `<div class="detail"><header class="detail-head">
     <a class="back" href="#/">← Atletas</a>
     <p class="eyebrow">${esc(ROLES_EQUIPO[state.profile.role] || "Panel del coach")}</p><h1>Hoy</h1>
-    <p class="lede hoy-fecha">${esc(fechaLarga(todayStr()))}${area ? " · " + CATEGORIAS[area].nombre : ""}</p>
-    ${avisosSistemaHTML()}</header>
+    <p class="lede hoy-fecha">${esc(fechaLarga(todayStr()))}${area ? " · " + CATEGORIAS[area].nombre : ""}</p></header>
     <div class="grid">
       ${area === "terapia" ? "" : `<section class="panel span-12 rt-hoy" aria-labelledby="hRt"><div class="panel-head"><h2 id="hRt">Rutina de hoy</h2><span class="muted">Fortalecimiento · según los días que viene cada uno</span></div>
         <div id="hoyRutinas"><div class="skel skel-line" style="width:70%"></div></div></section>`}
@@ -635,7 +634,6 @@ async function renderCoachHoy(main){
         <div id="hoyBody"><div class="skel skel-block"></div></div>
         <p class="muted wk-nota">Toca un nombre para marcar asistencia, cancelar o abrir su ficha. Se actualiza solo cada 30 segundos.</p></section>
     </div></div>`;
-  enlazarAvisosSistema();
   await pintarHoy();
   clearInterval(hoyUI.timer);
   hoyUI.timer = setInterval(()=>{

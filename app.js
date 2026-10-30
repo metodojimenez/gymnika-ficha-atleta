@@ -400,6 +400,7 @@ async function doSignup(){
 
 async function doLogout(){
   stopInbox();
+  await quitarPushDispositivo();
   avisoPagos.vistos = null; avisoPagos.forzar = true;
   document.getElementById("modalPago")?.remove();
   await sb.auth.signOut();
@@ -777,7 +778,7 @@ const inbox = { items: [], enabled: true, timer: null, open: false, cargando: fa
 const INBOX_SECCION = {
   consejos: "notasCard", plan: "nutricionCard", compensacion: "estiramientosCard", ficha: "fichaCard",
   medidas: "medidasCard", fuerza: "fuerzaCard", tiempos: "tiemposCard", eventos: "agendaCard",
-  pago: "planCard", reserva: "misReservasCard", sesiones: "planCard", checkin_error: "misReservasCard"
+  pago: "planCard", reserva: "misReservasCard", sesiones: "planCard", acceso: "planCard", checkin_error: "misReservasCard"
 };
 function tiempoRelativo(iso){
   const d = new Date(iso); if(isNaN(d)) return "";
@@ -799,6 +800,7 @@ function initInbox(){
   stopInbox();
   inbox.timer = setInterval(loadInbox, esMaster() ? 20000 : 60000);
   loadInbox();
+  iniciarPush();
 }
 function stopInbox(){
   if(inbox.timer){ clearInterval(inbox.timer); inbox.timer = null; }
@@ -843,6 +845,7 @@ function avisarNuevas(items){
   });
 }
 function notificarSistema(n, destino){
+  if(pushUI.activo) return; // con push activo, el aviso del sistema ya llega por el service worker
   try{
     if("Notification" in window && Notification.permission === "granted"){
       const sis = new Notification(n.titulo, { body: n.mensaje || "", tag: n.id, icon: LOGO_URL, requireInteraction: destino === "#/pagos" });
@@ -952,19 +955,6 @@ function mostrarEmergente(n){
   setTimeout(cerrar, 12000);
   notificarSistema(n, "#/agenda");
 }
-function avisosSistemaHTML(){
-  if(!esMaster() || !("Notification" in window) || Notification.permission !== "default") return "";
-  return `<div class="plan-alert avisos-sis" id="avisosSis"><span>Activa los avisos de reservas y compras en este dispositivo para verlos aunque estés en otra pestaña.</span>
-    <button type="button" class="btn-outline sm" id="btnAvisosSis">Activar avisos</button></div>`;
-}
-function enlazarAvisosSistema(){
-  const b = document.getElementById("btnAvisosSis");
-  if(b) b.onclick = async ()=>{
-    try{ await Notification.requestPermission(); } catch { /* sin soporte */ }
-    const box = document.getElementById("avisosSis"); if(box) box.remove();
-  };
-}
-
 function renderInboxBadge(){
   const btn = document.getElementById("btnInbox"), badge = document.getElementById("inboxBadge");
   if(!btn || !badge) return;
@@ -1322,6 +1312,7 @@ function instalarPospuesto(){
 function ocultarInstalar(posponer){
   if(posponer){ try{ localStorage.setItem(CLAVE_INSTALAR, String(Date.now())); } catch { /* sin almacenamiento */ } }
   instalar.el?.remove(); instalar.el = null;
+  if(pushUI.pendiente) mostrarActivarPush();
 }
 function mostrarInstalar(modo){
   if(instalar.el || appInstalada() || instalarPospuesto()) return;
@@ -1363,3 +1354,91 @@ if("serviceWorker" in navigator && location.protocol === "https:"){
   window.addEventListener("load", ()=>{ navigator.serviceWorker.register("/sw.js").catch(e => console.warn("No se pudo activar la instalación:", e)); });
 }
 if(esIOS()) setTimeout(()=> mostrarInstalar("ios"), 1500);
+
+/* ====================== NOTIFICACIONES PUSH ======================
+   Llegan aunque la app esté cerrada. Cada notificación de la campanita se envía también como push
+   (función enviar-push en Supabase) a los dispositivos donde la persona las activó.
+   En iPhone solo funcionan con la app instalada en la pantalla de inicio (iOS 16.4 o más). */
+const pushUI = { activo: false, pendiente: false, el: null };
+const CLAVE_PUSH = "gymnika_push_cerrado";
+function pushSoportado(){
+  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && location.protocol === "https:";
+}
+function base64UrlABytes(b64){
+  const s = atob((b64 + "===".slice((b64.length + 3) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(s, c => c.charCodeAt(0));
+}
+async function suscribirPush(){
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if(!sub){
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/enviar-push`);
+    const { publicKey } = await res.json();
+    if(!publicKey) throw new Error("Sin clave pública");
+    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64UrlABytes(publicKey) });
+  }
+  const j = sub.toJSON();
+  const { error } = await sb.rpc("guardar_push", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_dispositivo: navigator.userAgent });
+  if(error) throw error;
+  pushUI.activo = true;
+}
+async function quitarPushDispositivo(){
+  pushUI.activo = false; pushUI.pendiente = false;
+  pushUI.el?.remove(); pushUI.el = null;
+  if(!pushSoportado()) return;
+  try{
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if(sub) await sb.rpc("quitar_push", { p_endpoint: sub.endpoint });
+  } catch { /* sin conexión: el dispositivo se reasigna al próximo que inicie sesión */ }
+}
+async function iniciarPush(){
+  if(!pushSoportado() || !state.profile) return;
+  if(Notification.permission === "granted"){
+    try{ await suscribirPush(); } catch(e){ console.warn("No se pudo activar el push:", e); }
+    return;
+  }
+  if(Notification.permission === "default") mostrarActivarPush();
+}
+function mostrarActivarPush(){
+  pushUI.pendiente = true;
+  if(pushUI.el || instalar.el || !state.profile || Notification.permission !== "default") return;
+  try{ if(Date.now() - Number(localStorage.getItem(CLAVE_PUSH) || 0) < 3 * 86400000) return; } catch { /* sin almacenamiento */ }
+  const el = document.createElement("aside");
+  el.className = "instalar"; el.setAttribute("aria-label", "Activar notificaciones");
+  el.innerHTML = `
+    <img class="instalar-icono" src="/icono-192.png" alt="" width="44" height="44">
+    <div class="instalar-txt">
+      <strong>Activa las notificaciones</strong>
+      <span>${esEquipo() ? "Te avisamos de reservas, pagos y llegadas aunque tengas la app cerrada."
+        : "Te avisamos de tus reservas, tus pagos y lo que te deje tu coach, aunque tengas la app cerrada."}</span>
+    </div>
+    <div class="instalar-acc">
+      <button type="button" class="btn-primary" data-push-activar>Activar</button>
+      <button type="button" class="btn-link" data-push-cerrar>Ahora no</button>
+    </div>
+    <p class="instalar-msg" role="status" hidden></p>`;
+  const cerrar = (posponer)=>{
+    if(posponer){ try{ localStorage.setItem(CLAVE_PUSH, String(Date.now())); } catch { /* sin almacenamiento */ } }
+    pushUI.pendiente = false; el.remove(); pushUI.el = null;
+  };
+  el.querySelector("[data-push-cerrar]").onclick = ()=> cerrar(true);
+  el.querySelector("[data-push-activar]").onclick = async (ev)=>{
+    const btn = ev.currentTarget; btn.disabled = true;
+    const msg = el.querySelector(".instalar-msg");
+    let permiso = "default";
+    try{ permiso = await Notification.requestPermission(); } catch { /* sin soporte */ }
+    if(permiso !== "granted"){
+      msg.hidden = false;
+      msg.textContent = "Las notificaciones quedaron bloqueadas. Puedes activarlas en los ajustes del navegador o del teléfono.";
+      btn.hidden = true; return;
+    }
+    try{ await suscribirPush(); cerrar(false); }
+    catch(e){
+      console.warn(e); btn.disabled = false;
+      msg.hidden = false; msg.textContent = "No se pudieron activar. Revisa tu conexión e inténtalo de nuevo.";
+    }
+  };
+  document.body.appendChild(el);
+  pushUI.el = el;
+}

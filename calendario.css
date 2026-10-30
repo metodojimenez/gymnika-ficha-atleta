@@ -341,7 +341,6 @@ textarea + .autoria{ margin:-4px 0 4px; }
 @keyframes em-entra{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce){ .emergente{ animation:none; } }
 @media (max-width:560px){ .emergentes{ top:12px; bottom:auto; left:16px; right:16px; width:auto; } }
-.avisos-sis{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .emergente.alerta{ border-left-color:var(--danger); }
 .emergente.alerta .em-ico{ background:var(--danger-bg); color:var(--danger); font-weight:800; }
 
@@ -391,3 +390,4 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .instalar-acc .btn-link{ white-space:nowrap; }
 @keyframes instalar-sube{ from{ opacity:0; transform:translateY(16px); } to{ opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce){ .instalar{ animation:none; } }
+.instalar-msg{ grid-column:1 / -1; margin:0; font-size:14px; color:var(--danger); }
