@@ -824,13 +824,65 @@ async function loadInbox(){
    Cuando un alumno reserva un horario, el master ve una ventana emergente en la app y, si dio permiso,
    una notificación del sistema en este dispositivo. Funciona mientras la app esté abierta (aunque esté en otra pestaña). */
 const TIPOS_EMERGENTES = ["reserva_nueva", "checkin_error"];
+/* Un aviso cuenta como nuevo por id y hora: si la base lo actualiza (mismo alumno en pocos minutos) también se avisa */
+const claveAviso = (n)=> n.id + "|" + n.created_at;
 function avisarNuevas(items){
   const primeraVez = !inbox.vistos;
   inbox.vistos = inbox.vistos || new Set();
-  const nuevas = items.filter(n => !inbox.vistos.has(n.id));
-  nuevas.forEach(n => inbox.vistos.add(n.id));
+  const nuevas = items.filter(n => !inbox.vistos.has(claveAviso(n)));
+  nuevas.forEach(n => inbox.vistos.add(claveAviso(n)));
   if(primeraVez || !esMaster()) return;
-  nuevas.filter(n => !n.leida && TIPOS_EMERGENTES.includes(n.tipo)).reverse().forEach(mostrarEmergente);
+  nuevas.filter(n => !n.leida).reverse().forEach(n => {
+    if(n.tipo === "pago") mostrarModalPago(n);
+    else if(TIPOS_EMERGENTES.includes(n.tipo)) mostrarEmergente(n);
+  });
+}
+function notificarSistema(n, destino){
+  try{
+    if("Notification" in window && Notification.permission === "granted"){
+      const sis = new Notification(n.titulo, { body: n.mensaje || "", tag: n.id, icon: LOGO_URL, requireInteraction: destino === "#/pagos" });
+      sis.onclick = ()=>{ window.focus(); location.hash = destino; sis.close(); };
+    }
+  } catch { /* algunos navegadores no permiten notificaciones aquí */ }
+}
+/* Compra nueva: aviso grande al centro de la pantalla del master (se queda hasta que lo cierran) */
+function mostrarModalPago(n){
+  notificarSistema(n, "#/pagos");
+  let fondo = document.getElementById("modalPago");
+  if(!fondo){
+    fondo = document.createElement("div");
+    fondo.id = "modalPago"; fondo.className = "modal-pago-fondo";
+    fondo.innerHTML = `<div class="modal-pago" role="alertdialog" aria-modal="true" aria-labelledby="mpTitulo" aria-describedby="mpLista">
+        <span class="mp-ico" aria-hidden="true">S/</span>
+        <p class="eyebrow">Compra nueva</p>
+        <h2 id="mpTitulo">Hay un pago por revisar</h2>
+        <ul class="mp-lista" id="mpLista"></ul>
+        <p class="muted">Revisa el comprobante y apruébalo para activar las sesiones o el acceso.</p>
+        <div class="mp-acc">
+          <button type="button" class="btn-primary" data-mp-revisar>Revisar pago</button>
+          <button type="button" class="btn-outline" data-mp-cerrar>Después</button>
+        </div>
+      </div>`;
+    document.body.appendChild(fondo);
+    const cerrar = ()=>{ document.removeEventListener("keydown", onKey); fondo.remove(); };
+    const onKey = (e)=>{ if(e.key === "Escape") cerrar(); };
+    document.addEventListener("keydown", onKey);
+    fondo.addEventListener("click", (e)=>{ if(e.target === fondo) cerrar(); });
+    fondo.querySelector("[data-mp-cerrar]").onclick = cerrar;
+    fondo.querySelector("[data-mp-revisar]").onclick = ()=>{
+      const ids = [...fondo.querySelectorAll("[data-mp-id]")].map(li => li.dataset.mpId);
+      cerrar(); marcarLeida(ids);
+      if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos";
+    };
+  }
+  const lista = fondo.querySelector("#mpLista");
+  if(lista.querySelector(`[data-mp-id="${CSS.escape(n.id)}"]`)) return;
+  const li = document.createElement("li");
+  li.dataset.mpId = n.id;
+  li.innerHTML = `<strong>${esc(n.titulo)}</strong>${n.mensaje ? `<span>${esc(n.mensaje)}</span>` : ""}`;
+  lista.prepend(li);
+  fondo.querySelector("#mpTitulo").textContent = lista.children.length > 1 ? `Hay ${lista.children.length} pagos por revisar` : "Hay un pago por revisar";
+  fondo.querySelector("[data-mp-revisar]").focus();
 }
 function mostrarEmergente(n){
   let pila = document.getElementById("emergentes");
@@ -850,16 +902,11 @@ function mostrarEmergente(n){
   pila.prepend(el);
   while(pila.children.length > 4) pila.lastElementChild.remove();
   setTimeout(cerrar, 12000);
-  try{
-    if("Notification" in window && Notification.permission === "granted"){
-      const sis = new Notification(n.titulo, { body: n.mensaje || "", tag: n.id, icon: LOGO_URL });
-      sis.onclick = ()=>{ window.focus(); location.hash = "#/agenda"; sis.close(); };
-    }
-  } catch { /* algunos navegadores no permiten notificaciones aquí */ }
+  notificarSistema(n, "#/agenda");
 }
 function avisosSistemaHTML(){
   if(!esMaster() || !("Notification" in window) || Notification.permission !== "default") return "";
-  return `<div class="plan-alert avisos-sis" id="avisosSis"><span>Activa los avisos de reservas en este dispositivo para verlos aunque estés en otra pestaña.</span>
+  return `<div class="plan-alert avisos-sis" id="avisosSis"><span>Activa los avisos de reservas y compras en este dispositivo para verlos aunque estés en otra pestaña.</span>
     <button type="button" class="btn-outline sm" id="btnAvisosSis">Activar avisos</button></div>`;
 }
 function enlazarAvisosSistema(){

@@ -348,3 +348,20 @@ textarea + .autoria{ margin:-4px 0 4px; }
 /* ---------- Paneles que se pueden minimizar ---------- */
 .panel-head .plegar{ margin-left:auto; flex:none; font-size:14px; padding:6px 10px; min-height:0; }
 .panel.plegado .panel-head{ margin-bottom:0; padding-bottom:0; background-image:none; }
+
+/* ---------- Aviso grande de compra nueva (master) ---------- */
+.modal-pago-fondo{ position:fixed; inset:0; z-index:80; display:grid; place-items:center; padding:16px; background:rgba(35,27,31,.55); backdrop-filter:blur(3px); animation:mp-fondo .2s ease-out; }
+.modal-pago{ width:min(480px, 100%); max-height:calc(100vh - 32px); overflow:auto; background:var(--surface); border-radius:20px; padding:28px 24px 22px; text-align:center;
+  box-shadow:0 30px 80px rgba(35,27,31,.4); border-top:6px solid var(--accent); animation:mp-entra .28s cubic-bezier(.2,.9,.3,1.2); }
+.mp-ico{ display:inline-grid; place-items:center; width:72px; height:72px; border-radius:50%; background:var(--accent-tint); color:var(--accent-2);
+  font-family:var(--font-display); font-weight:800; font-size:28px; margin-bottom:10px; box-shadow:0 0 0 8px rgba(14,124,134,.08); }
+.modal-pago h2{ font-size:clamp(24px, 4vw, 30px); line-height:1.15; margin:2px 0 14px; }
+.mp-lista{ list-style:none; margin:0 0 12px; padding:0; display:grid; gap:8px; text-align:left; }
+.mp-lista li{ display:flex; flex-direction:column; gap:2px; padding:12px 14px; border-radius:12px; background:var(--paper-2); border:1px solid var(--line); font-size:15px; }
+.mp-lista li span{ color:var(--ink-soft); font-size:14.5px; }
+.mp-acc{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:14px; }
+.mp-acc .btn-primary{ margin-top:0; min-width:180px; }
+.mp-acc .btn-outline{ margin-top:0; }
+@keyframes mp-fondo{ from{ opacity:0; } to{ opacity:1; } }
+@keyframes mp-entra{ from{ opacity:0; transform:scale(.92) translateY(10px); } to{ opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce){ .modal-pago, .modal-pago-fondo{ animation:none; } }
