@@ -987,17 +987,17 @@ function renderNutricion(profile, uid, isCoach, solicitudes){
   });
 }
 
-/* ---- Compensación (Documento Master: 1 de la base + 2 del menú Gymnika + 1 rotación) ---- */
+/* ---- Compensación: en fortalecimiento solo el menú Gymnika y las rotaciones de cadera.
+   La base y el tobillo quedan solo para la rutina de estiramiento diaria de terapia. ---- */
 const COMPENSACION_GRUPOS = [
-  { grupo: "Base", items: ["Colgado relajado en barra", "Respiración 90/90 con exhalación larga"] },
+  { grupo: "Base", items: ["Colgado relajado en barra", "Respiración 90/90 con exhalación larga"], soloTerapia: true },
   { grupo: "Menú Gymnika", items: ["Ranas", "San José", "Aperturas en L", "El 4 (estiramiento de glúteo)", "Hinge de cadera", "Good morning", "Pivoteos de cadera"] },
-  { grupo: "Rotaciones Gymnika", items: ["Patada de Ballet", "Caballero", "Cachetadas"] },
-  { grupo: "Tobillo (se suma en la Fase 4)", items: ["Pantorrilla en pared", "Rodilla a la pared"] }
+  { grupo: "Rotaciones de cadera", items: ["Patada de Ballet", "Caballero", "Cachetadas"] },
+  { grupo: "Tobillo", items: ["Pantorrilla en pared", "Rodilla a la pared"], soloTerapia: true }
 ];
-const ESTIRAMIENTOS_PREDETERMINADOS = COMPENSACION_GRUPOS.flatMap(g => g.items);
 /* Nombres antiguos guardados en fichas anteriores */
 const ESTIRAMIENTO_RENOMBRES = { "Señorita ballet": "Patada de Ballet" };
-const COMPENSACION_NOTA = "Al final de cada rutina: 1 de la base + 2 del menú Gymnika + 1 rotación, 30-45 segundos o 6-8 repeticiones por lado.";
+const COMPENSACION_NOTA = "Al final de cada rutina: 2 del menú Gymnika + 1 rotación de cadera, 30-45 segundos o 6-8 repeticiones por lado.";
 
 const ESTIRAMIENTO_DIARIO_NOTA = "Esta rutina debe ser ejecutada todos los días de forma constante. La finalidad es prepararnos para empezar bien el día: no debes luchar contra el dolor.";
 function renderEstiramientos(profile, uid, isCoach){
@@ -1008,18 +1008,20 @@ function renderEstiramientos(profile, uid, isCoach){
 
   if(!isCoach){ pintarEstiramientosAlumno(box, actuales, uid, esTerapia, nota); return; }
 
-  let customList = actuales.filter(e => !ESTIRAMIENTOS_PREDETERMINADOS.includes(e));
-  let marcados = new Set(actuales.filter(e => ESTIRAMIENTOS_PREDETERMINADOS.includes(e)));
+  const grupos = COMPENSACION_GRUPOS.filter(g => esTerapia || !g.soloTerapia);
+  const predet = grupos.flatMap(g => g.items);
+  let customList = actuales.filter(e => !predet.includes(e));
+  let marcados = new Set(actuales.filter(e => predet.includes(e)));
 
   function paint(){
     box.innerHTML = `
       <p class="${esTerapia ? "resena-rutina" : "muted"}" style="margin:0">${esc(nota)}</p>
-      ${COMPENSACION_GRUPOS.map(g => `
+      ${grupos.map(g => `
         <fieldset class="comp-group">
           <legend>${esc(g.grupo)}</legend>
           <div class="check-grid">
             ${g.items.map(ej => {
-              const i = ESTIRAMIENTOS_PREDETERMINADOS.indexOf(ej);
+              const i = predet.indexOf(ej);
               return `
               <label class="checkline" for="est_${i}">
                 <input type="checkbox" id="est_${i}" data-preset-idx="${i}" ${marcados.has(ej)?"checked":""}>
@@ -1041,7 +1043,7 @@ function renderEstiramientos(profile, uid, isCoach){
     `;
     box.querySelectorAll("[data-preset-idx]").forEach(cb=>{
       cb.onchange = ()=>{
-        const ej = ESTIRAMIENTOS_PREDETERMINADOS[parseInt(cb.dataset.presetIdx,10)];
+        const ej = predet[parseInt(cb.dataset.presetIdx,10)];
         if(cb.checked) marcados.add(ej); else marcados.delete(ej);
       };
     });
@@ -1051,14 +1053,14 @@ function renderEstiramientos(profile, uid, isCoach){
     const input = document.getElementById("estOtro");
     const agregar = ()=>{
       const val = input.value.trim();
-      if(val && !customList.includes(val) && !ESTIRAMIENTOS_PREDETERMINADOS.includes(val)){ customList.push(val); }
+      if(val && !customList.includes(val) && !predet.includes(val)){ customList.push(val); }
       if(val){ paint(); document.getElementById("estOtro").focus(); }
     };
     document.getElementById("btnAddOtro").onclick = agregar;
     input.onkeydown = (e)=>{ if(e.key === "Enter"){ e.preventDefault(); agregar(); } };
     const saveBtn = document.getElementById("btnSaveEstiramientos");
     saveBtn.onclick = ()=> withBusy(saveBtn, "Guardando…", async ()=>{
-      const seleccionados = ESTIRAMIENTOS_PREDETERMINADOS.filter(ej => marcados.has(ej));
+      const seleccionados = predet.filter(ej => marcados.has(ej));
       const final = [...seleccionados, ...customList];
       const { error } = await sb.from("profiles").update({ estiramientos: final }).eq("id", uid);
       const msg = document.getElementById("estMsg");

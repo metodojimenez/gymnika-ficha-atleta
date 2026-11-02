@@ -5,11 +5,11 @@
    cuántos días viene (tabla "Reparto según los días de asistencia"). */
 
 const RUTINAS = {
-  R1: { titulo: "Empuje inferior (sentadilla) + jalón superior", pre: "mov" },
-  R2: { titulo: "Bisagra + empuje superior", pre: "est" },
-  R3: { titulo: "Empuje y arrastre con trineo + unilateral + resistir rotación", pre: "mov" },
-  R4: { titulo: "Movilidad y descompresión", pre: null },
-  R5: { titulo: "Propiocepción, equilibrio y SNC", pre: "est" }
+  R1: { titulo: "Empuje inferior (sentadilla) + jalón superior" },
+  R2: { titulo: "Bisagra + empuje superior" },
+  R3: { titulo: "Empuje y arrastre con trineo + unilateral + resistir rotación" },
+  R4: { titulo: "Movilidad y descompresión" },
+  R5: { titulo: "Propiocepción, equilibrio y SNC" }
 };
 
 /* Reparto de la semana (semana 1, 2 y 3 del bloque de 3 semanas) según los días de asistencia */
@@ -24,20 +24,48 @@ const REPARTO_DESCARGA = {
   4: ["R4", "R1r", "R4", "R2r"], 5: ["R4", "R1r", "R4", "R2r", "R5"]
 };
 
-const PRECALENTAMIENTO = {
-  mov: { nombre: "Movilidad", ej: "Gatos · Zancada con un pie a la altura de la mano, alternando · Aperturas de cadera · World's greatest stretch · Círculos con palo adelante y atrás, por encima y por debajo de la cabeza · Aperturas de cadera en L · 90-90" },
-  est: { nombre: "Estabilidad", ej: "Loaded beast con pierna extendida · Rotaciones de nadador · Amarrocados · Halos con poca resistencia · Pulpos" }
-};
-const CALENTAMIENTO = [
-  ["Respiración y control", "Respiración diafragmática 90/90", "5 respiraciones, exhalación larga", "Igual"],
-  ["Respiración y control", "Dead bug con exhalación", "6 c/l", "Solo piernas"],
-  ["Movilidad", "Inchworm con rotación torácica", "4", "Caminar manos desde cajón"],
-  ["Movilidad", "Sentadilla cosaca sin carga", "4 c/l", "Rango parcial, con apoyo"],
-  ["Activación", "Bear crawl", "2 × 10 m", "Cuadrupedia estática 20''"],
-  ["Activación", "Puente de glúteo con marcha", "8 c/l", "Puente bilateral"],
-  ["Activación", "Band pull-apart + push-up escapular", "12 + 8", "Push-up escapular en pared"],
-  ["Aproximación", "Series progresivas del primer principal", "2-3 series al 40-70% del peso de trabajo", "Igual, con la regresión"]
+/* Bloque 1 · Calentamiento: dos subcategorías, el coach elige 2 de cada una.
+   Movilidad: todo lo que antes era pre-calentamiento + dead bug, inchworm y cosaca.
+   Activación: lo de activación + el menú Gymnika. [ejercicio, dosis, regresión] */
+const DOSIS_MOVILIDAD = "45-60'' o 6-8 por lado";
+const CAL_MOVILIDAD = [
+  ["Gatos", DOSIS_MOVILIDAD, ""],
+  ["Zancada con un pie a la altura de la mano, alternando", DOSIS_MOVILIDAD, ""],
+  ["Aperturas de cadera", DOSIS_MOVILIDAD, ""],
+  ["Aperturas de cadera en L", DOSIS_MOVILIDAD, ""],
+  ["90-90", DOSIS_MOVILIDAD, ""],
+  ["World's greatest stretch", DOSIS_MOVILIDAD, ""],
+  ["Círculos con palo adelante y atrás, por encima y por debajo de la cabeza", DOSIS_MOVILIDAD, ""],
+  ["Loaded beast con pierna extendida", DOSIS_MOVILIDAD, ""],
+  ["Rotaciones de nadador", DOSIS_MOVILIDAD, ""],
+  ["Amarrocados", DOSIS_MOVILIDAD, ""],
+  ["Halos con poca resistencia", DOSIS_MOVILIDAD, ""],
+  ["Pulpos (rotación externa e interna de hombros, cada hombro independiente del otro)", DOSIS_MOVILIDAD, ""],
+  ["Dead bug con exhalación", "6 c/l", "Solo piernas"],
+  ["Inchworm con rotación torácica", "4", "Caminar manos desde cajón"],
+  ["Sentadilla cosaca sin carga", "4 c/l", "Rango parcial, con apoyo"]
 ];
+const MENU_GYMNIKA = ["Ranas", "San José", "Aperturas en L", "El 4 (estiramiento de glúteo)", "Hinge de cadera", "Good morning", "Pivoteos de cadera"];
+const ROTACIONES_CADERA = ["Patada de Ballet", "Caballero", "Cachetadas"];
+const CAL_ACTIVACION = [
+  ["Bear crawl", "2 × 10 m", "Cuadrupedia estática 20''"],
+  ["Puente de glúteo con marcha", "8 c/l", "Puente bilateral"],
+  ["Band pull-apart + push-up escapular", "12 + 8", "Push-up escapular en pared"],
+  ...MENU_GYMNIKA.map(x => [x + " · menú Gymnika", "30-45'' o 6-8 por lado", ""])
+];
+
+/* Bloque 2 · Aproximación: ejercicios que complementan el patrón del día; se eligen 3 que activen todo el cuerpo.
+   La rotación es un patrón de movimiento más dentro de este banco. */
+const APROXIMACION = [
+  ["Tren superior", "Tríceps · Pecho · Hombros"],
+  ["Bisagras", "Bisagra · Bisagras unipodales: lunges, búlgaras"],
+  ["Estabilidad", "Isometría en bosu"],
+  ["Con implemento", "Landmine · Med ball ligero · KB complex básicos"],
+  ["Carries", "Farmer · Suitcase"]
+];
+
+/* Bloque 4 · Complementarios del crusher: baja la carga y sube la energía para terminar de fatigar */
+const COMPLEMENTARIOS_CRUSHER = ["Sprints con resistencia", "Parado a echado boca arriba", "Parado a echado boca abajo", "Parado a sentado", "Echado a sentado", "Sprawls"];
 
 /* e(nombre, series, reps, intensidad, descanso, claves, regresión, principal) */
 function e(n, s, r, i, d, c, g, p){ return { n, s, r, i, d, c, g, p: !!p }; }
@@ -103,6 +131,18 @@ const SESIONES = {
       e("High pull KB", "3", "5", "Moderada", "90''", "Codos altos, cadera explosiva", "Swing corto")
     ]
   }
+};
+/* Fase 3 (explosiva): los principales son un contraste de 4 partes; con 3 partes se elimina el asistido.
+   La sentadilla es el ejemplo del método; en los demás patrones, las partes 2 y 4 siguen la misma regla. */
+const CONTRASTE_F3 = {
+  R1: [
+    { patron: "Sentadilla", partes: ["Sentadilla pesada, cualquier variante · 5 reps", "Sentadilla isométrica", "Saltos al cajón, saltos con peso o drop jumps", "Saltos asistidos"] },
+    { patron: "Jalón", partes: ["Dominada lastrada pesada · 5 reps", "Isometría del mismo patrón", "Slam de med ball", "Versión asistida del explosivo"] }
+  ],
+  R2: [
+    { patron: "Bisagra", partes: ["Peso muerto pesado · 5 reps", "Isometría del mismo patrón", "KB swing explosivo", "Versión asistida del explosivo"] },
+    { patron: "Empuje", partes: ["Press landmine pesado · 5 reps", "Isometría del mismo patrón", "Pase de pecho con med ball", "Versión asistida del explosivo"] }
+  ]
 };
 const PLIO_EXTENSIVA = [
   e("Pogos", "3", "10-15 contactos", "Baja, rítmica", "60''", "Tobillo rígido, contacto corto, rodilla casi recta", "Pogos sin despegar (talones)"),
@@ -188,10 +228,10 @@ const ROTACION = {
   F4: ["Rotación reactiva y control", ["lanzamiento", "cadera", "pallof"]],
   C: ["Variantes medias a baja intensidad (libre)", Object.keys(ROT_OPCIONES)]
 };
+/* Bloque 5 · Compensación: solo el menú Gymnika y las rotaciones de cadera */
 const COMPENSACION = [
-  ["Base (elige 1)", "Colgado relajado en barra · Respiración 90/90 con exhalación larga"],
-  ["Menú Gymnika (elige 2)", "Ranas · San José · Aperturas en L · El 4 (estiramiento de glúteo) · Hinge de cadera · Good morning · Pivoteos de cadera"],
-  ["Rotaciones Gymnika (elige 1)", "Patada de Ballet · Caballero · Cachetadas"]
+  ["Menú Gymnika (elige 2)", MENU_GYMNIKA.join(" · ")],
+  ["Rotaciones de cadera (elige 1)", ROTACIONES_CADERA.join(" · ")]
 ];
 const BLOQUES_R4 = [
   ["Respiración", "5'", "Respiración diafragmática 90/90 con exhalación larga", "2 × 5 respiraciones"],
@@ -241,21 +281,38 @@ function seccionHTML(num, titulo, tiempo, cuerpo){
 function rotacionHTML(fBase){
   const [enfasis, claves] = ROTACION[fBase];
   return `
-    <p>1 ejercicio de rotar + 1 de resistir rotación, 2 rondas de 6-10 repeticiones por lado o 20-30''. <strong>Énfasis:</strong> ${esc(enfasis)}.</p>
-    <ul class="rt-lista rt-rot">${claves.map(k => {
-      const o = ROT_OPCIONES[k];
-      return `<li class="rt-ej"><div class="rt-ej-top"><span class="rt-ej-n">${esc(o[1])}</span><span class="rt-tipo">${esc(o[0])}</span></div>
-        <p class="rt-ej-reg"><span>Reg.</span> ${esc(o[2])}</p>
-        <p class="rt-ej-claves"><strong>Media:</strong> ${esc(o[3])}</p>
-        <p class="rt-ej-reg"><span>Prog.</span> ${esc(o[4])}</p></li>`;
-    }).join("")}</ul>
-    <p class="muted">${fBase === "F1" || fBase === "F2" ? "Los lanzamientos a velocidad entran desde la Fase 3; antes solo van las versiones lentas. " : ""}Windmill con carga y extensión lateral en silla romana: solo aptos.</p>`;
+    <details class="rt-rot-det">
+      <summary><strong>Rotación</strong> · ${esc(enfasis)} <span class="muted">(${claves.length === Object.keys(ROT_OPCIONES).length ? "todas" : claves.length + " opciones"})</span></summary>
+      <ul class="rt-lista rt-rot">${claves.map(k => {
+        const o = ROT_OPCIONES[k];
+        return `<li class="rt-ej"><div class="rt-ej-top"><span class="rt-ej-n">${esc(o[1])}</span><span class="rt-tipo">${esc(o[0])}</span></div>
+          <p class="rt-ej-reg"><span>Reg.</span> ${esc(o[2])}</p>
+          <p class="rt-ej-claves"><strong>Media:</strong> ${esc(o[3])}</p>
+          <p class="rt-ej-reg"><span>Prog.</span> ${esc(o[4])}</p></li>`;
+      }).join("")}</ul>
+      <p class="muted">${fBase === "F1" || fBase === "F2" ? "Los lanzamientos a velocidad entran desde la Fase 3; antes solo van las versiones lentas. " : ""}Windmill con carga y extensión lateral en silla romana: solo aptos.</p>
+    </details>`;
+}
+function tablaCalHTML(titulo, filas){
+  return `<p class="rt-sub">${titulo} <span class="muted">· elige 2</span></p>
+    <ul class="rt-cal">${filas.map(c => `<li><strong>${esc(c[0])}</strong><span class="rt-cal-dosis num">${esc(c[1])}</span>${c[2] ? `<span class="rt-cal-reg"><span>Reg.</span> ${esc(c[2])}</span>` : ""}</li>`).join("")}</ul>`;
+}
+function contrasteHTML(base, ses){
+  const pares = ses.filter(x => x.p);
+  return `<p>Contraste de 4 partes, una tras otra. <strong>Con 3 partes se elimina el asistido.</strong></p>
+    <ol class="rt-lista">${CONTRASTE_F3[base].map((c, k) => {
+      const ref = pares[k] || {};
+      return `<li class="rt-ej principal"><div class="rt-ej-top"><span class="rt-ej-n"><span class="rt-star" aria-label="Principal">★</span> Contraste · ${esc(c.patron)}</span>
+          ${ref.s ? `<span class="rt-ej-dosis num">${esc(String(ref.s).replace("pares", "rondas"))}</span>` : ""}</div>
+        <ol class="rt-contraste">${c.partes.map((t, i) => `<li${i === 3 ? ' class="opcional"' : ""}>${esc(t)}${i === 3 ? ' <span class="muted">(se quita en contraste de 3)</span>' : ""}</li>`).join("")}</ol>
+        ${ref.d ? `<p class="rt-ej-meta"><span>Descanso ${esc(ref.d)}</span></p>` : ""}
+        ${ref.c ? `<p class="rt-ej-claves">${esc(ref.c)}</p>` : ""}</li>`;
+    }).join("")}</ol>`;
 }
 
 /* Contenido de una rutina (R1-R5) para la semana del macrociclo dada, en el orden de la plantilla de sesión */
 function contenidoRutina(base, semana, reducida){
   const fase = faseDeSemana(semana);
-  const info = RUTINAS[base];
   if(base === "R4" || base === "R5"){
     return `
       <p class="rt-nota">${base === "R4" ? "Sin principales pesados ni crusher." : "Misma estructura en todas las fases."} No aptos: ${base === "R4"
@@ -266,58 +323,64 @@ function contenidoRutina(base, semana, reducida){
 
   const fBase = fase === "F4a" || fase === "F4b" ? "F4" : fase;
   const lista = (xs)=> `<ul class="rt-lista">${xs.map(ejercicioHTML).join("")}</ul>`;
+  const sub = (t)=> `<p class="rt-sub">${t}</p>`;
   const notas = [];
-  let bloquesCentrales = [];
+  let principales = "", sugeridos = [];
   if(fase === "C" && semana === 19){
     const fuerza = PRUEBAS.filter(p => p.sem.includes(19) && /RM|Push-up/.test(p.txt));
     const saltos = PRUEBAS.filter(p => p.sem.includes(19) && /[Ss]alto/.test(p.txt));
-    bloquesCentrales.push([base === "R1" ? "Pruebas de salto (van primero)" : "Pruebas de fuerza", "",
-      `<ul class="rt-pruebas">${(base === "R1" ? saltos : fuerza).map(p => `<li>${esc(p.txt)}</li>`).join("")}</ul><p class="muted">El resto de la sesión, a RPE 6.</p>`]);
+    principales = sub(base === "R1" ? "Pruebas de salto (van primero)" : "Pruebas de fuerza")
+      + `<ul class="rt-pruebas">${(base === "R1" ? saltos : fuerza).map(p => `<li>${esc(p.txt)}</li>`).join("")}</ul><p class="muted">El resto de la sesión, a RPE 6.</p>`;
     if(base === "R1") notas.push("Quien arrastra dolor o fatiga de la Fase 4 no hace las pruebas de salto esta semana; quien faltó a más de la mitad de la Fase 4 no hace el triple salto.");
   } else if(fase === "C" || (semana === 6 && reducida)){
-    bloquesCentrales.push(["Principales ★", "24'", lista(SESIONES.F1[base].filter(x => x.p))]);
+    principales = lista(SESIONES.F1[base].filter(x => x.p));
     notas.push(semana === 20
       ? "Transición: técnica de los principales de la Fase 1 a RPE 5-6."
       : "Reducida: los mismos principales con la mitad de las series, a RPE 6-7 y sin crusher.");
   } else if(fBase === "F4"){
     const intensiva = fase === "F4b" && (base === "R1" || base === "R3");
     const plio = fase === "F4b" && base === "R2" ? [] : intensiva ? PLIO_INTENSIVA : PLIO_EXTENSIVA;
-    if(plio.length) bloquesCentrales.push([`Pliometría ${intensiva ? "intensiva" : "extensiva"} (con el cuerpo fresco)`, "", lista(plio)]);
-    bloquesCentrales.push(["Mantenimiento de fuerza ★", "", MANTENIMIENTO[base] ? lista([MANTENIMIENTO[base]]) : `<p class="muted">Según la sesión: 2-3 × 3 a RPE 7-8.</p>`]);
+    if(plio.length) principales += sub(`Pliometría ${intensiva ? "intensiva" : "extensiva"} (con el cuerpo fresco)`) + lista(plio);
+    principales += sub("Mantenimiento de fuerza") + (MANTENIMIENTO[base] ? lista([MANTENIMIENTO[base]]) : `<p class="muted">Según la sesión: 2-3 × 3 a RPE 7-8.</p>`);
     if(intensiva) notas.push("Intensiva solo para quien cumple los criterios de ingreso; quien no, sigue en extensiva (50-60 contactos) con progresión de complejidad.");
     if(fase === "F4b" && base === "R2") notas.push("La pliometría intensiva va solo en R1 y R3, con al menos 48 h entre ellas.");
     notas.push("Si el contacto con el suelo se alarga o el aterrizaje se vuelve ruidoso, termina la serie. Dolor >2/10 en articulaciones de carga: vuelve a la extensiva esa semana.");
   } else {
     const ses = SESIONES[fase][base];
-    bloquesCentrales.push(["Principales ★", "24'", lista(ses.filter(x => x.p))]);
-    bloquesCentrales.push(["Complementarios", "8'", lista(ses.filter(x => !x.p))]);
+    principales = fase === "F3" && CONTRASTE_F3[base] ? contrasteHTML(base, ses) : lista(ses.filter(x => x.p));
+    sugeridos = ses.filter(x => !x.p);
     if(fase === "F3") notas.push("En R1-R3 los saltos totales por sesión no pasan de 25. La serie se corta si la velocidad cae a simple vista.");
     if(fase === "F1") notas.push("Nadie trabaja al fallo en esta fase.");
   }
 
-  const pre = PRECALENTAMIENTO[info.pre];
-  const cal = `<div class="table-wrap"><table class="rt-tabla"><thead><tr><th scope="col">Parte</th><th scope="col">Ejercicio</th><th scope="col">Dosis</th><th scope="col">Reg. (no aptos)</th></tr></thead>
-    <tbody>${CALENTAMIENTO.map(c => `<tr><td class="muted">${esc(c[0])}</td><td><strong>${esc(c[1])}</strong></td><td>${esc(c[2])}</td><td>${esc(c[3])}</td></tr>`).join("")}</tbody></table></div>
-    <p class="muted">${fBase === "F3" ? "Fase 3: al final, + 2 × 5 pogos suaves y 2 saltos submáximos a cajón."
-      : fBase === "F4" ? "Fase 4: al final, + 2 × 10 pogos y 2 × 10 m de skips; esos contactos cuentan en el total pliométrico del día."
-      : "Fases 1 y 2: la última parte son solo las series de aproximación."}</p>`;
+  const calentamiento = `
+    ${tablaCalHTML("Movilidad", CAL_MOVILIDAD)}
+    ${tablaCalHTML("Activación", CAL_ACTIVACION)}
+    ${fBase === "F3" ? `<p class="muted">Fase 3: al final, + 2 × 5 pogos suaves y 2 saltos submáximos a cajón.</p>`
+      : fBase === "F4" ? `<p class="muted">Fase 4: al final, + 2 × 10 pogos y 2 × 10 m de skips; esos contactos cuentan en el total pliométrico del día.</p>` : ""}`;
+  const aproximacion = `
+    <p>Elige <strong>3 ejercicios</strong> que complementen el patrón del día (${esc(RUTINAS[base].titulo.toLowerCase())}) y activen todo el cuerpo.</p>
+    ${sugeridos.length ? sub("Sugeridos para esta rutina") + lista(sugeridos) : ""}
+    ${sub("Banco de aproximación")}
+    <ul class="rt-simple">${APROXIMACION.map(a => `<li><strong>${esc(a[0])}:</strong> ${esc(a[1])}</li>`).join("")}</ul>
+    ${rotacionHTML(fBase)}`;
   const cr = CRUSHER[fBase];
   const crusher = semana === 20 ? `<p>Carries ligeros o ninguno.</p>`
     : semana === 19 ? (base === "R3" ? `<p>Test de capacidad: crusher de la Fase 2, 5'.</p>` : `<p class="muted">Sin crusher: semana de pruebas.</p>`)
     : reducida ? `<p class="muted">Sin crusher en la rutina reducida.</p>`
-    : `<p><strong>Aptos:</strong> ${esc(cr[0])}</p><p><strong>No aptos:</strong> ${esc(cr[1])}</p><p class="muted">${esc(cr[2])}</p>`;
-  const comp = `<p>Elegir 1 de la base + 2 del menú Gymnika + 1 rotación: 30-45'' o 6-8 repeticiones por lado.</p>
-    <ul class="rt-simple">${COMPENSACION.map(c => `<li><strong>${esc(c[0])}:</strong> ${esc(c[1])}</li>`).join("")}${fBase === "F4" ? "<li>En la Fase 4 se suma pantorrilla en pared y rodilla a la pared para el tobillo.</li>" : ""}</ul>`;
+    : `<p>Baja la carga y sube la energía para terminar de fatigar.</p>
+       <p><strong>Aptos:</strong> ${esc(cr[0])}</p><p><strong>No aptos:</strong> ${esc(cr[1])}</p><p class="muted">${esc(cr[2])}</p>
+       ${sub("Complementarios")}<p class="rt-opciones">${COMPLEMENTARIOS_CRUSHER.map(x => `<span>${esc(x)}</span>`).join("")}</p>`;
+  const comp = `<p>Elige 2 del menú Gymnika + 1 rotación de cadera: 30-45'' o 6-8 repeticiones por lado.</p>
+    <ul class="rt-simple">${COMPENSACION.map(c => `<li><strong>${esc(c[0])}:</strong> ${esc(c[1])}</li>`).join("")}</ul>`;
 
-  let n = 1;
   return `
     ${notas.length ? `<p class="rt-nota">${notas.map(esc).join(" ")}</p>` : ""}
-    ${seccionHTML(n++, `Pre-calentamiento · ${pre.nombre}`, "5'", `<p>Elegir 3-4: 1 ronda de 45-60'' o 6-8 repeticiones por lado.</p><p class="rt-opciones">${pre.ej.split(" · ").map(x => `<span>${esc(x)}</span>`).join("")}</p>${info.pre === "est" ? `<p class="muted">Pulpos: rotación externa e interna de hombros, con cada hombro moviéndose independiente del otro.</p>` : ""}`)}
-    ${seccionHTML(n++, "Calentamiento", "8'", cal)}
-    ${seccionHTML(n++, "Rotación", "5'", rotacionHTML(fBase))}
-    ${bloquesCentrales.map(([t, tm, html]) => seccionHTML(n++, t, tm, html)).join("")}
-    ${seccionHTML(n++, "Crusher", "5'", crusher)}
-    ${seccionHTML(n++, "Compensación", "5'", comp)}`;
+    ${seccionHTML(1, "Calentamiento", "13'", calentamiento)}
+    ${seccionHTML(2, "Aproximación", "13'", aproximacion)}
+    ${seccionHTML(3, "Principales ★", "24'", principales)}
+    ${seccionHTML(4, "Crusher y complementarios", "5'", crusher)}
+    ${seccionHTML(5, "Compensación", "5'", comp)}`;
 }
 
 /* Semana del macrociclo a mostrar: la actual, o la que el coach elige con las flechas */
