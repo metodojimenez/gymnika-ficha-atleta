@@ -46,7 +46,7 @@ const CAL_MOVILIDAD = [
   ["Sentadilla cosaca sin carga", "4 c/l", "Rango parcial, con apoyo"]
 ];
 const MENU_GYMNIKA = ["Ranas", "San José", "Aperturas en L", "El 4 (estiramiento de glúteo)", "Hinge de cadera", "Good morning", "Pivoteos de cadera"];
-const ROTACIONES_CADERA = ["Patada de Ballet", "Caballero", "Cachetadas"];
+const ROTACIONES_CADERA = ["Patada de Ballet", "Caballero", "Cachetadas", "Señoritas", "Libro abierto y cerrado"];
 const CAL_ACTIVACION = [
   ["Bear crawl", "2 × 10 m", "Cuadrupedia estática 20''"],
   ["Puente de glúteo con marcha", "8 c/l", "Puente bilateral"],
@@ -132,16 +132,17 @@ const SESIONES = {
     ]
   }
 };
-/* Fase 3 (explosiva): los principales son un contraste de 4 partes; con 3 partes se elimina el asistido.
-   La sentadilla es el ejemplo del método; en los demás patrones, las partes 2 y 4 siguen la misma regla. */
+/* Fase 3 (explosiva): en R1 y R2 los principales son un contraste de 4 partes; con 3 partes se elimina el asistido.
+   Isometría: sostener la posición 10-30''. Asistido: banda elástica a favor del movimiento, que ayuda al atleta.
+   R3 no lleva contraste. */
 const CONTRASTE_F3 = {
   R1: [
-    { patron: "Sentadilla", partes: ["Sentadilla pesada, cualquier variante · 5 reps", "Sentadilla isométrica", "Saltos al cajón, saltos con peso o drop jumps", "Saltos asistidos"] },
-    { patron: "Jalón", partes: ["Dominada lastrada pesada · 5 reps", "Isometría del mismo patrón", "Slam de med ball", "Versión asistida del explosivo"] }
+    { patron: "Sentadilla", partes: ["Sentadilla pesada, cualquier variante · 5 reps", "Sentadilla isométrica: sostener la posición 10-30''", "Saltos al cajón, saltos con peso o drop jumps", "Saltos asistidos con banda elástica a favor del movimiento"] },
+    { patron: "Jalón", partes: ["Dominada lastrada pesada · 5 reps", "Dominada isométrica: sostener la posición 10-30''", "Slam de med ball", "Jalón explosivo asistido con banda elástica a favor del movimiento"] }
   ],
   R2: [
-    { patron: "Bisagra", partes: ["Peso muerto pesado · 5 reps", "Isometría del mismo patrón", "KB swing explosivo", "Versión asistida del explosivo"] },
-    { patron: "Empuje", partes: ["Press landmine pesado · 5 reps", "Isometría del mismo patrón", "Pase de pecho con med ball", "Versión asistida del explosivo"] }
+    { patron: "Bisagra", partes: ["Peso muerto pesado · 5 reps", "Peso muerto isométrico: sostener la posición 10-30''", "KB swing explosivo", "Bisagra explosiva asistida con banda elástica a favor del movimiento"] },
+    { patron: "Empuje", partes: ["Press landmine pesado · 5 reps", "Press landmine isométrico: sostener la posición 10-30''", "Pase de pecho con med ball", "Empuje explosivo asistido con banda elástica a favor del movimiento"] }
   ]
 };
 const PLIO_EXTENSIVA = [
@@ -234,18 +235,18 @@ const COMPENSACION = [
   ["Rotaciones de cadera (elige 1)", ROTACIONES_CADERA.join(" · ")]
 ];
 const BLOQUES_R4 = [
-  ["Respiración", "5'", "Respiración diafragmática 90/90 con exhalación larga", "2 × 5 respiraciones"],
-  ["Movilidad de columna y cadera", "15'", "Gatos · World's greatest stretch · Zancada con un pie a la altura de la mano · Aperturas de cadera · Aperturas de cadera en L · 90-90", "2 rondas, 6-8 por lado"],
+  ["Respiración", "5'", "Cucarachas y variantes", "2 × 5 respiraciones"],
+  ["Movilidad de columna y cadera", "15'", "Gatos · Zancada con un pie a la altura de la mano · Aperturas de cadera · Aperturas de cadera en L · 90-90", "2 rondas, 6-8 por lado"],
   ["Movilidad escapular", "10'", "Círculos con palo · Rotaciones de nadador · Amarrocados · Halos con poca resistencia", "2 rondas, 8 repeticiones"],
   ["Rotaciones Gymnika", "10'", "Caballero · Cachetadas · Patada de Ballet", "8 repeticiones cada una"],
-  ["Descompresión", "15'", "Colgado relajado en barra · Ranas · San José · El 4 · Hinge de cadera · Good morning · Pivoteos de cadera", "Colgado 3 × 20-30''; el resto 45-60'' por lado"],
-  ["Respiración final", "5'", "Respiración 90/90", "2-3' y salida suave"]
+  ["Descompresión", "15'", "Ranas · San José · El 4 · Hinge de cadera · Good morning · Pivoteos de cadera · Cucarachas", "45-60'' por lado"],
+  ["Respiración final", "5'", "Activación parasimpática", "2-3' y salida suave"]
 ];
 const BLOQUES_R5 = [
   ["Pre-calentamiento de estabilidad", "5'", "Loaded beast con pierna extendida · Rotaciones de nadador · Halos con poca resistencia", "1 ronda"],
   ["Equilibrio estático", "12'", "Marcha estática · Barra asimétrica en isometría · Plancha lateral", "3 × 20-30'' por lado"],
-  ["Equilibrio dinámico a 1 pierna", "15'", "PMR 1 pierna · Step-up alto lento · Windmill", "3 × 6 por lado, sin llegar a la fatiga"],
-  ["Propiocepción en pelota", "10'", "Plancha con antebrazos en pelota de yoga · Rotación de cadera en pelota de yoga", "3 × 20-30'' u 8 por lado"],
+  ["Equilibrio dinámico a 1 pierna", "15'", "PMR 1 pierna · Step-up alto lento · Windmill · Balance a una pierna en bosu · Catch en posición a una pierna · Air plane", "3 × 6 por lado, sin llegar a la fatiga"],
+  ["Propiocepción en pelota", "10'", "Plancha con antebrazos en pelota de yoga · Rotación de cadera en pelota de yoga · Balance · Patadas laterales", "3 × 20-30'' u 8 por lado"],
   ["SNC", "13'", "Ejercicios con pelotas en equilibrio, coordinando movimientos distintos de brazos y piernas · Ejercicios posturales", "Series de 20-40'' con calidad, sin llegar a la fatiga"],
   ["Compensación", "5'", "Menú Gymnika", "3-4 ejercicios"]
 ];
@@ -299,7 +300,8 @@ function tablaCalHTML(titulo, filas){
 }
 function contrasteHTML(base, ses){
   const pares = ses.filter(x => x.p);
-  return `<p>Contraste de 4 partes, una tras otra. <strong>Con 3 partes se elimina el asistido.</strong></p>
+  return `<p>Contraste de 4 partes, una tras otra. <strong>Con 3 partes se elimina el asistido.</strong>
+    Isometría: sostener la posición 10-30''. Asistido: banda elástica a favor del movimiento, que ayuda al atleta.</p>
     <ol class="rt-lista">${CONTRASTE_F3[base].map((c, k) => {
       const ref = pares[k] || {};
       return `<li class="rt-ej principal"><div class="rt-ej-top"><span class="rt-ej-n"><span class="rt-star" aria-label="Principal">★</span> Contraste · ${esc(c.patron)}</span>
@@ -316,7 +318,7 @@ function contenidoRutina(base, semana, reducida){
   if(base === "R4" || base === "R5"){
     return `
       <p class="rt-nota">${base === "R4" ? "Sin principales pesados ni crusher." : "Misma estructura en todas las fases."} No aptos: ${base === "R4"
-        ? "mismo contenido en rango sin dolor; el colgado se hace con los pies apoyados."
+        ? "mismo contenido en rango sin dolor."
         : "apoyo de una mano en pared en los ejercicios a 1 pierna, propiocepción sin pelota y, en el bloque SNC, coordinación sentado en la pelota o de pie en el piso."}</p>
       <ol class="rt-lista">${(base === "R4" ? BLOQUES_R4 : BLOQUES_R5).map(bloqueHTML).join("")}</ol>`;
   }

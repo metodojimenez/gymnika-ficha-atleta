@@ -990,9 +990,9 @@ function renderNutricion(profile, uid, isCoach, solicitudes){
 /* ---- Compensación: en fortalecimiento solo el menú Gymnika y las rotaciones de cadera.
    La base y el tobillo quedan solo para la rutina de estiramiento diaria de terapia. ---- */
 const COMPENSACION_GRUPOS = [
-  { grupo: "Base", items: ["Colgado relajado en barra", "Respiración 90/90 con exhalación larga"], soloTerapia: true },
+  { grupo: "Base", items: ["Bird dog"], soloTerapia: true },
   { grupo: "Menú Gymnika", items: ["Ranas", "San José", "Aperturas en L", "El 4 (estiramiento de glúteo)", "Hinge de cadera", "Good morning", "Pivoteos de cadera"] },
-  { grupo: "Rotaciones de cadera", items: ["Patada de Ballet", "Caballero", "Cachetadas"] },
+  { grupo: "Rotaciones de cadera", items: ["Patada de Ballet", "Caballero", "Cachetadas", "Señoritas", "Libro abierto y cerrado"] },
   { grupo: "Tobillo", items: ["Pantorrilla en pared", "Rodilla a la pared"], soloTerapia: true }
 ];
 /* Nombres antiguos guardados en fichas anteriores */
