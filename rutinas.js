@@ -229,11 +229,6 @@ const ROTACION = {
   F4: ["Rotación reactiva y control", ["lanzamiento", "cadera", "pallof"]],
   C: ["Variantes medias a baja intensidad (libre)", Object.keys(ROT_OPCIONES)]
 };
-/* Bloque 5 · Compensación: solo el menú Gymnika y las rotaciones de cadera */
-const COMPENSACION = [
-  ["Menú Gymnika (elige 2)", MENU_GYMNIKA.join(" · ")],
-  ["Rotaciones de cadera (elige 1)", ROTACIONES_CADERA.join(" · ")]
-];
 const BLOQUES_R4 = [
   ["Respiración", "5'", "Cucarachas y variantes", "2 × 5 respiraciones"],
   ["Movilidad de columna y cadera", "15'", "Gatos · Zancada con un pie a la altura de la mano · Aperturas de cadera · Aperturas de cadera en L · 90-90", "2 rondas, 6-8 por lado"],
@@ -258,11 +253,14 @@ function faseDeSemana(s){
 const FASE_NOMBRE = { F1: "Fase 1 · Miofibrilar", F2: "Fase 2 · Sarcoplasmático", F3: "Fase 3 · Fuerza Explosiva", F4a: "Fase 4 · Pliometría extensiva", F4b: "Fase 4 · Pliometría intensiva", C: "Cierre" };
 
 /* ---------- Pintado ---------- */
-const rutinaUI = { tab: "R1", desfase: 0 };
+const rutinaUI = { tab: "R1", desfase: 0, dia: null };
+/* Cada ejercicio que se puede elegir lleva data-sel="<bloque>|<nombre>" */
+const selAttr = (b, n)=> ` data-sel="${esc(b + "|" + n)}" tabindex="0" role="button" aria-pressed="false"`;
+const chipsSel = (b, items)=> `<p class="rt-opciones">${items.map(x => `<span${selAttr(b, x)}>${esc(x)}</span>`).join("")}</p>`;
 
-function ejercicioHTML(x){
+function ejercicioHTML(x, b){
   return `
-    <li class="rt-ej${x.p ? " principal" : ""}">
+    <li class="rt-ej${x.p ? " principal" : ""}"${b ? selAttr(b, x.n) : ""}>
       <div class="rt-ej-top">
         <span class="rt-ej-n">${x.p ? '<span class="rt-star" aria-label="Principal">★</span> ' : ""}${esc(x.n)}</span>
         <span class="rt-ej-dosis num">${esc(x.s)} × ${esc(x.r)}</span>
@@ -272,12 +270,12 @@ function ejercicioHTML(x){
       ${x.g ? `<p class="rt-ej-reg"><span>Reg.</span> ${esc(x.g)}</p>` : ""}
     </li>`;
 }
-function bloqueHTML(b){
-  return `<li class="rt-bloque"><div class="rt-ej-top"><span class="rt-ej-n">${esc(b[0])}</span><span class="rt-ej-dosis num">${esc(b[1])}</span></div>
-    <p class="rt-ej-claves">${esc(b[2])}</p><p class="rt-ej-meta"><span>${esc(b[3])}</span></p></li>`;
+function bloqueHTML(b, i){
+  return `<li class="rt-bloque" data-bloque="${i + 1}"><div class="rt-ej-top"><span class="rt-ej-n">${esc(b[0])}<span class="rt-cuenta" hidden></span></span><span class="rt-ej-dosis num">${esc(b[1])}</span></div>
+    ${chipsSel(i + 1, b[2].split(" · "))}<p class="rt-ej-meta"><span>${esc(b[3])}</span></p></li>`;
 }
 function seccionHTML(num, titulo, tiempo, cuerpo){
-  return `<section class="rt-bloque-sesion"><h4 class="rt-h"><span class="rt-num">${num}</span>${titulo}${tiempo ? `<span class="rt-tiempo">${tiempo}</span>` : ""}</h4>${cuerpo}</section>`;
+  return `<section class="rt-bloque-sesion" data-bloque="${num}"><h4 class="rt-h"><span class="rt-num">${num}</span>${titulo}<span class="rt-cuenta" hidden></span>${tiempo ? `<span class="rt-tiempo">${tiempo}</span>` : ""}</h4>${cuerpo}</section>`;
 }
 function rotacionHTML(fBase){
   const [enfasis, claves] = ROTACION[fBase];
@@ -286,7 +284,7 @@ function rotacionHTML(fBase){
       <summary><strong>Rotación</strong> · ${esc(enfasis)} <span class="muted">(${claves.length === Object.keys(ROT_OPCIONES).length ? "todas" : claves.length + " opciones"})</span></summary>
       <ul class="rt-lista rt-rot">${claves.map(k => {
         const o = ROT_OPCIONES[k];
-        return `<li class="rt-ej"><div class="rt-ej-top"><span class="rt-ej-n">${esc(o[1])}</span><span class="rt-tipo">${esc(o[0])}</span></div>
+        return `<li class="rt-ej"${selAttr(2, o[1])}><div class="rt-ej-top"><span class="rt-ej-n">${esc(o[1])}</span><span class="rt-tipo">${esc(o[0])}</span></div>
           <p class="rt-ej-reg"><span>Reg.</span> ${esc(o[2])}</p>
           <p class="rt-ej-claves"><strong>Media:</strong> ${esc(o[3])}</p>
           <p class="rt-ej-reg"><span>Prog.</span> ${esc(o[4])}</p></li>`;
@@ -296,7 +294,7 @@ function rotacionHTML(fBase){
 }
 function tablaCalHTML(titulo, filas){
   return `<p class="rt-sub">${titulo} <span class="muted">· elige 2</span></p>
-    <ul class="rt-cal">${filas.map(c => `<li><strong>${esc(c[0])}</strong><span class="rt-cal-dosis num">${esc(c[1])}</span>${c[2] ? `<span class="rt-cal-reg"><span>Reg.</span> ${esc(c[2])}</span>` : ""}</li>`).join("")}</ul>`;
+    <ul class="rt-cal">${filas.map(c => `<li${selAttr(1, c[0])}><strong>${esc(c[0])}</strong><span class="rt-cal-dosis num">${esc(c[1])}</span>${c[2] ? `<span class="rt-cal-reg"><span>Reg.</span> ${esc(c[2])}</span>` : ""}</li>`).join("")}</ul>`;
 }
 function contrasteHTML(base, ses){
   const pares = ses.filter(x => x.p);
@@ -304,7 +302,7 @@ function contrasteHTML(base, ses){
     Isometría: sostener la posición 10-30''. Asistido: banda elástica a favor del movimiento, que ayuda al atleta.</p>
     <ol class="rt-lista">${CONTRASTE_F3[base].map((c, k) => {
       const ref = pares[k] || {};
-      return `<li class="rt-ej principal"><div class="rt-ej-top"><span class="rt-ej-n"><span class="rt-star" aria-label="Principal">★</span> Contraste · ${esc(c.patron)}</span>
+      return `<li class="rt-ej principal"${selAttr(3, "Contraste · " + c.patron)}><div class="rt-ej-top"><span class="rt-ej-n"><span class="rt-star" aria-label="Principal">★</span> Contraste · ${esc(c.patron)}</span>
           ${ref.s ? `<span class="rt-ej-dosis num">${esc(String(ref.s).replace("pares", "rondas"))}</span>` : ""}</div>
         <ol class="rt-contraste">${c.partes.map((t, i) => `<li${i === 3 ? ' class="opcional"' : ""}>${esc(t)}${i === 3 ? ' <span class="muted">(se quita en contraste de 3)</span>' : ""}</li>`).join("")}</ol>
         ${ref.d ? `<p class="rt-ej-meta"><span>Descanso ${esc(ref.d)}</span></p>` : ""}
@@ -320,11 +318,11 @@ function contenidoRutina(base, semana, reducida){
       <p class="rt-nota">${base === "R4" ? "Sin principales pesados ni crusher." : "Misma estructura en todas las fases."} No aptos: ${base === "R4"
         ? "mismo contenido en rango sin dolor."
         : "apoyo de una mano en pared en los ejercicios a 1 pierna, propiocepción sin pelota y, en el bloque SNC, coordinación sentado en la pelota o de pie en el piso."}</p>
-      <ol class="rt-lista">${(base === "R4" ? BLOQUES_R4 : BLOQUES_R5).map(bloqueHTML).join("")}</ol>`;
+      <ol class="rt-lista">${(base === "R4" ? BLOQUES_R4 : BLOQUES_R5).map((b, i) => bloqueHTML(b, i)).join("")}</ol>`;
   }
 
   const fBase = fase === "F4a" || fase === "F4b" ? "F4" : fase;
-  const lista = (xs)=> `<ul class="rt-lista">${xs.map(ejercicioHTML).join("")}</ul>`;
+  const lista = (xs, b = 3)=> `<ul class="rt-lista">${xs.map(x => ejercicioHTML(x, b)).join("")}</ul>`;
   const sub = (t)=> `<p class="rt-sub">${t}</p>`;
   const notas = [];
   let principales = "", sugeridos = [];
@@ -342,7 +340,7 @@ function contenidoRutina(base, semana, reducida){
   } else if(fBase === "F4"){
     const intensiva = fase === "F4b" && (base === "R1" || base === "R3");
     const plio = fase === "F4b" && base === "R2" ? [] : intensiva ? PLIO_INTENSIVA : PLIO_EXTENSIVA;
-    if(plio.length) principales += sub(`Pliometría ${intensiva ? "intensiva" : "extensiva"} (con el cuerpo fresco)`) + lista(plio);
+    if(plio.length) principales += sub(`Pliometría ${intensiva ? "intensiva" : "extensiva"} (con el cuerpo fresco)`) + lista(plio, 3);
     principales += sub("Mantenimiento de fuerza") + (MANTENIMIENTO[base] ? lista([MANTENIMIENTO[base]]) : `<p class="muted">Según la sesión: 2-3 × 3 a RPE 7-8.</p>`);
     if(intensiva) notas.push("Intensiva solo para quien cumple los criterios de ingreso; quien no, sigue en extensiva (50-60 contactos) con progresión de complejidad.");
     if(fase === "F4b" && base === "R2") notas.push("La pliometría intensiva va solo en R1 y R3, con al menos 48 h entre ellas.");
@@ -362,19 +360,19 @@ function contenidoRutina(base, semana, reducida){
       : fBase === "F4" ? `<p class="muted">Fase 4: al final, + 2 × 10 pogos y 2 × 10 m de skips; esos contactos cuentan en el total pliométrico del día.</p>` : ""}`;
   const aproximacion = `
     <p>Elige <strong>3 ejercicios</strong> que complementen el patrón del día (${esc(RUTINAS[base].titulo.toLowerCase())}) y activen todo el cuerpo.</p>
-    ${sugeridos.length ? sub("Sugeridos para esta rutina") + lista(sugeridos) : ""}
+    ${sugeridos.length ? sub("Sugeridos para esta rutina") + lista(sugeridos, 2) : ""}
     ${sub("Banco de aproximación")}
-    <ul class="rt-simple">${APROXIMACION.map(a => `<li><strong>${esc(a[0])}:</strong> ${esc(a[1])}</li>`).join("")}</ul>
+    ${APROXIMACION.map(a => `<p class="rt-grupo">${esc(a[0])}</p>${chipsSel(2, a[1].split(" · "))}`).join("")}
     ${rotacionHTML(fBase)}`;
   const cr = CRUSHER[fBase];
   const crusher = semana === 20 ? `<p>Carries ligeros o ninguno.</p>`
     : semana === 19 ? (base === "R3" ? `<p>Test de capacidad: crusher de la Fase 2, 5'.</p>` : `<p class="muted">Sin crusher: semana de pruebas.</p>`)
     : reducida ? `<p class="muted">Sin crusher en la rutina reducida.</p>`
     : `<p>Baja la carga y sube la energía para terminar de fatigar.</p>
-       <p><strong>Aptos:</strong> ${esc(cr[0])}</p><p><strong>No aptos:</strong> ${esc(cr[1])}</p><p class="muted">${esc(cr[2])}</p>
-       ${sub("Complementarios")}<p class="rt-opciones">${COMPLEMENTARIOS_CRUSHER.map(x => `<span>${esc(x)}</span>`).join("")}</p>`;
+       <p class="rt-grupo">Aptos</p>${chipsSel(4, cr[0].split(" · "))}<p class="rt-grupo">No aptos</p>${chipsSel(4, cr[1].split(" · "))}<p class="muted">${esc(cr[2])}</p>
+       ${sub("Complementarios")}${chipsSel(4, COMPLEMENTARIOS_CRUSHER)}`;
   const comp = `<p>Elige 2 del menú Gymnika + 1 rotación de cadera: 30-45'' o 6-8 repeticiones por lado.</p>
-    <ul class="rt-simple">${COMPENSACION.map(c => `<li><strong>${esc(c[0])}:</strong> ${esc(c[1])}</li>`).join("")}</ul>`;
+    <p class="rt-grupo">Menú Gymnika</p>${chipsSel(5, MENU_GYMNIKA)}<p class="rt-grupo">Rotaciones de cadera</p>${chipsSel(5, ROTACIONES_CADERA)}`;
 
   return `
     ${notas.length ? `<p class="rt-nota">${notas.map(esc).join(" ")}</p>` : ""}
@@ -425,7 +423,8 @@ async function cargarRutinasDeHoy(){
   const [horarios, { data, error }] = await Promise.all([
     cargarHorarios(),
     sb.from("reservas").select("*").gte("fecha", lun).lte("fecha", fechaISO(sumarDias(parseFecha(lun), 6)))
-      .in("estado", ["confirmada", "asistio", "no_asistio"]).order("inicio")
+      .in("estado", ["confirmada", "asistio", "no_asistio"]).order("inicio"),
+    cargarSeleccionSemana(lun)
   ]);
   if(error) return null;
   const fort = new Set(horarios.filter(h => h.categoria === "fortalecimiento").map(h => h.id));
@@ -443,36 +442,89 @@ async function cargarRutinasDeHoy(){
       (grupos[cod] = grupos[cod] || []).push(uid);
     });
   });
-  return { semana: w.semana, fase: faseDeSemana(w.semana), porReserva, grupos };
+  return { semana: w.semana, fase: faseDeSemana(w.semana), porReserva, grupos, hoy };
+}
+
+/* ---------- Rutina del día: lo que el equipo elige en "Rutinas" ----------
+   Se guarda por fecha y rutina (tabla rutina_dia). Si un día no tiene nada propio, usa lo último que se armó
+   para esa rutina en la misma semana; al cambiar algo, se guarda solo para ese día. */
+const rutinaSel = { semana: null, filas: {}, error: null, timers: {} };
+async function cargarSeleccionSemana(lunes){
+  const { data, error } = await sb.from("rutina_dia").select("*").gte("fecha", lunes).lte("fecha", fechaISO(sumarDias(parseFecha(lunes), 6)));
+  rutinaSel.semana = lunes; rutinaSel.filas = {}; rutinaSel.error = error || null;
+  (data || []).forEach(r => { rutinaSel.filas[r.fecha + "|" + r.rutina] = r; });
+}
+function seleccionEfectiva(fecha, rt){
+  const propia = rutinaSel.filas[fecha + "|" + rt];
+  if(propia) return { fila: propia, heredada: false };
+  const previa = Object.values(rutinaSel.filas).filter(r => r.rutina === rt && r.fecha < fecha && (r.ejercicios || []).length)
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+  return previa ? { fila: previa, heredada: true } : { fila: null, heredada: false };
+}
+const TITULOS_BLOQUE = ["Calentamiento", "Aproximación", "Principales", "Crusher y complementarios", "Compensación"];
+function tituloBloque(rt, b){
+  const n = Number(b);
+  if(rt === "R4") return (BLOQUES_R4[n - 1] || [])[0] || "";
+  if(rt === "R5") return (BLOQUES_R5[n - 1] || [])[0] || "";
+  return TITULOS_BLOQUE[n - 1] || "";
+}
+/* Ejercicios elegidos agrupados por bloque, en el orden de la rutina */
+function elegidosPorBloque(rt, ejercicios){
+  const g = {};
+  (ejercicios || []).forEach(k => { const [b, ...n] = String(k).split("|"); (g[b] = g[b] || []).push(n.join("|")); });
+  return Object.keys(g).sort((a, b) => Number(a) - Number(b)).map(b => [tituloBloque(rt, b), g[b]]);
+}
+function diaCorto(iso){
+  const d = parseFecha(iso);
+  return `${DIAS_SEMANA[isoDow(d)].toLowerCase()} ${d.getDate()}`;
 }
 function rutinaChipHTML(cod){
   return cod ? `<span class="rt-cod ${cod.slice(0, 2)}" title="${esc(RUTINAS[cod.slice(0, 2)].titulo)}${cod.endsWith("r") ? " (reducida)" : ""}">${cod.slice(0, 2)}${cod.endsWith("r") ? "<small>red.</small>" : ""}</span>` : "";
 }
-/* Bloque "Rutina de hoy": qué rutinas tocan hoy y a quién; cada una abre su detalle */
+/* Bloque "Rutina de hoy": qué rutinas tocan hoy, a quién y con qué ejercicios (lo que se armó en Rutinas) */
+function rutinaHoyCardHTML(c, rh, personas){
+  const rt = c.slice(0, 2);
+  const { fila, heredada } = seleccionEfectiva(rh.hoy, rt);
+  const grupos = fila ? elegidosPorBloque(rt, fila.ejercicios) : [];
+  return `
+    <article class="rt-hoy-card">
+      <header class="rt-hoy-card-h">${rutinaChipHTML(c)}
+        <span class="rt-hoy-txt"><strong>${esc(RUTINAS[rt].titulo)}${c.endsWith("r") ? " · reducida" : ""}</strong>
+          ${personas ? `<span class="muted">${personas}</span>` : ""}</span></header>
+      ${grupos.length ? `<dl class="rt-hoy-sel">${grupos.map(([t, ns]) => `<div><dt>${esc(t)}</dt><dd>${ns.map(esc).join(" · ")}</dd></div>`).join("")}</dl>
+        <p class="rt-hoy-autor muted">${heredada ? `Armada el ${esc(diaCorto(fila.fecha))}` : "Armada para hoy"}${fila.editado_por ? " por " + esc(nombreAutor(fila.editado_por)) : ""}</p>`
+        : `<p class="muted rt-hoy-vacia">Todavía no se eligieron los ejercicios de esta rutina.</p>`}
+      <div class="rt-hoy-acc">
+        <button type="button" class="btn-outline sm" data-cambiar-rt="${rt}">${grupos.length ? "Cambiar rutina" : "Armar rutina"}</button>
+        <button type="button" class="btn-link" data-ver-rt="${rt}">Ver completa</button>
+      </div>
+    </article>`;
+}
 function rutinasHoyHTML(rh){
   if(!rh) return `<p class="muted" style="margin:0">El macrociclo aún no comienza.</p>`;
   const nombre = (id)=> nombreCorto((state.athleteList.find(a => a.id === id) || {}).nombre);
   const cods = Object.keys(rh.grupos).sort();
   const cab = `<p class="rt-hoy-fase">Semana <strong>${rh.semana}</strong> de 20 · ${esc(FASE_NOMBRE[rh.fase])}${rh.semana === 6 || rh.semana === 20 ? " · Descarga" : ""}</p>`;
-  if(!cods.length) return cab + `<p class="muted" style="margin:6px 0 0">Hoy nadie de fortalecimiento tiene reserva. Toca una rutina para verla:</p>
-    <div class="rt-hoy-grid">${Object.keys(RUTINAS).map(k => `<button type="button" class="rt-hoy-item" data-ver-rt="${k}">${rutinaChipHTML(k)}<span class="rt-hoy-txt"><strong>${esc(RUTINAS[k].titulo)}</strong></span></button>`).join("")}</div>`;
-  return cab + `<div class="rt-hoy-grid">${cods.map(c => `
-    <button type="button" class="rt-hoy-item" data-ver-rt="${c}">
-      ${rutinaChipHTML(c)}
-      <span class="rt-hoy-txt"><strong>${esc(RUTINAS[c.slice(0, 2)].titulo)}${c.endsWith("r") ? " · reducida" : ""}</strong>
-        <span class="muted">${plural(rh.grupos[c].length, "persona", "personas")}: ${rh.grupos[c].map(id => esc(nombre(id))).join(", ")}</span></span>
-      <span class="rt-hoy-ver" aria-hidden="true">Ver →</span>
-    </button>`).join("")}</div>`;
+  if(rutinaSel.error) return cab + `<p class="error">No se pudo cargar la rutina armada: ${esc(errorES(rutinaSel.error))}</p>`;
+  if(!cods.length) return cab + `<p class="muted" style="margin:6px 0 10px">Hoy nadie de fortalecimiento tiene reserva.</p>
+    <div class="rt-hoy-grid">${Object.keys(RUTINAS).map(k => rutinaHoyCardHTML(k, rh, "")).join("")}</div>`;
+  return cab + `<div class="rt-hoy-grid">${cods.map(c => rutinaHoyCardHTML(c, rh,
+    `${plural(rh.grupos[c].length, "persona", "personas")}: ${rh.grupos[c].map(id => esc(nombre(id))).join(", ")}`)).join("")}</div>`;
 }
-function abrirRutina(cod){
-  rutinaUI.tab = cod.slice(0, 2); rutinaUI.desfase = 0; rutinaUI.elegida = true;
+function abrirRutina(cod, armar){
+  rutinaUI.tab = cod.slice(0, 2); rutinaUI.desfase = 0; rutinaUI.elegida = true; rutinaUI.irATabs = true;
+  if(armar) rutinaUI.dia = todayStr();
   if(location.hash === "#/rutinas") showCoachRoute(); else location.hash = "#/rutinas";
 }
 function enlazarRutinasHoy(box, enRutinas, main){
-  box.querySelectorAll("[data-ver-rt]").forEach(b => {
+  box.querySelectorAll("[data-ver-rt], [data-cambiar-rt]").forEach(b => {
     b.onclick = ()=>{
-      if(enRutinas){ rutinaUI.tab = b.dataset.verRt.slice(0, 2); rutinaUI.elegida = true; renderCoachRutinas(main); main.querySelector(".rt-tabs").scrollIntoView({ behavior: "smooth", block: "start" }); }
-      else abrirRutina(b.dataset.verRt);
+      const rt = b.dataset.verRt || b.dataset.cambiarRt;
+      if(enRutinas){
+        rutinaUI.tab = rt; rutinaUI.elegida = true; rutinaUI.irATabs = true;
+        if(b.dataset.cambiarRt) rutinaUI.dia = todayStr();
+        renderCoachRutinas(main);
+      } else abrirRutina(rt, !!b.dataset.cambiarRt);
     };
   });
 }
@@ -487,6 +539,11 @@ function renderCoachRutinas(main){
   const tab = rutinaUI.tab;
   const mismoMes = w.inicio.getMonth() === w.fin.getMonth();
   const rango = `${w.inicio.getDate()}${mismoMes ? "" : " de " + MESES_LARGOS[w.inicio.getMonth()]} al ${w.fin.getDate()} de ${MESES_LARGOS[w.fin.getMonth()]}`;
+  /* Día que se está armando: el elegido si cae en esta semana; si no, hoy (esta semana) o el lunes */
+  const lunes = fechaISO(w.inicio), domingo = fechaISO(w.fin);
+  if(!rutinaUI.dia || rutinaUI.dia < lunes || rutinaUI.dia > domingo) rutinaUI.dia = w.esActual ? todayStr() : lunes;
+  const dia = rutinaUI.dia;
+  const dias = Array.from({ length: 7 }, (_, i) => fechaISO(sumarDias(w.inicio, i)));
   main.innerHTML = `<div class="detail"><header class="detail-head">
     <a class="back" href="#/">← Atletas</a>
     <p class="eyebrow">Panel del coach</p><h1>Rutinas</h1>
@@ -497,6 +554,8 @@ function renderCoachRutinas(main){
       <button type="button" class="icon-btn" id="rtNext" aria-label="Semana siguiente">›</button>
       ${w.esActual ? "" : `<button type="button" class="btn-link" id="rtHoy">Esta semana</button>`}
     </div>
+    ${w.antes ? "" : `<div class="rt-dias" role="group" aria-label="Día que estás armando"><span class="rt-dias-t">Armar la rutina del</span>
+      ${dias.map(f => { const d = parseFecha(f); return `<button type="button" data-dia="${f}" aria-pressed="${f === dia}"${f === todayStr() ? ' class="es-hoy"' : ""}><span>${DIAS_SEMANA[isoDow(d)].slice(0, 3)}</span><strong class="num">${d.getDate()}</strong></button>`; }).join("")}</div>`}
     ${w.esActual ? `<section class="panel rt-hoy" aria-labelledby="rtHoyT"><div class="panel-head"><h2 id="rtHoyT">Hoy toca</h2><span class="muted">${esc(fechaLarga(todayStr()))}</span></div>
       <div id="rtHoyBox"><div class="skel skel-line" style="width:70%"></div></div></section>` : ""}
     <section class="panel rutina">
@@ -513,17 +572,25 @@ function renderCoachRutinas(main){
       </div>
       <div class="rt-panel" role="tabpanel">
         <h3 class="rt-titulo">${tab} · ${esc(RUTINAS[tab].titulo)}</h3>
+        ${w.antes ? "" : `<div class="rt-armar"><p><strong>Toca los ejercicios para elegirlos.</strong> Lo elegido arma la ${tab} del ${esc(fechaLarga(dia))} y se ve en Hoy. El número de ejercicios por bloque es una sugerencia.</p>
+          <p class="rt-armar-estado" id="rtSelEstado" aria-live="polite"></p>
+          <button type="button" class="btn-link" id="rtLimpiar" hidden>Quitar todo lo elegido</button></div>`}
         ${contenidoRutina(tab, w.semana, w.semana === 6 && (tab === "R1" || tab === "R2"))}
       </div>
       <p class="rt-pie muted">★ principal · Reg. = regresión para no aptos en ese patrón. R1, R2 y R3 son el 1.º, 2.º y 3.º día de entrenamiento de cada persona en la semana; R4 y R5 se reparten según la tabla.</p>
     </section></div>`;
-  const ir = (d)=>{ rutinaUI.desfase = d; renderCoachRutinas(main); };
+  const ir = (d)=>{ rutinaUI.desfase = d; rutinaUI.dia = null; renderCoachRutinas(main); };
   main.querySelector("#rtPrev").onclick = ()=> ir(rutinaUI.desfase - 1);
   main.querySelector("#rtNext").onclick = ()=> ir(rutinaUI.desfase + 1);
   const bh = main.querySelector("#rtHoy"); if(bh) bh.onclick = ()=> ir(0);
   main.querySelectorAll("[data-rt]").forEach(b => {
     b.onclick = ()=>{ rutinaUI.tab = b.dataset.rt; rutinaUI.elegida = true; renderCoachRutinas(main); };
   });
+  main.querySelectorAll("[data-dia]").forEach(b => {
+    b.onclick = ()=>{ rutinaUI.dia = b.dataset.dia; renderCoachRutinas(main); };
+  });
+  if(!w.antes) enlazarSeleccion(main, dia, tab, lunes);
+  if(rutinaUI.irATabs){ rutinaUI.irATabs = false; main.querySelector(".rt-tabs").scrollIntoView({ block: "start" }); }
   if(w.esActual) cargarRutinasDeHoy().then(rh => {
     const box = main.querySelector("#rtHoyBox");
     if(!box) return;
@@ -533,4 +600,73 @@ function renderCoachRutinas(main){
     box.innerHTML = rutinasHoyHTML(rh);
     enlazarRutinasHoy(box, true, main);
   });
+}
+
+/* Elegir ejercicios con un clic: quedan resaltados y se guardan solos para el día y la rutina que se están armando */
+function enlazarSeleccion(main, dia, tab, lunes){
+  const panel = main.querySelector(".rt-panel");
+  if(!panel) return;
+  const pintar = ()=> pintarSeleccion(main, dia, tab);
+  if(rutinaSel.semana === lunes) pintar();
+  else cargarSeleccionSemana(lunes).then(()=>{ if(main.contains(panel)) pintar(); });
+  const alternar = (el)=>{
+    if(rutinaSel.semana !== lunes) return;
+    const actual = new Set((seleccionEfectiva(dia, tab).fila || {}).ejercicios || []);
+    const k = el.dataset.sel;
+    if(actual.has(k)) actual.delete(k); else actual.add(k);
+    guardarSeleccion(main, dia, tab, [...actual]);
+  };
+  panel.addEventListener("click", (e)=>{
+    if(e.target.closest("summary, a, button:not([data-sel])")) return;
+    const el = e.target.closest("[data-sel]");
+    if(el) alternar(el);
+  });
+  panel.addEventListener("keydown", (e)=>{
+    const el = e.target.closest("[data-sel]");
+    if(el && (e.key === "Enter" || e.key === " ")){ e.preventDefault(); alternar(el); }
+  });
+  const limpiar = main.querySelector("#rtLimpiar");
+  if(limpiar) limpiar.onclick = ()=> guardarSeleccion(main, dia, tab, []);
+}
+function pintarSeleccion(main, dia, tab){
+  const estado = main.querySelector("#rtSelEstado");
+  if(rutinaSel.error){ if(estado) estado.innerHTML = `<span class="error">No se pudo cargar lo elegido: ${esc(errorES(rutinaSel.error))}</span>`; return; }
+  const { fila, heredada } = seleccionEfectiva(dia, tab);
+  const set = new Set((fila || {}).ejercicios || []);
+  main.querySelectorAll(".rt-panel [data-sel]").forEach(el => {
+    const on = set.has(el.dataset.sel);
+    el.classList.toggle("elegido", on);
+    el.setAttribute("aria-pressed", String(on));
+    if(on){ const det = el.closest("details"); if(det) det.open = true; }
+  });
+  main.querySelectorAll(".rt-panel [data-bloque]").forEach(b => {
+    const n = b.querySelectorAll(".elegido").length;
+    const c = b.querySelector(".rt-cuenta");
+    if(c){ c.hidden = !n; c.textContent = n ? (n === 1 ? "1 elegido" : n + " elegidos") : ""; }
+  });
+  if(estado){
+    estado.innerHTML = !set.size ? "Todavía no hay ejercicios elegidos para este día."
+      : heredada ? `Se usa lo que se armó el <strong>${esc(diaCorto(fila.fecha))}</strong>. Si cambias algo, se guarda solo para este día.`
+      : `<strong>${set.size} ${set.size === 1 ? "ejercicio elegido" : "ejercicios elegidos"}</strong>${fila.editado_por ? ` · guardado por ${esc(nombreAutor(fila.editado_por))}` : ""}${fila.guardando ? " · guardando…" : ""}`;
+  }
+  const limpiar = main.querySelector("#rtLimpiar");
+  if(limpiar) limpiar.hidden = !set.size || heredada;
+}
+function guardarSeleccion(main, dia, tab, ejercicios){
+  const k = dia + "|" + tab;
+  rutinaSel.filas[k] = { ...(rutinaSel.filas[k] || {}), fecha: dia, rutina: tab, ejercicios, editado_por: state.profile.id, guardando: true };
+  pintarSeleccion(main, dia, tab);
+  rutinaSel.timers = rutinaSel.timers || {};
+  clearTimeout(rutinaSel.timers[k]);
+  rutinaSel.timers[k] = setTimeout(async ()=>{
+    const fila = rutinaSel.filas[k];
+    const { data, error } = await sb.from("rutina_dia").upsert({ fecha: dia, rutina: tab, ejercicios: fila.ejercicios }, { onConflict: "fecha,rutina" }).select().maybeSingle();
+    if(error){
+      const estado = main.querySelector("#rtSelEstado");
+      if(estado) estado.innerHTML = `<span class="error">No se pudo guardar: ${esc(errorES(error))}</span>`;
+      return;
+    }
+    rutinaSel.filas[k] = data || { ...fila, guardando: false };
+    if(main.querySelector(".rt-panel")) pintarSeleccion(main, dia, tab);
+  }, 400);
 }

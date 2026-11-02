@@ -476,3 +476,39 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .rt-cal-dosis{ font-size:13.5px; color:var(--ink-soft); }
 .rt-cal-reg{ font-size:13px; color:var(--ink-soft); }
 .rt-cal-reg span{ font-weight:700; color:var(--coach-2); }
+
+/* Armar la rutina del día: días de la semana y ejercicios elegibles */
+.rt-dias{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 var(--gap); }
+.rt-dias-t{ font-weight:700; font-size:14px; color:var(--ink-soft); margin-right:4px; }
+.rt-dias button{ display:inline-flex; flex-direction:column; align-items:center; min-width:46px; min-height:48px; padding:4px 6px; border-radius:10px;
+  border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); font-size:12px; font-weight:700; line-height:1.1; }
+.rt-dias button strong{ font-family:var(--font-display); font-size:18px; color:var(--ink); }
+.rt-dias button.es-hoy{ border-color:var(--accent); }
+.rt-dias button[aria-pressed="true"]{ background:var(--ink); border-color:var(--ink); color:#fff; }
+.rt-dias button[aria-pressed="true"] strong{ color:#fff; }
+.rt-armar{ margin:0 0 14px; padding:10px 14px; border-radius:12px; background:var(--accent-tint); border:1px solid rgba(14,124,134,.25); font-size:14.5px; }
+.rt-armar p{ margin:0; }
+.rt-armar-estado{ margin-top:4px !important; color:var(--ink-soft); }
+.rt-armar .btn-link{ min-height:32px; padding:0; margin-top:4px; }
+.rt-grupo{ margin:10px 0 4px; font-size:13px; font-weight:700; color:var(--ink-soft); }
+.rt-cuenta{ margin-left:8px; padding:2px 8px; border-radius:999px; background:var(--accent); color:#fff; font-family:var(--font-body); font-size:11.5px; font-weight:700; letter-spacing:0; text-transform:none; }
+[data-sel]{ cursor:pointer; transition:background .15s, border-color .15s, box-shadow .15s; }
+[data-sel]:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.rt-opciones span[data-sel]:hover, .rt-cal li[data-sel]:hover, li.rt-ej[data-sel]:hover{ border-color:var(--accent); }
+.rt-opciones span.elegido{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+.rt-opciones span.elegido::before{ content:"✓ "; }
+.rt-cal li.elegido, li.rt-ej.elegido{ background:var(--accent-tint); border-color:var(--accent); box-shadow:inset 4px 0 0 var(--accent); }
+.rt-cal li.elegido strong::before, li.rt-ej.elegido .rt-ej-n::before{ content:"✓ "; color:var(--accent); font-weight:800; }
+@media (prefers-reduced-motion: reduce){ [data-sel]{ transition:none; } }
+
+/* Hoy: tarjetas de la rutina del día */
+.rt-hoy-card{ display:flex; flex-direction:column; gap:8px; padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:var(--surface); min-width:0; }
+.rt-hoy-card-h{ display:flex; align-items:flex-start; gap:10px; }
+.rt-hoy-sel{ margin:0; display:grid; gap:6px; font-size:14px; }
+.rt-hoy-sel div{ display:grid; gap:1px; }
+.rt-hoy-sel dt{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+.rt-hoy-sel dd{ margin:0; }
+.rt-hoy-autor, .rt-hoy-vacia{ margin:0; font-size:13px; }
+.rt-hoy-acc{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:auto; }
+.rt-hoy-acc .btn-outline{ margin-top:0; min-height:40px; }
+.rt-hoy-card .rt-cod{ min-width:44px; min-height:36px; font-size:17px; flex:none; }
