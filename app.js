@@ -799,7 +799,7 @@ function initInbox(){
   btn.hidden = false;
   btn.onclick = (e)=>{ e.stopPropagation(); inbox.open ? closeInbox(true) : openInbox(); };
   stopInbox();
-  inbox.timer = setInterval(loadInbox, esMaster() ? 20000 : 60000);
+  inbox.timer = setInterval(loadInbox, esEquipo() ? 20000 : 60000);
   loadInbox();
   iniciarPush();
 }
@@ -839,8 +839,12 @@ function avisarNuevas(items){
   inbox.vistos = inbox.vistos || new Set();
   const nuevas = items.filter(n => !inbox.vistos.has(claveAviso(n)));
   nuevas.forEach(n => inbox.vistos.add(claveAviso(n)));
-  if(primeraVez || !esMaster()) return;
-  nuevas.filter(n => !n.leida).reverse().forEach(n => {
+  if(primeraVez || !esEquipo()) return;
+  const sinLeer = nuevas.filter(n => !n.leida).reverse();
+  /* Llegadas con QR: ventana con los que asistieron y un mensaje del coach para cada uno (todo el equipo del área) */
+  sinLeer.filter(n => n.tipo === "checkin").forEach(n => mostrarLlegadas(n));
+  if(!esMaster()) return;
+  sinLeer.forEach(n => {
     if(n.tipo === "pago" || n.tipo === "pago_aprobado") notificarSistema(n, "#/pagos");
     else if(TIPOS_EMERGENTES.includes(n.tipo)) mostrarEmergente(n);
   });
@@ -1155,7 +1159,7 @@ async function refreshCoachAside(){
       <span class="count">${state.athleteList.length} ${area ? "de " + CATEGORIAS[area].nombre.toLowerCase() : "registrados"}</span>
     </div>
     ${area ? "" : `<div class="seg cat-filter" role="group" aria-label="Filtrar por programa">
-      ${[["", "Todos"], ["terapia", "Terapia"], ["fortalecimiento", "Fortalecimiento"]].map(([k, t]) => `<button type="button" aria-pressed="${(state.catFiltro || "") === k}" data-filtro="${k}">${t}<span class="num">${k ? state.athleteList.filter(a => a.categoria === k).length : state.athleteList.length}</span></button>`).join("")}
+      ${[["", "Todos"], ["terapia", "Terapia"], ["fortalecimiento", "Fortalecimiento"]].map(([k, t]) => `<button type="button" aria-pressed="${(state.catFiltro || "") === k}" data-filtro="${k}">${t}<span class="num">${k ? state.athleteList.filter(a => catsDe(a.categoria).includes(k)).length : state.athleteList.length}</span></button>`).join("")}
     </div>`}
     <label class="sr-only" for="searchAthlete">Buscar atleta</label>
     <input type="search" id="searchAthlete" placeholder="Buscar por nombre o deporte" value="${esc(state.search)}" autocomplete="off">
@@ -1185,7 +1189,7 @@ async function refreshCoachAside(){
 
 function filterAthletes(q){
   q = (q || "").toLowerCase().trim();
-  const base = state.catFiltro ? state.athleteList.filter(a => a.categoria === state.catFiltro) : state.athleteList;
+  const base = state.catFiltro ? state.athleteList.filter(a => catsDe(a.categoria).includes(state.catFiltro)) : state.athleteList;
   if(!q) return base;
   return base.filter(a => (a.nombre||"").toLowerCase().includes(q) || (a.deporte||"").toLowerCase().includes(q));
 }
@@ -1207,7 +1211,7 @@ function renderAthleteListInto(list){
     const flags = [];
     const alerta = (state.alertas || []).find(x => x.user_id === a.id);
     if(alerta) flags.push(`<span class="flag alerta">${esc(alertaTexto(alerta))}</span>`);
-    if(a.categoria && !areaCoach()) flags.push(`<span class="flag cat-${a.categoria}">${CATEGORIAS[a.categoria].nombre}</span>`);
+    if(a.categoria && (!areaCoach() || a.categoria === "transicion")) flags.push(`<span class="flag cat-${a.categoria}">${CATEGORIAS[a.categoria].nombre}</span>`);
     if(tieneLesion(a.lesiones)) flags.push(`<span class="flag warn">Lesión</span>`);
     if(a.autorizacion_medica === false) flags.push(`<span class="flag warn">Sin autorización médica</span>`);
     if(!isProfileComplete(a)) flags.push(`<span class="flag info">Ficha incompleta</span>`);
@@ -1444,4 +1448,91 @@ function mostrarActivarPush(){
   };
   document.body.appendChild(el);
   pushUI.el = el;
+}
+
+/* ====================== LLEGADAS CON QR (EQUIPO) ======================
+   Cuando alguien registra su llegada, al equipo de esa área le sale una ventana con todos los que ya llegaron
+   a esa clase y un cuadro para dejarle un mensaje a cada uno. El mensaje es el consejo del coach que el alumno
+   ve en su ficha (se muestra solo el último; el historial completo está en Ajustes). */
+const llegadasUI = { clases: {}, borradores: {} };
+async function mostrarLlegadas(n){
+  if(!n.atleta_id) return;
+  const hoy = todayStr();
+  const { data: mia } = await sb.from("reservas").select("horario_id, fecha, inicio").eq("user_id", n.atleta_id).eq("fecha", hoy)
+    .eq("estado", "asistio").order("checkin_at", { ascending: false }).limit(1);
+  const r = (mia || [])[0];
+  if(!r) return;
+  const clave = r.horario_id + "|" + r.fecha;
+  llegadasUI.clases[clave] = { horario_id: r.horario_id, fecha: r.fecha, inicio: r.inicio };
+  await pintarLlegadas();
+}
+async function pintarLlegadas(){
+  const claves = Object.keys(llegadasUI.clases);
+  if(!claves.length) return;
+  const horarios = await cargarHorarios();
+  const grupos = await Promise.all(claves.map(async k => {
+    const c = llegadasUI.clases[k];
+    const { data } = await sb.from("reservas").select("user_id, checkin_at").eq("horario_id", c.horario_id).eq("fecha", c.fecha)
+      .eq("estado", "asistio").order("checkin_at");
+    return { ...c, clave: k, h: horarios.find(h => h.id === c.horario_id) || {}, asistentes: data || [] };
+  }));
+  const ids = [...new Set(grupos.flatMap(g => g.asistentes.map(a => a.user_id)))];
+  const { data: perfiles } = ids.length ? await sb.from("profiles").select("id, nombre, consejos_coach, consejos_at").in("id", ids) : { data: [] };
+  const perfil = (id)=> (perfiles || []).find(p => p.id === id) || {};
+
+  let dlg = document.getElementById("modalLlegadas");
+  if(dlg) dlg.querySelectorAll("textarea[data-msg-para]").forEach(t => { llegadasUI.borradores[t.dataset.msgPara] = t.value; });
+  const nuevo = !dlg;
+  if(nuevo){
+    dlg = document.createElement("dialog");
+    dlg.id = "modalLlegadas"; dlg.className = "modal-pago modal-llegadas";
+    dlg.setAttribute("aria-labelledby", "llTitulo");
+    document.body.appendChild(dlg);
+    const cerrar = ()=>{ if(dlg.open) dlg.close(); dlg.remove(); llegadasUI.clases = {}; llegadasUI.borradores = {}; };
+    dlg.addEventListener("cancel", (e)=>{ e.preventDefault(); cerrar(); });
+    dlg.addEventListener("click", async (e)=>{
+      if(e.target.closest("[data-ll-cerrar]")){ cerrar(); return; }
+      const b = e.target.closest("[data-guardar-msg]");
+      if(!b) return;
+      const uid = b.dataset.guardarMsg;
+      const t = dlg.querySelector(`textarea[data-msg-para="${CSS.escape(uid)}"]`);
+      const texto = (t.value || "").trim();
+      const est = dlg.querySelector(`[data-msg-estado="${CSS.escape(uid)}"]`);
+      if(!texto){ est.textContent = "Escribe el mensaje antes de guardar."; return; }
+      b.disabled = true; est.textContent = "Guardando…";
+      const { error } = await sb.from("profiles").update({ consejos_coach: texto }).eq("id", uid);
+      b.disabled = false;
+      if(error){ est.textContent = errorES(error); return; }
+      delete llegadasUI.borradores[uid];
+      t.value = ""; est.innerHTML = "<strong>Guardado.</strong> Ya lo ve en su ficha.";
+      const ult = dlg.querySelector(`[data-ultimo="${CSS.escape(uid)}"]`);
+      if(ult) ult.textContent = "Último mensaje: " + texto;
+    });
+  }
+  const totalPersonas = grupos.reduce((s, g) => s + g.asistentes.length, 0);
+  dlg.innerHTML = `
+    <p class="eyebrow">Llegadas con QR</p>
+    <h2 id="llTitulo">${totalPersonas === 1 ? "Llegó 1 persona" : `Llegaron ${totalPersonas} personas`}</h2>
+    <p class="muted ll-ayuda">Deja un mensaje a cada uno. Lo verá en su ficha como el consejo de su coach.</p>
+    ${grupos.map(g => `
+      <section class="ll-clase">
+        <h3>${esc((CATEGORIAS[g.h.categoria] || {}).nombre || "Clase")} · ${esc(horaCorta(g.h.hora || ""))}</h3>
+        <ul class="ll-lista">${g.asistentes.map(a => {
+          const p = perfil(a.user_id);
+          return `<li>
+            <div class="ll-top"><span class="avatar sm" aria-hidden="true">${esc(initials(p.nombre || ""))}</span>
+              <strong>${esc(p.nombre || "Alumno")}</strong><span class="muted num">${a.checkin_at ? "llegó " + esc(horaDe(a.checkin_at)) : ""}</span></div>
+            <p class="muted ll-ultimo" data-ultimo="${esc(a.user_id)}">${p.consejos_coach ? "Último mensaje: " + esc(p.consejos_coach) : "Todavía no tiene mensajes del coach."}</p>
+            <label class="sr-only" for="ll_${esc(a.user_id)}">Mensaje para ${esc(p.nombre || "el alumno")}</label>
+            <textarea id="ll_${esc(a.user_id)}" rows="2" data-msg-para="${esc(a.user_id)}" placeholder="Mensaje del coach para ${esc((p.nombre || "el alumno").split(" ")[0])}…">${esc(llegadasUI.borradores[a.user_id] || "")}</textarea>
+            <div class="ll-acc"><button type="button" class="btn-outline sm" data-guardar-msg="${esc(a.user_id)}">Guardar mensaje</button><span class="muted" data-msg-estado="${esc(a.user_id)}" aria-live="polite"></span></div>
+          </li>`;
+        }).join("")}</ul>
+      </section>`).join("")}
+    <div class="mp-acc"><button type="button" class="btn-primary" data-ll-cerrar>Listo</button></div>`;
+  if(!dlg.open){ try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); } }
+  if(nuevo){ const t = dlg.querySelector("textarea"); if(t) t.focus(); }
+}
+function horaDe(iso){
+  return new Intl.DateTimeFormat("es-PE", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Lima" }).format(new Date(iso));
 }

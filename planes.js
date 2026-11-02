@@ -4,8 +4,15 @@
 
 const CATEGORIAS = {
   terapia: { nombre: "Terapia", desc: "Sesiones de terapia con reserva de horario. Compras sesiones y cada una vale 1 token." },
-  fortalecimiento: { nombre: "Fortalecimiento", desc: "Entrenamiento en los horarios de fortalecimiento con acceso mensual." }
+  fortalecimiento: { nombre: "Fortalecimiento", desc: "Entrenamiento en los horarios de fortalecimiento con acceso mensual." },
+  /* Solo la asigna un master coach: paso de terapia a fortalecimiento, con sesiones de terapia y acceso de fortalecimiento */
+  transicion: { nombre: "Transición", desc: "Paso de terapia a fortalecimiento: reserva en los dos horarios, con sesiones de terapia y acceso de fortalecimiento.", soloMaster: true }
 };
+/* Categorías de horario que puede usar un alumno */
+const catsDe = (cat)=> cat === "transicion" ? ["terapia", "fortalecimiento"] : cat ? [cat] : [];
+/* En transición, cada parte de la app trabaja con una "vista" del perfil en una sola categoría; _real guarda el perfil verdadero */
+const perfilEn = (profile, cat)=> ({ ...(profile._real || profile), categoria: cat, _real: profile._real || profile });
+const perfilReal = (profile)=> profile._real || profile;
 const DIAS_SEMANA = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 const METODOS_PAGO = { yape: "Yape", plin: "Plin", transferencia: "Transferencia", mercadopago: "Mercado Pago" };
@@ -92,7 +99,7 @@ function categoriaPickerHTML(prefix, actual){
   return `
     <fieldset class="cat-picker" id="${prefix}cat">
       <legend>¿A qué vienes a Gymnika?<span class="req" aria-hidden="true">*</span></legend>
-      ${Object.entries(CATEGORIAS).map(([k, c]) => `
+      ${Object.entries(CATEGORIAS).filter(([, c]) => !c.soloMaster).map(([k, c]) => `
         <label class="cat-option">
           <input type="radio" name="${prefix}categoria" value="${k}" ${actual === k ? "checked" : ""}>
           <span><strong>${c.nombre}</strong><span>${esc(c.desc)}</span></span>
@@ -133,6 +140,10 @@ function calcIMC(profile, medidas){
 
 /* ====================== ALUMNO: MI PLAN ====================== */
 async function cargarPlanDe(uid, categoria){
+  if(categoria === "transicion"){
+    const [ter, fort] = await Promise.all([cargarPlanDe(uid, "terapia"), cargarPlanDe(uid, "fortalecimiento")]);
+    return { ...fort, movs: ter.movs, saldo: ter.saldo };
+  }
   if(categoria === "terapia"){
     const [{ data: movs }, { data: compras }, { data: reservas }] = await Promise.all([
       sb.from("tokens_movimientos").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
@@ -305,7 +316,14 @@ async function renderPlanAlumno(profile){
       estadoHTML = `<span class="plan-num plan-word off">${est.ultima ? "Vencido" : "Sin acceso"}</span><span class="plan-unit">${est.ultima ? "venció el " + fmtFecha(est.ultima.fin, true) : "Compra tu acceso mensual para empezar"}</span>`;
     }
     const asistMes = plan.asistencias.filter(a => String(a.fecha).startsWith(hoy.slice(0, 7))).length;
+    const terHTML = cat === "transicion" ? `
+      <div class="trans-ter">
+        <div><p class="eyebrow">Terapia</p>
+          <div class="perfil-saldo"><span class="plan-num num">${plan.saldo}</span><span class="plan-unit">${plan.saldo === 1 ? "sesión disponible" : "sesiones disponibles"}</span></div></div>
+        <button type="button" class="btn-outline" id="btnComprarTer">Comprar sesiones</button>
+      </div>` : "";
     box.innerHTML = `
+      ${cat === "transicion" ? `<p class="eyebrow trans-eyebrow">Fortalecimiento</p>` : ""}
       <div class="perfil">
         <div class="plan-big">${estadoHTML}</div>
         <div class="perfil-acciones">
@@ -313,6 +331,7 @@ async function renderPlanAlumno(profile){
           <button type="button" class="btn-outline" id="btnComprar">${est.vigente || est.futura ? "Renovar acceso" : "Comprar acceso mensual"}</button>
         </div>
       </div>
+      ${terHTML}
       ${medidorHTML(plan.asistencias)}
       ${proxHTML}
       <div class="plan-meta muted">${inicio}<span>Entrenamientos este mes: <strong>${asistMes}</strong></span>
@@ -324,7 +343,9 @@ async function renderPlanAlumno(profile){
         <ul class="mov-list">${plan.congelamientos.map(c => `<li><span class="mov-txt">Del ${fmtFecha(c.desde)} al ${fmtFecha(c.hasta)}${c.motivo ? " · " + esc(c.motivo) : ""}</span></li>`).join("")}</ul>
       </details>` : ""}`;
   }
-  document.getElementById("btnComprar").onclick = ()=> abrirCompra(profile);
+  document.getElementById("btnComprar").onclick = ()=> abrirCompra(cat === "transicion" ? perfilEn(profile, "fortalecimiento") : profile);
+  const bt = document.getElementById("btnComprarTer");
+  if(bt) bt.onclick = ()=> abrirCompra(perfilEn(profile, "terapia"));
   box.querySelectorAll("[data-escanear]").forEach(b => { b.onclick = abrirEscanerQR; });
   box.querySelectorAll("[data-rueda]").forEach(b => { b.onclick = ()=> abrirRueda(plan.asistencias); });
   mostrarConsejoDelDia();
@@ -486,7 +507,7 @@ async function abrirCompra(profile){
           <button type="button" class="btn-primary" data-close-done>Entendido</button>
         </div>`;
       form.querySelector("[data-close-done]").onclick = ()=> dlg.close();
-      renderPlanAlumno(profile);
+      renderPlanAlumno(perfilReal(profile));
     });
   };
 }
@@ -527,10 +548,24 @@ function fechaLarga(iso){
 async function renderReservasAlumno(profile){
   const box = document.getElementById("reservarCard");
   if(!box) return;
+  /* Transición: se elige si reservar terapia o fortalecimiento y el calendario trabaja en esa categoría */
+  const real = perfilReal(profile);
+  if(real.categoria === "transicion"){
+    reservaUI.cat = profile._real ? profile.categoria : (reservaUI.cat || "terapia");
+    let sel = document.getElementById("transCat");
+    if(!sel){
+      sel = document.createElement("div");
+      sel.id = "transCat"; sel.className = "seg trans-cat"; sel.setAttribute("role", "group"); sel.setAttribute("aria-label", "Qué quieres reservar");
+      box.before(sel);
+    }
+    sel.innerHTML = ["terapia", "fortalecimiento"].map(k => `<button type="button" data-trans-cat="${k}" aria-pressed="${reservaUI.cat === k}">${CATEGORIAS[k].nombre}</button>`).join("");
+    sel.querySelectorAll("[data-trans-cat]").forEach(b => b.onclick = ()=>{ reservaUI.cat = b.dataset.transCat; reservaUI.dia = null; renderReservasAlumno(perfilEn(real, reservaUI.cat)); });
+    if(!profile._real) profile = perfilEn(real, reservaUI.cat);
+  }
   const cat = profile.categoria;
   const esTer = cat === "terapia";
   const [aj, horarios] = await Promise.all([cargarAjustes(), cargarHorarios()]);
-  const hs = horarios.filter(h => h.activo && h.categoria === cat);
+  const hs = horarios.filter(h => h.activo && h.categoria === cat);  // en transición, cat es la categoría elegida arriba
   if(!hs.length){ box.innerHTML = emptyHTML(`Todavía no hay horarios de ${esTer ? "terapia" : "fortalecimiento"} publicados.`); renderMisReservas(profile); return; }
 
   const hoyISO = todayStr();
@@ -546,7 +581,7 @@ async function renderReservasAlumno(profile){
   const desde = fechaISO(primero) < hoyISO ? hoyISO : fechaISO(primero);
   const [{ data: ocup }, plan] = await Promise.all([
     sb.rpc("ocupacion", { p_desde: desde, p_hasta: fechaISO(ultimo) }),
-    state.plan ? Promise.resolve(state.plan) : cargarPlanDe(profile.id, cat)
+    state.plan ? Promise.resolve(state.plan) : cargarPlanDe(profile.id, perfilReal(profile).categoria)
   ]);
   if(!document.getElementById("reservarCard")) return;
   const mias = (plan.reservas || []).filter(r => ["confirmada", "espera", "asistio"].includes(r.estado));
@@ -777,7 +812,7 @@ function confirmarReserva(profile, h, fecha, o, aj, saldo){
 }
 
 async function refrescarReservas(profile){
-  await renderPlanAlumno(profile);
+  await renderPlanAlumno(perfilReal(profile));
   await renderReservasAlumno(profile);
 }
 
@@ -951,7 +986,7 @@ async function procesarCheckin(codigo){
     return;
   }
   const res = typeof data === "string" ? JSON.parse(data) : (data || {});
-  const esFort = state.profile.categoria === "fortalecimiento";
+  const esFort = (res.categoria || state.profile.categoria) === "fortalecimiento";
   if(res.ok === false){
     /* Horario equivocado: la base ya avisó al alumno y a los master */
     openDialog("Horario equivocado", `

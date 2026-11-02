@@ -862,6 +862,7 @@
   .chip.cat-chip{ font-weight:700; }
   .chip.cat-terapia{ color:var(--terapia); background:var(--terapia-soft); border-color:var(--terapia-line); }
   .chip.cat-fortalecimiento{ color:var(--fort); background:var(--fort-soft); border-color:var(--fort-line); }
+  .flag.cat-transicion, .chip.cat-transicion{ color:#6E4A6B; background:#F3ECF2; border-color:rgba(110,74,107,.3); }
   .tokens-adj input[type="number"]{ flex:0 0 110px; }
   .freeze-row{ flex-wrap:wrap; }
   .freeze-row input{ flex:1 1 120px; }

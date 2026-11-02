@@ -512,3 +512,30 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .rt-hoy-acc{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:auto; }
 .rt-hoy-acc .btn-outline{ margin-top:0; min-height:40px; }
 .rt-hoy-card .rt-cod{ min-width:44px; min-height:36px; font-size:17px; flex:none; }
+
+/* Ajustes: historial de consejos */
+.hist-cons{ list-style:none; margin:0; padding:0; display:grid; gap:8px; max-height:560px; overflow:auto; }
+.hist-cons li{ padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--surface); font-size:14.5px; }
+.hist-cons li p{ margin:4px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.hist-cons-top{ display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.hist-cons .muted{ font-size:13px; }
+/* Transición: sesiones de terapia dentro del panel del plan */
+.trans-eyebrow{ margin-bottom:6px; }
+.trans-ter{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:14px; padding:12px 14px; border-radius:12px; background:var(--terapia-soft, #FBF0EA); border:1px solid var(--terapia-line, rgba(180,82,59,.25)); position:relative; z-index:1; }
+.trans-ter .plan-num{ font-size:34px; }
+.trans-ter .btn-outline{ margin-top:0; }
+.trans-ter-coach{ margin-bottom:12px; padding-bottom:4px; border-bottom:1px dashed var(--line); }
+.trans-cat{ margin:0 0 12px; }
+/* Llegadas con QR: ventana para dejar un mensaje a cada alumno */
+.modal-llegadas{ width:min(560px, calc(100vw - 32px)); text-align:left; }
+.modal-llegadas h2{ margin-bottom:4px; }
+.ll-ayuda{ margin:0 0 12px; }
+.ll-clase h3{ font-size:15px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin:12px 0 8px; }
+.ll-lista{ list-style:none; margin:0; padding:0; display:grid; gap:10px; }
+.ll-lista li{ padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--paper); }
+.ll-top{ display:flex; align-items:center; gap:10px; }
+.ll-top .muted{ margin-left:auto; font-size:13px; }
+.ll-ultimo{ margin:6px 0; font-size:13.5px; overflow-wrap:anywhere; }
+.ll-lista textarea{ width:100%; min-height:60px; }
+.ll-acc{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:6px; }
+.ll-acc .btn-outline{ margin-top:0; }

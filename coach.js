@@ -71,7 +71,21 @@ async function renderPlanCoach(profile){
 
   const est = estadoMembresia(plan);
   const hoy = todayStr();
-  box.innerHTML = catSelect + `
+  /* Transición: además del acceso de fortalecimiento, las sesiones de terapia (y el color de riesgo para el horario de terapia) */
+  const terHTML = cat !== "transicion" ? "" : `
+    <div class="trans-ter-coach">
+      <p class="eyebrow">Terapia</p>
+      ${riesgoPickerHTML(profile)}
+      <div class="plan-big"><span class="plan-num num">${plan.saldo}</span><span class="plan-unit">${plan.saldo === 1 ? "sesión disponible" : "sesiones disponibles"}</span></div>
+      ${master ? `<div class="inline-add tokens-adj">
+        <input type="number" id="adjCant" inputmode="numeric" placeholder="+2 o −1" aria-label="Sesiones a sumar o restar">
+        <input id="adjNota" placeholder="Motivo (ej: cortesía)" aria-label="Motivo del ajuste">
+        <button type="button" class="btn-outline" id="btnAjustar">Ajustar</button>
+      </div>` : ""}
+      <div id="adjMsg" aria-live="polite"></div>
+      <p class="eyebrow" style="margin-top:14px">Fortalecimiento</p>
+    </div>`;
+  box.innerHTML = catSelect + terHTML + `
     <div class="plan-hero compact"><div class="plan-big">
       ${est.congelado ? `<span class="plan-num plan-word">Congelado</span><span class="plan-unit">hasta el ${fmtFecha(est.congelado.hasta, true)} · vence el ${fmtFecha(est.finTotal, true)}</span>`
         : est.vigente ? `<span class="plan-num plan-word">Activo</span><span class="plan-unit">vence el ${fmtFecha(est.finTotal, true)} · ${plural(diasEntre(hoy, est.finTotal) + 1, "día", "días")}</span>`
@@ -85,6 +99,19 @@ async function renderPlanCoach(profile){
       <ul class="mov-list">${plan.congelamientos.map(c => `<li><span class="mov-txt">Del ${fmtFecha(c.desde)} al ${fmtFecha(c.hasta)}${c.motivo ? " · " + esc(c.motivo) : ""}</span></li>`).join("")}</ul></details>` : ""}
     ${comprasHTML}`;
   bindCat();
+  if(cat === "transicion"){
+    bindRiesgo(profile);
+    const ba = document.getElementById("btnAjustar");
+    if(ba) ba.onclick = ()=> withBusy(ba, "…", async ()=>{
+      const n = parseInt(document.getElementById("adjCant").value, 10);
+      const msg = document.getElementById("adjMsg");
+      if(!n){ showMsg(msg, "error", "Escribe cuántas sesiones sumar (ej: 2) o restar (ej: -1)."); return; }
+      const { error } = await sb.rpc("ajustar_tokens", { p_user: profile.id, p_cantidad: n, p_nota: document.getElementById("adjNota").value });
+      if(error){ showError(msg, error); return; }
+      await renderPlanCoach(profile);
+      showMsg(document.getElementById("adjMsg"), "ok", "Saldo actualizado.");
+    });
+  }
 
   function bindCat(){
     const b = document.getElementById("btnGuardarCat");
@@ -507,7 +534,12 @@ async function renderCoachAjustes(main){
         <textarea id="ajTerminos" rows="10">${esc(aj.terminos || TERMINOS_BORRADOR)}</textarea>
         <button type="button" class="btn-primary" id="btnGuardarTerminos">Guardar términos</button><div id="termMsg" aria-live="polite"></div>
       </section>
+      <section class="panel span-12" aria-labelledby="hHistCons"><div class="panel-head"><h2 id="hHistCons">Historial de consejos</h2><span class="muted">Todos los consejos de los coaches, del más reciente al más antiguo</span></div>
+        <input type="search" id="histConsBuscar" placeholder="Buscar por alumno o por texto" aria-label="Buscar en el historial de consejos">
+        <div id="histConsBox" style="margin-top:12px"><div class="skel skel-block"></div></div>
+      </section>
     </div></div>`;
+  pintarHistorialConsejos();
 
   const bAj = document.getElementById("btnGuardarAj");
   bAj.onclick = ()=> withBusy(bAj, "Guardando…", async ()=>{
@@ -870,4 +902,30 @@ async function renderCoachEquipo(main){
       : `<p class="muted" style="margin-top:10px">${(data || []).length ? "Esa persona ya está en el equipo." : "No encontramos una cuenta con ese nombre o correo. Pídele que se registre primero."}</p>`;
     enlazar(out);
   };
+}
+
+/* ====================== AJUSTES: HISTORIAL DE CONSEJOS (MASTER) ======================
+   Cada vez que un coach deja un consejo nuevo, la base lo guarda con su fecha (tabla consejos_historial).
+   La ficha del alumno muestra solo el último; aquí se ven todos. */
+const normalizar = (t)=> String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+async function pintarHistorialConsejos(){
+  const box = document.getElementById("histConsBox");
+  if(!box) return;
+  const { data, error } = await sb.from("consejos_historial").select("*").order("created_at", { ascending: false }).limit(500);
+  if(!document.getElementById("histConsBox")) return;
+  if(error){ box.innerHTML = `<div class="error">${esc(errorES(error))}</div>`; return; }
+  const filas = data || [];
+  const nombre = (id)=> (state.athleteList.find(a => a.id === id) || {}).nombre || "Alumno";
+  const pintar = (q)=>{
+    const t = normalizar(q || "");
+    const vis = t ? filas.filter(r => normalizar(nombre(r.user_id) + " " + r.texto).includes(t)) : filas;
+    box.innerHTML = vis.length ? `<ul class="hist-cons">${vis.map(r => `
+      <li><div class="hist-cons-top"><strong>${esc(nombre(r.user_id))}</strong><span class="muted num">${esc(fmtFechaHora(r.created_at))}</span></div>
+        <p>${esc(r.texto)}</p>${r.autor ? `<span class="muted">Por ${esc(nombreAutor(r.autor))}</span>` : ""}</li>`).join("")}</ul>
+      ${vis.length === 500 ? `<p class="muted">Se muestran los 500 más recientes.</p>` : ""}`
+      : emptyHTML(t ? "Ningún consejo coincide con la búsqueda." : "Todavía no hay consejos guardados.");
+  };
+  pintar("");
+  const q = document.getElementById("histConsBuscar");
+  if(q) q.oninput = ()=> pintar(q.value);
 }

@@ -107,7 +107,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("fichaCard", "Datos personales", 12)}`
     } : {
       inicio: `
-    ${panelHTML("planCard", "Mi acceso", 12, { cls: "plan-panel", eyebrow: "Fortalecimiento" })}
+    ${panelHTML("planCard", cat === "transicion" ? "Mi plan" : "Mi acceso", 12, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}
     ${estirar}
     ${consejos}`,
       reservar: `
@@ -135,7 +135,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("fichaCard", "Datos personales", 12)}`;
   } else {
     panels = `
-    ${panelHTML("planCard", esMaster() ? "Plan y pagos" : "Acceso", 12, { eyebrow: cat ? "Fortalecimiento" : "Sin categoría" })}
+    ${panelHTML("planCard", esMaster() ? "Plan y pagos" : cat === "transicion" ? "Plan" : "Acceso", 12, { eyebrow: cat ? CATEGORIAS[cat].nombre + (cat === "transicion" ? " · terapia y fortalecimiento" : "") : "Sin categoría" })}
     ${macroHTML}
     ${resumenHTML}
     ${panelHTML("notasCard", "Notas del coach", 6)}
