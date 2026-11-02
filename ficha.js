@@ -80,47 +80,51 @@ async function renderAthleteDetail(profile, isCoach, container){
   const cat = profile.categoria;
   const esTerapia = cat === "terapia";
   const graficoPeso = (span)=> panelHTML("pesoGrasaCard", "Peso y % grasa", span, { body: `<div class="chart-box"><canvas id="pesoGrasaChart" role="img" aria-label="Gráfico de peso y porcentaje de grasa en el tiempo"></canvas></div>` });
-  const datosPersonales = `
-    <section class="panel span-12" aria-label="Datos personales">
-      <details class="ficha-details">
-        <summary><h2>Datos personales</h2><span class="muted">Ver y editar</span></summary>
-        <div id="fichaCard"></div>
-      </details>
-    </section>`;
   const resumenHTML = `
         <section class="span-12" aria-labelledby="h_resumen">
           <h2 class="sr-only" id="h_resumen">${isCoach ? "Resumen del proceso" : "Tu proceso"}</h2>
           <div class="stats" id="resumenCard"></div>
         </section>`;
   const macroHTML = `<section class="panel macro span-12" id="macroCard" aria-label="Macrociclo"></section>`;
-  let panels;
-  if(!isCoach && esTerapia){
-    panels = `
-    ${panelHTML("planCard", "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
-    ${panelHTML("reservarCard", "Reservar sesión", 8, { note: "Cada reserva usa 1 sesión" })}
-    ${panelHTML("misReservasCard", "Mis reservas", 4)}
-    ${panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 12, { eyebrow: "Todos los días" })}
+  let panels, tabsAlumno = null;
+  if(!isCoach){
+    const estirar = panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 12, { eyebrow: esTerapia ? "Todos los días" : "Compensación diaria" });
+    const consejos = `
     ${panelHTML("notasCard", "Consejos de tu coach", 6, { cls: "coach-voice", eyebrow: "Tu coach" })}
-    ${panelHTML("tipCard", esc(tip.titulo), 6, { cls: "coach-voice", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
-    ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
-    ${datosPersonales}`;
-  } else if(!isCoach){
-    panels = `
-    ${panelHTML("planCard", "Mi acceso mensual", 12, { cls: "plan-panel", eyebrow: "Fortalecimiento" })}
+    ${panelHTML("tipCard", esc(tip.titulo), 6, { cls: "coach-voice", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}`;
+    tabsAlumno = esTerapia ? {
+      inicio: `
+    ${panelHTML("planCard", "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
+    ${estirar}
+    ${consejos}`,
+      reservar: `
+    ${panelHTML("reservarCard", "Reservar sesión", 8, { note: "Cada reserva usa 1 sesión" })}
+    ${panelHTML("misReservasCard", "Mis reservas", 4)}`,
+      progreso: `
+    ${resumenHTML}
+    ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}`,
+      ficha: `
+    ${panelHTML("fichaCard", "Datos personales", 12)}`
+    } : {
+      inicio: `
+    ${panelHTML("planCard", "Mi acceso", 12, { cls: "plan-panel", eyebrow: "Fortalecimiento" })}
+    ${estirar}
+    ${consejos}`,
+      reservar: `
     ${panelHTML("reservarCard", "Reservar horario", 8, { note: "Obligatorio para entrar" })}
-    ${panelHTML("misReservasCard", "Mis horarios", 4)}
+    ${panelHTML("misReservasCard", "Mis horarios", 4)}`,
+      progreso: `
     ${macroHTML}
     ${resumenHTML}
-    ${panelHTML("notasCard", "Consejos de tu coach", 6, { cls: "coach-voice", eyebrow: "Tu coach" })}
-    ${panelHTML("tipCard", esc(tip.titulo), 6, { cls: "coach-voice", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
     ${panelHTML("fuerzaCard", "Progresión de fuerza", 8, { note: "Carga el coach" })}
     ${graficoPeso(4)}
     ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
-    ${panelHTML("tiemposCard", "Tiempos deportivos", 6)}
+    ${panelHTML("tiemposCard", "Tiempos deportivos", 12)}`,
+      ficha: `
     ${panelHTML("agendaCard", "Agenda: viajes y competencias", 6)}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
-    ${panelHTML("estiramientosCard", "Compensación", 6)}
-    ${datosPersonales}`;
+    ${panelHTML("fichaCard", "Datos personales", 12)}`
+    };
   } else if(esTerapia){
     panels = `
     ${panelHTML("planCard", esMaster() ? "Plan y pagos" : "Sesiones", 12, { eyebrow: "Terapia" })}
@@ -147,7 +151,9 @@ async function renderAthleteDetail(profile, isCoach, container){
   if(isCoach && cat) chips.unshift(`<li class="chip cat-chip cat-${cat}">${CATEGORIAS[cat].nombre}</li>`);
   state.detail.profile = profile;
 
-  container.innerHTML = `
+  if(tabsAlumno){
+    container.innerHTML = detalleAlumnoHTML(profile, chips, tabsAlumno, fallo);
+  } else container.innerHTML = `
     <div class="detail">
       <header class="detail-head">
         ${isCoach ? `<a class="back" href="#/">← Atletas</a>` : ""}
@@ -180,6 +186,7 @@ async function renderAthleteDetail(profile, isCoach, container){
   }
 
   const hay = (id)=> !!document.getElementById(id);
+  if(tabsAlumno) activarSeccionAlumno(seccionAlumnoDeURL(), false);
   enlazarPlegables(container);
   renderMacro(state.detail.eventos, true);
   renderResumen();
@@ -999,17 +1006,7 @@ function renderEstiramientos(profile, uid, isCoach){
   const nota = esTerapia ? ESTIRAMIENTO_DIARIO_NOTA : COMPENSACION_NOTA;
   const actuales = [...new Set((profile.estiramientos || []).map(e => ESTIRAMIENTO_RENOMBRES[e] || e))];
 
-  if(!isCoach){
-    box.innerHTML = esTerapia
-      ? `<p class="resena-rutina">${esc(nota)}</p>
-         ${actuales.length ? `<ol class="stretch-list">${actuales.map(e=>`<li>${esc(e)}</li>`).join("")}</ol>`
-           : `<p class="muted">Tu coach todavía no asignó tu rutina de estiramiento diaria.</p>`}`
-      : actuales.length
-        ? `<ol class="stretch-list">${actuales.map(e=>`<li>${esc(e)}</li>`).join("")}</ol>
-           <p class="muted" style="margin-top:12px">${esc(nota)}</p>`
-        : `<p class="muted">Tu coach todavía no asignó tu rutina de compensación.</p>`;
-    return;
-  }
+  if(!isCoach){ pintarEstiramientosAlumno(box, actuales, uid, esTerapia, nota); return; }
 
   let customList = actuales.filter(e => !ESTIRAMIENTOS_PREDETERMINADOS.includes(e));
   let marcados = new Set(actuales.filter(e => ESTIRAMIENTOS_PREDETERMINADOS.includes(e)));
@@ -1171,3 +1168,106 @@ window.addEventListener("DOMContentLoaded", ()=>{
   });
   bootAfterAuth();
 });
+
+/* ====================== SECCIONES DEL ALUMNO ======================
+   Inicio (su perfil), Reservar, Progreso y Mi ficha. En el teléfono el menú va abajo, como en una app;
+   en computadora va debajo del encabezado. La sección elegida queda en la dirección (#/reservar…). */
+const SECCIONES_ALUMNO = {
+  inicio: { t: "Inicio", ico: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>` },
+  reservar: { t: "Reservar", ico: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/><path d="m9 15 2 2 4-4"/></svg>` },
+  progreso: { t: "Progreso", ico: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M6 16v-4M11 16V8M16 16v-6M21 4l-5 5-4-3-6 5"/></svg>` },
+  ficha: { t: "Mi ficha", ico: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>` }
+};
+function seccionAlumnoDeURL(){
+  const m = location.hash.match(/^#\/(inicio|reservar|progreso|ficha)\b/);
+  return m ? m[1] : "inicio";
+}
+function saludoDelDia(){
+  const h = Number(new Intl.DateTimeFormat("es-PE", { hour: "numeric", hour12: false, timeZone: "America/Lima" }).format(new Date()));
+  return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
+}
+function detalleAlumnoHTML(profile, chips, tabs, fallo){
+  const cat = profile.categoria;
+  const est = macrocicloEstado();
+  const semanaHTML = cat === "fortalecimiento" && !est.antes
+    ? `<a class="perfil-semana" href="#/progreso"><span class="num">${est.semana}</span><span>Semana ${est.semana} de 20 · ${esc(est.fase || "")}</span><span aria-hidden="true">→</span></a>` : "";
+  const nav = `<nav class="tabs-alumno" aria-label="Secciones de tu ficha">${Object.entries(SECCIONES_ALUMNO).map(([k, v]) =>
+    `<a href="#/${k}" data-tab-alumno="${k}"><span class="ta-ico" aria-hidden="true">${v.ico}</span><span>${v.t}</span></a>`).join("")}</nav>`;
+  const titulo = (k)=> `<header class="tab-head"><p class="eyebrow">${esc(profile.nombre || "Mi ficha")}</p><h1>${SECCIONES_ALUMNO[k].t}</h1></header>`;
+  return `
+    <div class="detail detail-alumno">
+      ${nav}
+      <div id="detailMsg">${fallo ? `<div class="error" role="alert">${esc("Parte de la ficha no cargó. " + errorES(fallo.error))}</div>` : ""}</div>
+      <section class="tab-alumno" data-tab="inicio" aria-label="Inicio">
+        <header class="detail-head perfil-head">
+          <div class="perfil-id">
+            <span class="avatar perfil-avatar" aria-hidden="true">${esc(initials(profile.nombre || ""))}</span>
+            <div><p class="eyebrow">${saludoDelDia()}</p><h1>${esc(profile.nombre || "Mi ficha")}</h1></div>
+          </div>
+          ${chips.length ? `<ul class="chips">${chips.join("")}</ul>` : ""}
+          ${semanaHTML}
+        </header>
+        <div class="grid">${tabs.inicio}</div>
+      </section>
+      ${["reservar", "progreso", "ficha"].map(k => `
+      <section class="tab-alumno" data-tab="${k}" aria-label="${SECCIONES_ALUMNO[k].t}" hidden>
+        ${titulo(k)}
+        <div class="grid">${tabs[k]}</div>
+      </section>`).join("")}
+    </div>`;
+}
+function activarSeccionAlumno(k, subir = true){
+  const tabs = document.querySelectorAll(".tab-alumno");
+  if(!tabs.length) return;
+  if(!SECCIONES_ALUMNO[k]) k = "inicio";
+  tabs.forEach(t => { t.hidden = t.dataset.tab !== k; });
+  document.querySelectorAll("[data-tab-alumno]").forEach(a => {
+    if(a.dataset.tabAlumno === k) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+  document.body.classList.add("con-tabs");
+  if(subir) window.scrollTo(0, 0);
+}
+/* Lleva a la sección donde está un panel (lo usan los avisos de la campanita) */
+function mostrarSeccionDe(el){
+  const tab = el && el.closest(".tab-alumno");
+  if(!tab) return;
+  const k = tab.dataset.tab;
+  if(location.hash !== "#/" + k) history.replaceState(null, "", "#/" + k);
+  activarSeccionAlumno(k, false);
+}
+
+/* Rutina de estiramiento del alumno: la lista que asignó el coach, con la dosis y casillas para ir marcando
+   lo que ya hizo hoy (se guarda en este teléfono y se reinicia cada día). */
+function pintarEstiramientosAlumno(box, lista, uid, esTerapia, nota){
+  if(!lista.length){
+    box.innerHTML = `<p class="muted">Tu coach todavía no asignó tu rutina${esTerapia ? " de estiramiento diaria" : " de compensación"}. Cuando lo haga, aparecerá aquí.</p>`;
+    return;
+  }
+  const clave = "gymnika_estiro_" + uid + "_" + todayStr();
+  let hechos = new Set();
+  try{ hechos = new Set(JSON.parse(localStorage.getItem(clave) || "[]")); } catch { /* sin almacenamiento */ }
+  const grupoDe = (ej)=> (COMPENSACION_GRUPOS.find(g => g.items.includes(ej)) || {}).grupo || "";
+  const pintar = ()=>{
+    const n = lista.filter(e => hechos.has(e)).length, total = lista.length;
+    box.innerHTML = `
+      <p class="${esTerapia ? "resena-rutina" : "estiro-nota"}">${esc(nota)}</p>
+      <div class="estiro-avance" role="status">
+        <span class="estiro-barra" aria-hidden="true"><i style="width:${Math.round(n / total * 100)}%"></i></span>
+        <span>${n === total ? "<strong>Rutina de hoy completa.</strong> Buen trabajo." : `Hoy llevas <strong>${n} de ${total}</strong>`}</span>
+      </div>
+      <ol class="estiro-lista">${lista.map((e, i) => `
+        <li><label class="${hechos.has(e) ? "hecho" : ""}">
+          <input type="checkbox" data-estiro="${i}" ${hechos.has(e) ? "checked" : ""}>
+          <span class="estiro-num num" aria-hidden="true">${i + 1}</span>
+          <span class="estiro-txt"><strong>${esc(e)}</strong>${!esTerapia && grupoDe(e) ? `<span class="muted">${esc(grupoDe(e))}</span>` : ""}</span>
+        </label></li>`).join("")}</ol>`;
+    box.querySelectorAll("[data-estiro]").forEach(c => c.onchange = ()=>{
+      const ej = lista[Number(c.dataset.estiro)];
+      if(c.checked) hechos.add(ej); else hechos.delete(ej);
+      try{ localStorage.setItem(clave, JSON.stringify([...hechos])); } catch { /* sin almacenamiento */ }
+      pintar();
+      const otra = box.querySelector(`[data-estiro="${c.dataset.estiro}"]`); if(otra) otra.focus();
+    });
+  };
+  pintar();
+}

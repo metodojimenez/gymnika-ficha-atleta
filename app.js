@@ -1054,6 +1054,7 @@ async function abrirNotificacion(id){
   await renderAthleteDetail(state.profile, false, document.getElementById("athleteMain"));
   const sec = document.getElementById(INBOX_SECCION[n.tipo] || "");
   if(sec){
+    mostrarSeccionDe(sec);
     const det = sec.closest("details");
     if(det) det.open = true;
     sec.closest("section").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1292,6 +1293,7 @@ window.addEventListener("hashchange", ()=>{
     return;
   }
   if(esEquipo() && document.getElementById("coachLayout")) showCoachRoute();
+  else if(state.profile && !esEquipo() && document.getElementById("athleteMain")) activarSeccionAlumno(seccionAlumnoDeURL());
 });
 
 
