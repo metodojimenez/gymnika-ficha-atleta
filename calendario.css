@@ -625,3 +625,4 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .tarea-n{ margin-left:auto; min-width:26px; height:26px; padding:0 8px; border-radius:999px; background:var(--paper-2); font-size:13px; line-height:26px; text-align:center; font-weight:700; }
 .tarea-grupo.mio .tarea-n{ background:var(--accent); color:#fff; }
 .tarea-check input:disabled{ opacity:.35; }
+.aviso-version{ grid-template-columns:1fr; z-index:70; }

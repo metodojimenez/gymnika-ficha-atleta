@@ -1410,6 +1410,49 @@ if("serviceWorker" in navigator && location.protocol === "https:"){
 }
 if(esIOS()) setTimeout(()=> mostrarInstalar("ios"), 1500);
 
+/* ====================== VERSIÓN NUEVA Y DATOS AL DÍA ======================
+   En el teléfono la app puede quedar abierta días sin recargarse. Al volver a ella revisa si se publicó
+   una versión nueva (cambia el ?v= de los archivos) y se actualiza sola; si la persona está escribiendo,
+   muestra un aviso con el botón "Actualizar". También renueva la lista de atletas del equipo. */
+const firmaVersion = (html)=> (String(html).match(/\b(?:app|ficha|planes|rutinas|coach|estilos|calendario)\.(?:js|css)\?v=\d+/g) || []).sort().join("|");
+const VERSION_CARGADA = firmaVersion(document.head ? document.head.innerHTML : "");
+const versionUI = { revisada: 0, aside: Date.now() };
+function appOcupada(){
+  const a = document.activeElement;
+  return !!document.querySelector(".overlay, dialog[open]") || !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.value);
+}
+function mostrarAvisoVersion(){
+  if(document.getElementById("avisoVersion")) return;
+  const el = document.createElement("div");
+  el.id = "avisoVersion"; el.className = "instalar aviso-version"; el.setAttribute("role", "status");
+  el.innerHTML = `<div class="instalar-txt"><strong>Hay una versión nueva de la app</strong><span>Actualiza para ver los últimos cambios.</span></div>
+    <div class="instalar-acc"><button type="button" class="btn-primary" data-actualizar>Actualizar</button></div>`;
+  el.querySelector("[data-actualizar]").onclick = ()=> location.reload();
+  document.body.appendChild(el);
+}
+async function revisarVersionNueva(alVolver){
+  if(!VERSION_CARGADA || Date.now() - versionUI.revisada < 45000) return;
+  versionUI.revisada = Date.now();
+  try{
+    const r = await fetch("/?version=" + Date.now(), { cache: "no-store" });
+    if(!r.ok) return;
+    const nueva = firmaVersion(await r.text());
+    if(!nueva || nueva === VERSION_CARGADA) return;
+    if(alVolver && !appOcupada()){ location.reload(); return; }
+    mostrarAvisoVersion();
+  } catch { /* sin internet: se revisa la próxima vez */ }
+}
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState !== "visible") return;
+  revisarVersionNueva(true);
+  if(esEquipo() && document.getElementById("coachAside") && Date.now() - versionUI.aside > 60000){
+    versionUI.aside = Date.now();
+    refreshCoachAside();
+  }
+});
+window.addEventListener("load", ()=>{ setTimeout(()=> revisarVersionNueva(false), 4000); });
+setInterval(()=> revisarVersionNueva(false), 5 * 60000);
+
 /* ====================== NOTIFICACIONES PUSH ======================
    Llegan aunque la app esté cerrada. Cada notificación de la campanita se envía también como push
    (función enviar-push en Supabase) a los dispositivos donde la persona las activó.
