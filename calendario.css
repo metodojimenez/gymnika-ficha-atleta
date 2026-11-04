@@ -630,3 +630,17 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .tarea-check input:disabled{ opacity:.35; }
 .aviso-version{ grid-template-columns:1fr; z-index:70; }
 .tarea-grupo.todos .avatar{ background:var(--coach-soft); color:var(--coach-2); }
+
+/* Fortalecimiento: asistencias del mes con color según la constancia */
+.asist{ display:flex; align-items:center; gap:14px; margin:14px 0 4px; padding:12px 14px; border-radius:14px; border:1.5px solid var(--line); background:var(--surface); position:relative; z-index:1; }
+.asist-num{ font-family:var(--font-display); font-weight:800; font-size:44px; line-height:1; min-width:56px; text-align:center; }
+.asist-txt{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+.asist-txt strong{ font-size:15.5px; }
+.asist-txt span{ font-size:14px; color:var(--ink-soft); }
+.asist-verde{ border-color:#2E9B57; background:#EEF8F1; }
+.asist-verde .asist-num{ color:#1F7A43; }
+.asist-naranja{ border-color:#E08A2C; background:#FDF3E7; }
+.asist-naranja .asist-num{ color:#B8661A; }
+.asist-rojo{ border-color:#C8372D; background:#FCEDEB; }
+.asist-rojo .asist-num{ color:#B42318; }
+.asist-sin .asist-num{ color:var(--ink-faint); }

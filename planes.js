@@ -300,6 +300,50 @@ function sesionesHTML(rs, opts = {}){
       <ul>${prox.map(r => `<li><span class="num">${fmtFechaHora(r.inicio)}</span></li>`).join("")}${rs.agendadas.length > prox.length ? `<li class="muted">y ${rs.agendadas.length - prox.length} más</li>` : ""}</ul></div>` : ""}`;
 }
 
+/* Asistencias de fortalecimiento: cuántas veces vino este mes, en verde si viene seguido,
+   anaranjado si faltó 2 días de semana seguidos y rojo si no vino de lunes a viernes (5 días de semana seguidos).
+   Se cuentan días de lunes a viernes desde ayer hacia atrás (hoy cuenta solo si ya vino), desde que empezó su acceso
+   y sin contar los días congelados. */
+function estadoAsistencia(plan){
+  const hoy = todayStr();
+  const fechas = new Set((plan.asistencias || []).map(a => String(a.fecha)));
+  const mes = [...fechas].filter(f => f.startsWith(hoy.slice(0, 7))).length;
+  const inicios = (plan.membresias || []).map(m => m.inicio).sort();
+  if(!inicios.length) return { mes, nivel: "sin", faltas: 0 };
+  const congelado = (iso)=> (plan.congelamientos || []).some(c => c.desde <= iso && c.hasta >= iso);
+  let faltas = 0;
+  if(!fechas.has(hoy)){
+    let d = sumarDias(parseFecha(hoy), -1);
+    for(let i = 0; i < 40; i++, d = sumarDias(d, -1)){
+      const iso = fechaISO(d);
+      if(iso < inicios[0]) break;
+      if(isoDow(d) > 5 || congelado(iso)) continue;
+      if(fechas.has(iso)) break;
+      faltas++;
+    }
+  }
+  return { mes, faltas, nivel: faltas >= 5 ? "rojo" : faltas >= 2 ? "naranja" : "verde" };
+}
+function asistenciaHTML(plan, propio){
+  const e = estadoAsistencia(plan);
+  const mesNombre = MESES_LARGOS[new Date().getMonth()];
+  const texto = e.nivel === "sin" ? (propio ? "Escanea el QR al llegar para que cuente tu asistencia." : "Escanea el QR al llegar para que cuente su asistencia.")
+    : e.nivel === "rojo" ? (propio ? "No viniste en toda la semana. ¡Vuelve a entrenar!" : "No vino en toda la semana.")
+    : e.nivel === "naranja" ? (propio ? `Faltaste ${e.faltas} días de semana seguidos. ¡Te esperamos!` : `Faltó ${e.faltas} días de semana seguidos.`)
+    : (propio ? "Vienes seguido. ¡Sigue así!" : "Viene seguido.");
+  return `
+    <div class="asist asist-${e.nivel}" role="status">
+      <span class="asist-num num">${e.mes}</span>
+      <span class="asist-txt"><strong>${e.mes === 1 ? "asistencia" : "asistencias"} en ${mesNombre}</strong><span>${esc(texto)}</span></span>
+    </div>`;
+}
+function proximasHTML(lista, titulo){
+  if(!lista.length) return "";
+  const prox = lista.slice(0, 4);
+  return `<div class="ses-prox"><p class="ses-prox-t">${esc(titulo)}</p>
+    <ul>${prox.map(r => `<li><span class="num">${fmtFechaHora(r.inicio)}</span></li>`).join("")}${lista.length > prox.length ? `<li class="muted">y ${lista.length - prox.length} más</li>` : ""}</ul></div>`;
+}
+
 async function renderPlanAlumno(profile){
   const box = document.getElementById("planCard");
   if(!box) return;
@@ -341,7 +385,10 @@ async function renderPlanAlumno(profile){
     } else {
       estadoHTML = `<span class="plan-num plan-word off">${est.ultima ? "Vencido" : "Sin acceso"}</span><span class="plan-unit">${est.ultima ? "venció el " + fmtFecha(est.ultima.fin, true) : cat === "transicion" ? "Tu master coach te habilitará el acceso" : "Compra tu acceso mensual para empezar"}</span>`;
     }
-    const asistMes = plan.asistencias.filter(a => String(a.fecha).startsWith(hoy.slice(0, 7))).length;
+    const hs = planes.horarios || [];
+    const proxFort = (plan.reservas || []).filter(r => r.estado === "confirmada" && new Date(r.inicio) > new Date()
+      && (cat === "fortalecimiento" || (hs.find(h => h.id === r.horario_id) || {}).categoria === "fortalecimiento"))
+      .sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)));
     const terHTML = cat === "transicion" ? `
       <div class="trans-ter">
         <p class="eyebrow">Terapia</p>
@@ -362,10 +409,11 @@ async function renderPlanAlumno(profile){
           ${accionFort}
         </div>
       </div>
-      ${medidorHTML(plan.asistencias)}
-      ${proxHTML}
-      <div class="plan-meta muted">${inicio}<span>Entrenamientos este mes: <strong>${asistMes}</strong></span>
-        ${plan.congelamientos.length ? `<span>Congelamientos: <strong>${plan.congelamientos.length}</strong></span>` : ""}</div>
+      ${asistenciaHTML(plan, propio)}
+      ${proxFort.length ? proximasHTML(proxFort, propio ? "Tus próximas sesiones" : "Próximas sesiones")
+        : `<p class="perfil-prox">${propio ? "No tienes horarios reservados. Reserva tu horario para poder entrar." : "No tiene horarios reservados."}</p>`}
+      ${inicio || plan.congelamientos.length ? `<div class="plan-meta muted">${inicio}
+        ${plan.congelamientos.length ? `<span>Congelamientos: <strong>${plan.congelamientos.length}</strong></span>` : ""}</div>` : ""}
       ${suscripcionHTML(plan, false)}
       ${avisoComprasHTML(plan.compras)}
       ${cat === "fortalecimiento" ? `
@@ -385,7 +433,12 @@ async function renderPlanAlumno(profile){
   const bt = document.getElementById("btnComprarTer");
   if(bt) bt.onclick = ()=> abrirCompra(perfilEn(profile, "terapia"));
   box.querySelectorAll("[data-escanear]").forEach(b => { b.onclick = abrirEscanerQR; });
-  box.querySelectorAll("[data-rueda]").forEach(b => { b.onclick = ()=> abrirRueda(plan.asistencias); });
+  /* La rueda de constancia ahora vive en Progreso */
+  const rueda = document.getElementById("constanciaCard");
+  if(rueda && cat !== "terapia"){
+    rueda.innerHTML = medidorHTML(plan.asistencias);
+    rueda.querySelectorAll("[data-rueda]").forEach(b => { b.onclick = ()=> abrirRueda(plan.asistencias); });
+  }
   mostrarConsejoDelDia();
 }
 

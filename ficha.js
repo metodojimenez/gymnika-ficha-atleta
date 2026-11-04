@@ -101,8 +101,8 @@ async function renderAthleteDetail(profile, isCoach, container){
     const familia = !esHijo && !state.profile.tutor_id ? panelHTML("familiaCard", "Mi familia", 12, { eyebrow: "Hijos a tu cargo" }) : "";
     tabsAlumno = esTerapia ? {
       inicio: `
-    ${panelHTML("planCard", esHijo ? "Sus sesiones" : "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
     ${estirar}
+    ${panelHTML("planCard", esHijo ? "Sus sesiones" : "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
     ${consejos}
     ${familia}`,
       reservar: `
@@ -116,13 +116,13 @@ async function renderAthleteDetail(profile, isCoach, container){
     } : {
       inicio: `
     ${panelHTML("planCard", cat === "transicion" ? (esHijo ? "Su plan" : "Mi plan") : (esHijo ? "Su acceso" : "Mi acceso"), 12, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}
-    ${estirar}
-    ${consejos}
-    ${familia}`,
+    ${estirar}`,
       reservar: `
     ${panelHTML("reservarCard", "Reservar horario", 8, { note: "Obligatorio para entrar" })}
     ${panelHTML("misReservasCard", esHijo ? "Sus horarios" : "Mis horarios", 4)}`,
       progreso: `
+    ${consejos}
+    ${panelHTML("constanciaCard", "Tu rueda de constancia", 12, { eyebrow: "Desde tu último entrenamiento" })}
     ${macroHTML}
     ${resumenHTML}
     ${panelHTML("fuerzaCard", "Progresión de fuerza", 8, { note: "Carga el coach" })}
@@ -130,6 +130,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
     ${panelHTML("tiemposCard", "Tiempos deportivos", 12)}`,
       ficha: `
+    ${familia}
     ${panelHTML("agendaCard", "Agenda: viajes y competencias", 6)}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
     ${panelHTML("fichaCard", "Datos personales", 12)}`
@@ -1118,6 +1119,7 @@ const COMPENSACION_GRUPOS = [
 const ESTIRAMIENTO_RENOMBRES = { "Señorita ballet": "Patada de Ballet" };
 const COMPENSACION_NOTA = "Al final de cada rutina: 2 del menú Gymnika + 1 rotación de cadera, 30-45 segundos o 6-8 repeticiones por lado.";
 
+const COMPENSACION_NOTA_ALUMNO = "Tu rutina de compensación, elegida por tu coach para ti. Hazla al final de cada entrenamiento: 30 a 45 segundos o 6 a 8 repeticiones por lado.";
 const ESTIRAMIENTO_DIARIO_NOTA = "Esta rutina debe ser ejecutada todos los días de forma constante. La finalidad es prepararnos para empezar bien el día: no debes luchar contra el dolor.";
 function renderEstiramientos(profile, uid, isCoach){
   const box = document.getElementById("estiramientosCard");
@@ -1125,7 +1127,8 @@ function renderEstiramientos(profile, uid, isCoach){
   const nota = esTerapia ? ESTIRAMIENTO_DIARIO_NOTA : COMPENSACION_NOTA;
   const actuales = [...new Set((profile.estiramientos || []).map(e => ESTIRAMIENTO_RENOMBRES[e] || e))];
 
-  if(!isCoach){ pintarEstiramientosAlumno(box, actuales, uid, esTerapia, nota); return; }
+  /* El alumno ve solo su rutina personalizada; el menú de opciones y la regla de armado son para el coach */
+  if(!isCoach){ pintarEstiramientosAlumno(box, actuales, uid, esTerapia, esTerapia ? ESTIRAMIENTO_DIARIO_NOTA : COMPENSACION_NOTA_ALUMNO); return; }
 
   const grupos = COMPENSACION_GRUPOS.filter(g => esTerapia || !g.soloTerapia);
   const predet = grupos.flatMap(g => g.items);
@@ -1378,7 +1381,6 @@ function pintarEstiramientosAlumno(box, lista, uid, esTerapia, nota){
   const clave = "gymnika_estiro_" + uid + "_" + todayStr();
   let hechos = new Set();
   try{ hechos = new Set(JSON.parse(localStorage.getItem(clave) || "[]")); } catch { /* sin almacenamiento */ }
-  const grupoDe = (ej)=> (COMPENSACION_GRUPOS.find(g => g.items.includes(ej)) || {}).grupo || "";
   const pintar = ()=>{
     const n = lista.filter(e => hechos.has(e)).length, total = lista.length;
     box.innerHTML = `
@@ -1391,7 +1393,7 @@ function pintarEstiramientosAlumno(box, lista, uid, esTerapia, nota){
         <li><label class="${hechos.has(e) ? "hecho" : ""}">
           <input type="checkbox" data-estiro="${i}" ${hechos.has(e) ? "checked" : ""}>
           <span class="estiro-num num" aria-hidden="true">${i + 1}</span>
-          <span class="estiro-txt"><strong>${esc(e)}</strong>${!esTerapia && grupoDe(e) ? `<span class="muted">${esc(grupoDe(e))}</span>` : ""}</span>
+          <span class="estiro-txt"><strong>${esc(e)}</strong></span>
         </label></li>`).join("")}</ol>`;
     box.querySelectorAll("[data-estiro]").forEach(c => c.onchange = ()=>{
       const ej = lista[Number(c.dataset.estiro)];
