@@ -704,6 +704,7 @@ async function renderCoachHoy(main){
         <p class="muted wk-nota">Toca un nombre para marcar asistencia, cancelar o abrir su ficha. Se actualiza solo cada 30 segundos.</p></section>
     </div></div>`;
   enlazarFormsTareas();
+  suscribirTareas();
   main.querySelectorAll("[data-ir-equipo]").forEach(l => { l.onclick = (e)=>{ e.preventDefault(); document.getElementById("tareasEquipo").scrollIntoView({ behavior: "smooth", block: "start" }); document.getElementById("tt_equipo")?.focus({ preventScroll: true }); }; });
   await Promise.all([pintarHoy(), pintarTareasHoy()]);
   if(location.hash === "#/hoy" && hoyUI.irATareas){ hoyUI.irATareas = false; document.getElementById("tareasEquipo")?.scrollIntoView({ behavior: "smooth", block: "start" }); }
@@ -976,7 +977,20 @@ async function pintarHistorialConsejos(){
    Dos listas: "Tareas de los master" (solo master coach, compartida: los master agregan, asignan y marcan hecha) y
    "Tareas del equipo" (cada tarea va a un coach; todo el equipo la ve en un apartado con el nombre de cada uno).
    Los master agregan y asignan; cada coach marca como hechas las suyas. A quien se le asigna le llega un aviso. */
-const tareasUI = { lista: [] };
+const tareasUI = { lista: [], canal: null, espera: null };
+/* Cambios en las tareas (agregar, marcar, borrar) llegan al instante a todas las pantallas abiertas */
+function suscribirTareas(){
+  if(tareasUI.canal || typeof sb.channel !== "function") return;
+  tareasUI.canal = sb.channel("tareas-equipo")
+    .on("postgres_changes", { event: "*", schema: "public", table: "tareas_equipo" }, ()=>{
+      clearTimeout(tareasUI.espera);
+      tareasUI.espera = setTimeout(()=>{ if(document.getElementById("tareasEquipoLista")) pintarTareasHoy(); }, 300);
+    })
+    .subscribe();
+}
+function quitarSuscripcionTareas(){
+  if(tareasUI.canal){ try { sb.removeChannel(tareasUI.canal); } catch { /* ya cerrado */ } tareasUI.canal = null; }
+}
 function nombreEquipo(id){
   if(id === state.profile.id) return "Tú";
   return ((state.equipo || []).find(p => p.id === id) || {}).nombre || "Coach";
@@ -1015,6 +1029,9 @@ function formTareaHTML(ambito){
 function itemTareaHTML(t, conPara){
   const yo = state.profile.id, hoy = todayStr();
   const puedeMarcar = esMaster() || (t.ambito === "equipo" && (!t.asignada_a || t.asignada_a === yo));
+  /* Para ti: contorno verde; si vence en 48 horas o menos (o ya venció), verde más brillante */
+  const mia = t.asignada_a === yo && !t.hecha;
+  const urgente = mia && t.fecha_limite && diasEntre(hoy, t.fecha_limite) <= 2;
   const vence = t.fecha_limite ? (t.fecha_limite < hoy && !t.hecha ? `<span class="tarea-vence tarde">Venció el ${fmtFecha(t.fecha_limite)}</span>`
     : `<span class="tarea-vence${t.fecha_limite === hoy ? " hoy" : ""}">${t.fecha_limite === hoy ? "Para hoy" : "Para el " + fmtFecha(t.fecha_limite)}</span>`) : "";
   const quien = (id)=> id === yo ? "ti" : nombreEquipo(id);
@@ -1022,7 +1039,7 @@ function itemTareaHTML(t, conPara){
     ? `${t.hecha_por === yo ? "La hiciste tú" : "Hecha por " + esc(quien(t.hecha_por))}${t.hecha_at ? " · " + esc(tiempoRelativo(t.hecha_at).toLowerCase()) : ""}`
     : [conPara ? (t.asignada_a ? "Para " + esc(quien(t.asignada_a)) : t.ambito === "master" ? "Para todos los master" : "Para todos") : "", t.creado_por === yo ? "la agregaste tú" : "la agregó " + esc(quien(t.creado_por))].filter(Boolean).join(" · ");
   return `
-    <li class="tarea${t.hecha ? " hecha" : ""}${t.asignada_a === yo && !t.hecha ? " mia" : ""}">
+    <li class="tarea${t.hecha ? " hecha" : ""}${mia ? " mia" : ""}${urgente ? " urgente" : ""}">
       <label class="tarea-check"><input type="checkbox" data-hecha="${esc(t.id)}" ${t.hecha ? "checked" : ""}${puedeMarcar ? "" : " disabled"}><span class="sr-only">${t.hecha ? "Marcar como pendiente" : "Marcar como hecha"}</span></label>
       <div class="tarea-txt"><p>${esc(t.texto)}</p><p class="tarea-meta">${vence}<span>${meta}</span></p></div>
       ${esMaster() ? `<button type="button" class="icon-btn tarea-del" data-borrar-tarea="${esc(t.id)}" aria-label="Borrar tarea">✕</button>` : ""}
@@ -1037,13 +1054,15 @@ async function pintarTareasHoy(){
   if(error){ boxE.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
   tareasUI.lista = data || [];
   const yo = state.profile.id;
-  const hechasHTML = (l)=> l.length ? `<details class="records"><summary>Hechas (${l.length})</summary><ul class="tareas-lista">${l.map(t => itemTareaHTML(t, true)).join("")}</ul></details>` : "";
+  /* La sección "Hechas" que estaba abierta sigue abierta al recargar la lista */
+  const abiertas = new Set([...document.querySelectorAll(".tareas-panel details[data-hechas][open]")].map(d => d.dataset.hechas));
+  const hechasHTML = (l, clave)=> l.length ? `<details class="records" data-hechas="${clave}"${abiertas.has(clave) ? " open" : ""}><summary>Hechas (${l.length})</summary><ul class="tareas-lista">${l.map(t => itemTareaHTML(t, true)).join("")}</ul></details>` : "";
   const hechasOrden = (l)=> l.sort((a, b) => String(b.hecha_at).localeCompare(String(a.hecha_at))).slice(0, 20);
 
   if(boxM){
     const m = tareasUI.lista.filter(t => t.ambito !== "equipo");
     const pend = m.filter(t => !t.hecha).sort(ordenPend);
-    boxM.innerHTML = `${pend.length ? `<ul class="tareas-lista">${pend.map(t => itemTareaHTML(t, true)).join("")}</ul>` : emptyHTML("No hay tareas pendientes. ¡Todo al día!")}${hechasHTML(hechasOrden(m.filter(t => t.hecha)))}`;
+    boxM.innerHTML = `${pend.length ? `<ul class="tareas-lista">${pend.map(t => itemTareaHTML(t, true)).join("")}</ul>` : emptyHTML("No hay tareas pendientes. ¡Todo al día!")}${hechasHTML(hechasOrden(m.filter(t => t.hecha)), "master")}`;
     const c = document.getElementById("tmCuenta"); if(c) c.textContent = pend.length ? plural(pend.length, "pendiente", "pendientes") : "";
   }
 
@@ -1071,7 +1090,7 @@ async function pintarTareasHoy(){
   });
   boxE.innerHTML = `
     ${grupos.length ? grupos.join("") : emptyHTML(esMaster() ? "Nadie tiene tareas pendientes." : "No tienes tareas pendientes.")}
-    ${hechasHTML(hechasOrden(e.filter(t => t.hecha)))}`;
+    ${hechasHTML(hechasOrden(e.filter(t => t.hecha)), "equipo")}`;
 
   document.querySelectorAll(".tareas-panel [data-hecha]").forEach(cb => {
     cb.onchange = async ()=>{

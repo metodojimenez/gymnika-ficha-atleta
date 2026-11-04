@@ -404,6 +404,7 @@ async function doSignup(){
 
 async function doLogout(){
   stopInbox();
+  quitarSuscripcionTareas();
   await quitarPushDispositivo();
   avisoPagos.vistos = null; avisoPagos.forzar = true;
   document.getElementById("modalPago")?.remove();
