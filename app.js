@@ -29,7 +29,6 @@ const SECCIONES_COACH = {
   hoy:         { t: "Hoy",      ico: "◉" },
   agenda:      { t: "Horario",  ico: "◷" },
   rutinas:     { t: "Rutinas",  ico: "R" },
-  tareas:      { t: "Tareas",   ico: "✓", master: true },
   pagos:       { t: "Pagos",    ico: "S/", master: true },
   resumen:     { t: "Resumen",  ico: "▤", master: true },
   equipo:      { t: "Equipo",   ico: "☰", master: true },
@@ -739,9 +738,7 @@ function appbarHTML(tag){
   return `
     <header class="appbar">
       <div class="appbar-inner">
-        ${esEquipo()
-          ? `<a class="brand brand-link" href="#/hoy" aria-label="Gymnika · ir a Hoy">${LOGO_HTML}<span class="mark">GYMNIKA</span><span class="tag">${esc(tag)}</span></a>`
-          : `<div class="brand">${LOGO_HTML}<span class="mark">GYMNIKA</span><span class="tag">${esc(tag)}</span></div>`}
+        <a class="brand brand-link" href="${esEquipo() ? "#/hoy" : "#/inicio"}" data-recargar aria-label="Gymnika · actualizar la página">${LOGO_HTML}<span class="mark">GYMNIKA</span><span class="tag">${esc(tag)}</span></a>
         <div class="appbar-user">
           <div class="inbox-wrap">
             <button type="button" class="icon-btn inbox-btn" id="btnInbox" aria-haspopup="dialog" aria-expanded="false" aria-controls="inboxPanel" aria-label="Notificaciones" hidden>
@@ -868,7 +865,7 @@ async function loadInbox(){
 /* ====================== VENTANAS EMERGENTES (MASTER) ======================
    Cuando un alumno reserva un horario, el master ve una ventana emergente en la app y, si dio permiso,
    una notificación del sistema en este dispositivo. Funciona mientras la app esté abierta (aunque esté en otra pestaña). */
-const TIPOS_EMERGENTES = ["reserva_nueva", "checkin_error", "solicitud_terapia", "tarea"];
+const TIPOS_EMERGENTES = ["reserva_nueva", "checkin_error", "solicitud_terapia"];
 /* Un aviso cuenta como nuevo por id y hora: si la base lo actualiza (mismo alumno en pocos minutos) también se avisa */
 const claveAviso = (n)=> n.id + "|" + n.created_at;
 function avisarNuevas(items){
@@ -880,6 +877,8 @@ function avisarNuevas(items){
   const sinLeer = nuevas.filter(n => !n.leida).reverse();
   /* Llegadas con QR: ventana con los que asistieron y un mensaje del coach para cada uno (todo el equipo del área) */
   sinLeer.filter(n => n.tipo === "checkin").forEach(n => mostrarLlegadas(n));
+  /* Tareas asignadas: aviso para cualquier coach del equipo */
+  sinLeer.filter(n => n.tipo === "tarea").forEach(n => mostrarEmergente(n));
   if(!esMaster()) return;
   sinLeer.forEach(n => {
     if(n.tipo === "pago" || n.tipo === "pago_aprobado") notificarSistema(n, "#/pagos");
@@ -986,7 +985,7 @@ function mostrarEmergente(n){
   }
   const el = document.createElement("div");
   el.className = "emergente" + (n.tipo === "checkin_error" ? " alerta" : ""); el.setAttribute("role", "status");
-  const ver = n.tipo === "tarea" ? ["✓", "Ver tareas", "#/tareas"] : n.tipo === "solicitud_terapia" ? ["✚", "Ver ficha", "#/atleta/" + encodeURIComponent(n.atleta_id || "")] : [n.tipo === "checkin_error" ? "!" : "◷", "Ver horario", "#/agenda"];
+  const ver = n.tipo === "tarea" ? ["✓", "Ver tareas", "#/hoy"] : n.tipo === "solicitud_terapia" ? ["✚", "Ver ficha", "#/atleta/" + encodeURIComponent(n.atleta_id || "")] : [n.tipo === "checkin_error" ? "!" : "◷", "Ver horario", "#/agenda"];
   el.innerHTML = `<span class="em-ico" aria-hidden="true">${ver[0]}</span>
     <div class="em-txt"><strong>${esc(n.titulo)}</strong>${n.mensaje ? `<span>${esc(n.mensaje)}</span>` : ""}</div>
     <div class="em-acc"><button type="button" class="btn-link" data-ver>${ver[1]}</button><button type="button" class="icon-btn" data-cerrar aria-label="Cerrar aviso">✕</button></div>`;
@@ -1084,7 +1083,7 @@ async function abrirNotificacion(id){
   if(esEquipo()){
     if((n.tipo === "pago" || n.tipo === "pago_aprobado") && esMaster()){ if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos"; return; }
     if(n.tipo === "checkin" || n.tipo === "reserva_nueva" || n.tipo === "checkin_error"){ if(location.hash === "#/agenda") showCoachRoute(); else location.hash = "#/agenda"; return; }
-    if(n.tipo === "tarea"){ if(location.hash === "#/tareas") showCoachRoute(); else location.hash = "#/tareas"; return; }
+    if(n.tipo === "tarea"){ hoyUI.irATareas = true; if(location.hash === "#/hoy") showCoachRoute(); else location.hash = "#/hoy"; return; }
     if(!n.atleta_id) return;
     if(!state.athleteList.some(a => a.id === n.atleta_id)) await refreshCoachAside();
     const destino = "#/atleta/" + encodeURIComponent(n.atleta_id);
@@ -1104,6 +1103,14 @@ async function abrirNotificacion(id){
   }
 }
 window.addEventListener("focus", ()=>{ if(inbox.timer) loadInbox(); });
+/* Tocar el logo GYMNIKA recarga la app (vuelve a Hoy o a Inicio con todo actualizado) */
+document.addEventListener("click", (e)=>{
+  const a = e.target.closest && e.target.closest("[data-recargar]");
+  if(!a) return;
+  e.preventDefault();
+  history.replaceState(null, "", location.pathname + location.search + a.getAttribute("href"));
+  location.reload();
+});
 
 /* ====================== PANEL DEL COACH ====================== */
 function routeAthleteId(){
@@ -1111,7 +1118,7 @@ function routeAthleteId(){
   return m ? decodeURIComponent(m[1]) : null;
 }
 function routeCoachSeccion(){
-  const m = location.hash.match(/^#\/(hoy|agenda|rutinas|tareas|pagos|resumen|equipo|comunicados|ajustes)\b/);
+  const m = location.hash.match(/^#\/(hoy|agenda|rutinas|pagos|resumen|equipo|comunicados|ajustes)\b/);
   return m ? m[1] : null;
 }
 /* Alertas del equipo (última semana de acceso en fortalecimiento, 2 o menos sesiones en terapia) */
@@ -1143,7 +1150,7 @@ async function renderCoachHome(){
   if(routeAthleteId() || routeCoachSeccion()) document.getElementById("coachLayout").classList.add("has-selection");
   await refreshCoachAside();
   showCoachRoute();
-  if(esMaster()){ actualizarBadgePagos(); actualizarBadgeTareas(); }
+  if(esMaster()) actualizarBadgePagos();
 }
 
 async function refreshCoachAside(){
@@ -1174,7 +1181,7 @@ async function refreshCoachAside(){
       </div>
     </div>`}
     <nav class="coach-nav n-${secciones.length}" aria-label="Secciones del coach">
-      ${secciones.map(k => `<a href="#/${k}" data-nav="${k}"><span class="cn-ico" aria-hidden="true">${SECCIONES_COACH[k].ico}</span>${SECCIONES_COACH[k].t}${k === "pagos" ? `<span class="cn-badge" id="navPagosBadge" hidden></span>` : k === "tareas" ? `<span class="cn-badge" id="navTareasBadge" hidden></span>` : k === "hoy" && state.alertas.length ? `<span class="cn-badge alerta" aria-label="${plural(state.alertas.length, "alerta", "alertas")}">${state.alertas.length}</span>` : ""}</a>`).join("")}
+      ${secciones.map(k => `<a href="#/${k}" data-nav="${k}"><span class="cn-ico" aria-hidden="true">${SECCIONES_COACH[k].ico}</span>${SECCIONES_COACH[k].t}${k === "pagos" ? `<span class="cn-badge" id="navPagosBadge" hidden></span>` : k === "hoy" && state.alertas.length ? `<span class="cn-badge alerta" aria-label="${plural(state.alertas.length, "alerta", "alertas")}">${state.alertas.length}</span>` : ""}</a>`).join("")}
     </nav>
     ${error ? `<div class="error" role="alert">${esc(errorES(error))}</div>` : ""}
     ${(solicitudesPend && solicitudesPend.length) ? `
@@ -1297,7 +1304,6 @@ async function showCoachRoute(){
     else if(seccion === "hoy") await renderCoachHoy(main);
     else if(seccion === "agenda") await renderCoachAgenda(main);
     else if(seccion === "rutinas") renderCoachRutinas(main);
-    else if(seccion === "tareas") await renderCoachTareas(main);
     else if(seccion === "resumen") await renderCoachResumen(main);
     else if(seccion === "equipo") await renderCoachEquipo(main);
     else if(seccion === "comunicados") await renderCoachComunicados(main);

@@ -690,15 +690,28 @@ async function renderCoachHoy(main){
         <div id="hoyRutinas"><div class="skel skel-line" style="width:70%"></div></div></section>`}
       <section class="panel span-12 hoy-alertas" aria-labelledby="hAl"><div class="panel-head"><h2 id="hAl">Alertas</h2><span class="muted">${nota}</span></div>
         <div id="hoyAlertas"><div class="skel skel-block"></div></div></section>
+      ${esMaster() ? `<section class="panel span-6 tareas-panel" aria-labelledby="hTm"><div class="panel-head"><h2 id="hTm">Tareas de los master</h2><span class="muted" id="tmCuenta"></span></div>
+        <p class="muted tareas-nota">Compartida entre los master coach.</p>
+        ${formTareaHTML("master")}
+        <div id="tareasMasterLista"><div class="skel skel-block"></div></div></section>` : ""}
+      <section class="panel ${esMaster() ? "span-6" : "span-12"} tareas-panel" id="tareasEquipo" aria-labelledby="hTe"><div class="panel-head"><h2 id="hTe">Tareas del equipo</h2><span class="muted" id="teCuenta"></span></div>
+        <p class="muted tareas-nota">${esMaster() ? "Asígnale tareas a cada coach: le llega un aviso y la ve aquí con su nombre." : "Las tareas que te asignan los master. Márcalas cuando las termines."}</p>
+        ${formTareaHTML("equipo")}
+        <div id="tareasEquipoMsg" aria-live="polite"></div>
+        <div id="tareasEquipoLista"><div class="skel skel-block"></div></div></section>
       <section class="panel span-12" aria-labelledby="hCl"><div class="panel-head"><h2 id="hCl">Clases de hoy</h2><span class="muted" id="hoyResumen"></span></div>
         <div id="hoyBody"><div class="skel skel-block"></div></div>
         <p class="muted wk-nota">Toca un nombre para marcar asistencia, cancelar o abrir su ficha. Se actualiza solo cada 30 segundos.</p></section>
     </div></div>`;
-  await pintarHoy();
+  enlazarFormsTareas();
+  await Promise.all([pintarHoy(), pintarTareasHoy()]);
+  if(location.hash === "#/hoy" && hoyUI.irATareas){ hoyUI.irATareas = false; document.getElementById("tareasEquipo")?.scrollIntoView({ behavior: "smooth", block: "start" }); }
   clearInterval(hoyUI.timer);
   hoyUI.timer = setInterval(()=>{
     if(!document.getElementById("hoyBody")){ clearInterval(hoyUI.timer); hoyUI.timer = null; return; }
-    if(!document.querySelector(".overlay")) pintarHoy();
+    if(document.querySelector(".overlay")) return;
+    pintarHoy();
+    if(!document.activeElement || !document.activeElement.closest(".tareas-panel")) pintarTareasHoy();
   }, 30000);
 }
 async function pintarHoy(){
@@ -958,120 +971,126 @@ async function pintarHistorialConsejos(){
   if(q) q.oninput = ()=> pintar(q.value);
 }
 
-/* ====================== MASTER: TAREAS DEL EQUIPO ======================
-   Una sola lista compartida entre los master coach: cualquiera agrega, asigna a alguien y marca como hecha.
-   Si una tarea se asigna a otro master, a esa persona le llega un aviso. */
-const tareasUI = { filtro: "todas" };
-function mastersEquipo(){ return (state.equipo || []).filter(p => p.role === "coach").sort((a, b) => String(a.nombre).localeCompare(String(b.nombre))); }
-async function renderCoachTareas(main){
-  const masters = mastersEquipo();
-  main.innerHTML = `<div class="detail"><header class="detail-head">
-      <a class="back" href="#/">← Atletas</a>
-      <p class="eyebrow">Master coach</p><h1>Tareas</h1>
-      <p class="muted" style="margin-top:6px">Lista compartida del equipo master: cualquiera agrega, asigna y marca como hecha.</p>
-    </header>
-    <section class="panel tareas-panel" aria-label="Tareas del equipo">
-      <form id="tareaForm" class="tarea-form" novalidate>
-        <label for="tareaTexto" class="sr-only">Nueva tarea</label>
-        <input id="tareaTexto" maxlength="500" placeholder="Nueva tarea" autocomplete="off">
-        <div class="tarea-opts">
-          <div><label for="tareaPara">Para</label>
-            <select id="tareaPara"><option value="">Cualquiera</option>${masters.map(m => `<option value="${esc(m.id)}"${m.id === state.profile.id ? " selected" : ""}>${esc(m.id === state.profile.id ? "Yo" : m.nombre || "Master")}</option>`).join("")}</select></div>
-          <div><label for="tareaFecha">Para cuándo <span class="muted">(opcional)</span></label><input type="date" id="tareaFecha" min="${todayStr()}"></div>
-          <button class="btn-primary" type="submit" id="btnTarea">Agregar</button>
-        </div>
-      </form>
-      <div id="tareaMsg" aria-live="polite"></div>
-      <div class="seg tareas-filtro" role="group" aria-label="Qué tareas ver">
-        <button type="button" data-tfiltro="todas" aria-pressed="${tareasUI.filtro === "todas"}">Todas</button>
-        <button type="button" data-tfiltro="mias" aria-pressed="${tareasUI.filtro === "mias"}">Mías</button>
-      </div>
-      <div id="tareasLista" aria-live="polite"><div class="skel skel-block"></div></div>
-    </section></div>`;
-  main.querySelectorAll("[data-tfiltro]").forEach(b => {
-    b.onclick = ()=>{
-      tareasUI.filtro = b.dataset.tfiltro;
-      main.querySelectorAll("[data-tfiltro]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
-      pintarTareas();
-    };
-  });
-  const form = document.getElementById("tareaForm");
-  form.onsubmit = (e)=>{
-    e.preventDefault();
-    const btn = document.getElementById("btnTarea");
-    withBusy(btn, "…", async ()=>{
-      const msg = document.getElementById("tareaMsg");
-      const texto = document.getElementById("tareaTexto").value.trim();
-      if(!texto){ showMsg(msg, "error", "Escribe la tarea."); return; }
-      const { error } = await sb.from("tareas_equipo").insert({
-        texto, asignada_a: document.getElementById("tareaPara").value || null,
-        fecha_limite: document.getElementById("tareaFecha").value || null
-      });
-      if(error){ showError(msg, error); return; }
-      document.getElementById("tareaTexto").value = "";
-      document.getElementById("tareaFecha").value = "";
-      msg.innerHTML = "";
-      await pintarTareas();
-      actualizarBadgeTareas();
-      document.getElementById("tareaTexto").focus();
-    });
-  };
-  await pintarTareas();
+/* ====================== TAREAS EN "HOY" ======================
+   Dos listas: "Tareas de los master" (solo master coach, compartida: cualquiera agrega, asigna y marca hecha) y
+   "Tareas del equipo" (cada tarea va a un coach; todo el equipo la ve en un apartado con el nombre de cada uno).
+   Los master agregan y asignan; cada coach marca como hechas las suyas. A quien se le asigna le llega un aviso. */
+const tareasUI = { lista: [] };
+function nombreEquipo(id){
+  if(id === state.profile.id) return "Tú";
+  return ((state.equipo || []).find(p => p.id === id) || {}).nombre || "Coach";
 }
-async function pintarTareas(){
-  const box = document.getElementById("tareasLista");
-  if(!box) return;
+function equipoOrdenado(soloMasters){
+  return (state.equipo || []).filter(p => !soloMasters || p.role === "coach")
+    .sort((a, b) => (a.id === state.profile.id ? -1 : b.id === state.profile.id ? 1 : String(a.nombre).localeCompare(String(b.nombre))));
+}
+function formTareaHTML(ambito){
+  if(!esMaster()) return "";
+  const gente = equipoOrdenado(ambito === "master");
+  return `
+    <form class="tarea-form" data-ambito="${ambito}" novalidate>
+      <label for="tt_${ambito}" class="sr-only">Nueva tarea</label>
+      <input id="tt_${ambito}" maxlength="500" placeholder="Nueva tarea" autocomplete="off">
+      <div class="tarea-opts">
+        <div><label for="tp_${ambito}">Para</label>
+          <select id="tp_${ambito}">${ambito === "master" ? `<option value="">Cualquiera</option>` : `<option value="">Elige a quién</option>`}
+            ${gente.map(m => `<option value="${esc(m.id)}">${esc(m.id === state.profile.id ? "Yo" : (m.nombre || "Coach") + (ambito === "equipo" ? " · " + (ROLES_EQUIPO[m.role] || "").replace("Coach de ", "").replace("Coach general", "General").replace("Master coach", "Master") : ""))}</option>`).join("")}
+          </select></div>
+        <div><label for="tf_${ambito}">Para cuándo <span class="muted">(opcional)</span></label><input type="date" id="tf_${ambito}" min="${todayStr()}"></div>
+        <button class="btn-primary" type="submit">Agregar</button>
+      </div>
+      <div class="tarea-msg" aria-live="polite"></div>
+    </form>`;
+}
+function itemTareaHTML(t, conPara){
+  const yo = state.profile.id, hoy = todayStr();
+  const puedeMarcar = esMaster() || (t.ambito === "equipo" && t.asignada_a === yo);
+  const vence = t.fecha_limite ? (t.fecha_limite < hoy && !t.hecha ? `<span class="tarea-vence tarde">Venció el ${fmtFecha(t.fecha_limite)}</span>`
+    : `<span class="tarea-vence${t.fecha_limite === hoy ? " hoy" : ""}">${t.fecha_limite === hoy ? "Para hoy" : "Para el " + fmtFecha(t.fecha_limite)}</span>`) : "";
+  const quien = (id)=> id === yo ? "ti" : nombreEquipo(id);
+  const meta = t.hecha
+    ? `${t.hecha_por === yo ? "La hiciste tú" : "Hecha por " + esc(quien(t.hecha_por))}${t.hecha_at ? " · " + esc(tiempoRelativo(t.hecha_at).toLowerCase()) : ""}`
+    : [conPara ? (t.asignada_a ? "Para " + esc(quien(t.asignada_a)) : "Para cualquiera") : "", t.creado_por === yo ? "la agregaste tú" : "la agregó " + esc(quien(t.creado_por))].filter(Boolean).join(" · ");
+  return `
+    <li class="tarea${t.hecha ? " hecha" : ""}${t.asignada_a === yo && !t.hecha ? " mia" : ""}">
+      <label class="tarea-check"><input type="checkbox" data-hecha="${esc(t.id)}" ${t.hecha ? "checked" : ""}${puedeMarcar ? "" : " disabled"}><span class="sr-only">${t.hecha ? "Marcar como pendiente" : "Marcar como hecha"}</span></label>
+      <div class="tarea-txt"><p>${esc(t.texto)}</p><p class="tarea-meta">${vence}<span>${meta}</span></p></div>
+      ${esMaster() ? `<button type="button" class="icon-btn tarea-del" data-borrar-tarea="${esc(t.id)}" aria-label="Borrar tarea">✕</button>` : ""}
+    </li>`;
+}
+function ordenPend(a, b){ return (a.fecha_limite || "9999").localeCompare(b.fecha_limite || "9999") || String(b.created_at).localeCompare(String(a.created_at)); }
+async function pintarTareasHoy(){
+  const boxM = document.getElementById("tareasMasterLista"), boxE = document.getElementById("tareasEquipoLista");
+  if(!boxE) return;
   const { data, error } = await sb.from("tareas_equipo").select("*").order("created_at", { ascending: false }).limit(300);
-  if(!document.getElementById("tareasLista")) return;
-  if(error){ box.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
+  if(!document.getElementById("tareasEquipoLista")) return;
+  if(error){ boxE.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
+  tareasUI.lista = data || [];
   const yo = state.profile.id;
-  const nombre = (id)=> id === yo ? "ti" : ((state.equipo || []).find(p => p.id === id) || {}).nombre || "otro master";
-  const todas = (data || []).filter(t => tareasUI.filtro !== "mias" || t.asignada_a === yo || (!t.asignada_a && t.creado_por === yo));
-  const hoy = todayStr();
-  const pend = todas.filter(t => !t.hecha).sort((a, b) =>
-    (a.fecha_limite || "9999").localeCompare(b.fecha_limite || "9999") || String(b.created_at).localeCompare(String(a.created_at)));
-  const hechas = todas.filter(t => t.hecha).sort((a, b) => String(b.hecha_at).localeCompare(String(a.hecha_at))).slice(0, 40);
-  const item = (t)=>{
-    const vence = t.fecha_limite ? (t.fecha_limite < hoy && !t.hecha ? `<span class="tarea-vence tarde">Venció el ${fmtFecha(t.fecha_limite)}</span>`
-      : `<span class="tarea-vence${t.fecha_limite === hoy ? " hoy" : ""}">${t.fecha_limite === hoy ? "Para hoy" : "Para el " + fmtFecha(t.fecha_limite)}</span>`) : "";
-    const meta = t.hecha
-      ? `${t.hecha_por === yo ? "La hiciste tú" : "Hecha por " + esc(nombre(t.hecha_por))}${t.hecha_at ? " · " + esc(tiempoRelativo(t.hecha_at).toLowerCase()) : ""}`
-      : `${t.asignada_a ? "Para " + esc(nombre(t.asignada_a)) : "Para cualquiera"} · ${t.creado_por === yo ? "la agregaste tú" : "la agregó " + esc(nombre(t.creado_por))}`;
-    return `
-      <li class="tarea${t.hecha ? " hecha" : ""}${t.asignada_a === yo && !t.hecha ? " mia" : ""}">
-        <label class="tarea-check"><input type="checkbox" data-hecha="${esc(t.id)}" ${t.hecha ? "checked" : ""}><span class="sr-only">${t.hecha ? "Marcar como pendiente" : "Marcar como hecha"}</span></label>
-        <div class="tarea-txt"><p>${esc(t.texto)}</p><p class="tarea-meta">${vence}<span>${meta}</span></p></div>
-        <button type="button" class="icon-btn tarea-del" data-borrar-tarea="${esc(t.id)}" aria-label="Borrar tarea">✕</button>
-      </li>`;
-  };
-  box.innerHTML = `
-    ${pend.length ? `<ul class="tareas-lista">${pend.map(item).join("")}</ul>` : emptyHTML(tareasUI.filtro === "mias" ? "No tienes tareas pendientes." : "No hay tareas pendientes. ¡Todo al día!")}
-    ${hechas.length ? `<details class="records"><summary>Hechas (${hechas.length})</summary><ul class="tareas-lista">${hechas.map(item).join("")}</ul></details>` : ""}`;
-  box.querySelectorAll("[data-hecha]").forEach(c => {
-    c.onchange = async ()=>{
-      c.disabled = true;
-      const { error: e2 } = await sb.from("tareas_equipo").update({ hecha: c.checked }).eq("id", c.dataset.hecha);
-      if(e2){ c.disabled = false; c.checked = !c.checked; showError(document.getElementById("tareaMsg"), e2); return; }
-      await pintarTareas();
-      actualizarBadgeTareas();
+  const hechasHTML = (l)=> l.length ? `<details class="records"><summary>Hechas (${l.length})</summary><ul class="tareas-lista">${l.map(t => itemTareaHTML(t, true)).join("")}</ul></details>` : "";
+  const hechasOrden = (l)=> l.sort((a, b) => String(b.hecha_at).localeCompare(String(a.hecha_at))).slice(0, 20);
+
+  if(boxM){
+    const m = tareasUI.lista.filter(t => t.ambito !== "equipo");
+    const pend = m.filter(t => !t.hecha).sort(ordenPend);
+    boxM.innerHTML = `${pend.length ? `<ul class="tareas-lista">${pend.map(t => itemTareaHTML(t, true)).join("")}</ul>` : emptyHTML("No hay tareas pendientes. ¡Todo al día!")}${hechasHTML(hechasOrden(m.filter(t => t.hecha)))}`;
+    const c = document.getElementById("tmCuenta"); if(c) c.textContent = pend.length ? plural(pend.length, "pendiente", "pendientes") : "";
+  }
+
+  /* Tareas del equipo: un apartado por coach con sus pendientes (el tuyo primero) */
+  const e = tareasUI.lista.filter(t => t.ambito === "equipo");
+  const pend = e.filter(t => !t.hecha);
+  const ids = [...new Set(pend.map(t => t.asignada_a))].sort((a, b) =>
+    a === yo ? -1 : b === yo ? 1 : nombreEquipo(a).localeCompare(nombreEquipo(b)));
+  const mias = pend.filter(t => t.asignada_a === yo).length;
+  const c = document.getElementById("teCuenta"); if(c) c.textContent = esMaster() ? (pend.length ? plural(pend.length, "pendiente", "pendientes") : "") : (mias ? `Tienes ${plural(mias, "pendiente", "pendientes")}` : "");
+  boxE.innerHTML = `
+    ${ids.length ? ids.map(id => {
+      const suyas = pend.filter(t => t.asignada_a === id).sort(ordenPend);
+      const persona = (state.equipo || []).find(p => p.id === id);
+      return `<section class="tarea-grupo${id === yo ? " mio" : ""}" aria-label="Tareas de ${esc(nombreEquipo(id))}">
+        <h3 class="tarea-grupo-t"><span class="avatar" aria-hidden="true">${esc(initials(id === yo ? state.profile.nombre || "" : (persona || {}).nombre || ""))}</span>
+          <span>${esc(id === yo ? "Tus tareas" : nombreEquipo(id))}${persona && id !== yo ? `<small>${esc(ROLES_EQUIPO[persona.role] || "")}</small>` : ""}</span><span class="tarea-n">${suyas.length}</span></h3>
+        <ul class="tareas-lista">${suyas.map(t => itemTareaHTML(t, false)).join("")}</ul></section>`;
+    }).join("") : emptyHTML("Nadie tiene tareas pendientes.")}
+    ${hechasHTML(hechasOrden(e.filter(t => t.hecha)))}`;
+
+  document.querySelectorAll(".tareas-panel [data-hecha]").forEach(cb => {
+    cb.onchange = async ()=>{
+      cb.disabled = true;
+      const { error: e2 } = await sb.from("tareas_equipo").update({ hecha: cb.checked }).eq("id", cb.dataset.hecha);
+      if(e2){ cb.disabled = false; cb.checked = !cb.checked; showError(cb.closest(".tareas-panel").querySelector(".tarea-msg") || document.getElementById("tareasEquipoMsg"), e2); return; }
+      await pintarTareasHoy();
     };
   });
-  box.querySelectorAll("[data-borrar-tarea]").forEach(b => {
+  document.querySelectorAll(".tareas-panel [data-borrar-tarea]").forEach(b => {
     b.onclick = async ()=>{
       if(!confirm("¿Borrar esta tarea?")) return;
       const { error: e3 } = await sb.from("tareas_equipo").delete().eq("id", b.dataset.borrarTarea);
-      if(e3){ showError(document.getElementById("tareaMsg"), e3); return; }
-      await pintarTareas();
-      actualizarBadgeTareas();
+      if(e3){ showError(b.closest(".tareas-panel").querySelector(".tarea-msg") || document.getElementById("tareasEquipoMsg"), e3); return; }
+      await pintarTareasHoy();
     };
   });
 }
-/* Número de tareas pendientes en el menú (asignadas a mí o a cualquiera) */
-async function actualizarBadgeTareas(){
-  const b = document.getElementById("navTareasBadge");
-  if(!b || !esMaster()) return;
-  const { data, error } = await sb.from("tareas_equipo").select("id,asignada_a").eq("hecha", false);
-  const n = error ? 0 : (data || []).filter(t => !t.asignada_a || t.asignada_a === state.profile.id).length;
-  b.hidden = !n; b.textContent = n || "";
-  b.setAttribute("aria-label", plural(n, "tarea pendiente", "tareas pendientes"));
+function enlazarFormsTareas(){
+  document.querySelectorAll(".tarea-form").forEach(form => {
+    form.onsubmit = (ev)=>{
+      ev.preventDefault();
+      const ambito = form.dataset.ambito;
+      const btn = form.querySelector("button[type=submit]");
+      withBusy(btn, "…", async ()=>{
+        const msg = form.querySelector(".tarea-msg");
+        const texto = form.querySelector(`#tt_${ambito}`).value.trim();
+        const para = form.querySelector(`#tp_${ambito}`).value || null;
+        if(!texto){ showMsg(msg, "error", "Escribe la tarea."); return; }
+        if(ambito === "equipo" && !para){ showMsg(msg, "error", "Elige a qué coach se la asignas."); return; }
+        const { error } = await sb.from("tareas_equipo").insert({ texto, ambito, asignada_a: para, fecha_limite: form.querySelector(`#tf_${ambito}`).value || null });
+        if(error){ showError(msg, error); return; }
+        form.querySelector(`#tt_${ambito}`).value = ""; form.querySelector(`#tf_${ambito}`).value = "";
+        msg.innerHTML = "";
+        await pintarTareasHoy();
+        form.querySelector(`#tt_${ambito}`).focus();
+      });
+    };
+  });
 }

@@ -613,3 +613,15 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .tarea-vence.tarde{ color:var(--danger); }
 .tarea-del{ flex:none; opacity:.6; }
 .tarea-del:hover, .tarea-del:focus-visible{ opacity:1; }
+
+/* Hoy: tareas de los master y del equipo (un apartado por coach) */
+.tareas-nota{ margin:-4px 0 10px; font-size:14px; }
+.tareas-panel .tarea-form{ margin-bottom:12px; }
+.tarea-grupo{ margin:0 0 14px; }
+.tarea-grupo-t{ display:flex; align-items:center; gap:10px; margin:0 0 8px; font-size:16px; }
+.tarea-grupo-t .avatar{ width:34px; height:34px; font-size:13px; flex:none; }
+.tarea-grupo-t > span:nth-child(2){ display:flex; flex-direction:column; min-width:0; }
+.tarea-grupo-t small{ font-family:var(--font-body); font-weight:500; font-size:12.5px; color:var(--ink-soft); }
+.tarea-n{ margin-left:auto; min-width:26px; height:26px; padding:0 8px; border-radius:999px; background:var(--paper-2); font-size:13px; line-height:26px; text-align:center; font-weight:700; }
+.tarea-grupo.mio .tarea-n{ background:var(--accent); color:#fff; }
+.tarea-check input:disabled{ opacity:.35; }
