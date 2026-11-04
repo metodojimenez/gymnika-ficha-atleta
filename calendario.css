@@ -601,7 +601,8 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .tareas-filtro{ margin:16px 0 10px; }
 .tareas-lista{ list-style:none; margin:0; padding:0; display:grid; gap:8px; }
 .tarea{ display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
-.tarea.mia{ border-color:rgba(14,124,134,.4); box-shadow:inset 4px 0 0 var(--accent); }
+/* Tarea asignada a quien la está viendo: contorno verde */
+.tarea.mia{ border:2px solid #2E9B57; box-shadow:0 0 0 3px rgba(46,155,87,.14); padding:9px 11px; }
 .tarea.hecha .tarea-txt p:first-child{ text-decoration:line-through; color:var(--ink-faint); }
 .tarea-check{ display:flex; align-items:center; justify-content:center; min-width:32px; min-height:32px; margin:0; }
 .tarea-check input{ width:22px; height:22px; accent-color:var(--accent); }
