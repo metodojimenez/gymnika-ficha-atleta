@@ -13,6 +13,10 @@ const catsDe = (cat)=> cat === "transicion" ? ["terapia", "fortalecimiento"] : c
 /* En transición, cada parte de la app trabaja con una "vista" del perfil en una sola categoría; _real guarda el perfil verdadero */
 const perfilEn = (profile, cat)=> ({ ...(profile._real || profile), categoria: cat, _real: profile._real || profile });
 const perfilReal = (profile)=> profile._real || profile;
+/* Para quién se hace una acción: el master por un alumno o el papá/mamá por su hijo (null = uno mismo) */
+const paraDe = (profile)=>{ const id = perfilReal(profile).id; return state.profile && id !== state.profile.id ? id : null; };
+const conPara = (args, profile)=>{ const p = paraDe(profile); return p ? { ...args, p_para: p } : args; };
+const primerNombre = (n)=> String(n || "").trim().split(/\s+/)[0] || "";
 const DIAS_SEMANA = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 const METODOS_PAGO = { yape: "Yape", plin: "Plin", transferencia: "Transferencia", mercadopago: "Mercado Pago" };
@@ -142,7 +146,7 @@ function calcIMC(profile, medidas){
 async function cargarPlanDe(uid, categoria){
   if(categoria === "transicion"){
     const [ter, fort] = await Promise.all([cargarPlanDe(uid, "terapia"), cargarPlanDe(uid, "fortalecimiento")]);
-    return { ...fort, movs: ter.movs, saldo: ter.saldo };
+    return { ...fort, movs: ter.movs, saldo: ter.saldo, _uid: uid };
   }
   if(categoria === "terapia"){
     const [{ data: movs }, { data: compras }, { data: reservas }] = await Promise.all([
@@ -151,7 +155,7 @@ async function cargarPlanDe(uid, categoria){
       sb.from("reservas").select("*").eq("user_id", uid).order("inicio", { ascending: false })
     ]);
     const saldo = (movs || []).reduce((s, m) => s + Number(m.cantidad || 0), 0);
-    return { movs: movs || [], compras: compras || [], reservas: reservas || [], saldo };
+    return { movs: movs || [], compras: compras || [], reservas: reservas || [], saldo, _uid: uid };
   }
   const [{ data: membresias }, { data: congelamientos }, { data: compras }, { data: asistencias }, { data: suscripciones }, { data: reservas }, { data: fijo }] = await Promise.all([
     sb.from("membresias").select("*").eq("user_id", uid).order("fin", { ascending: false }),
@@ -162,7 +166,7 @@ async function cargarPlanDe(uid, categoria){
     sb.from("reservas").select("*").eq("user_id", uid).order("inicio", { ascending: false }),
     sb.from("horario_fijo").select("*").eq("user_id", uid).eq("activo", true)
   ]);
-  return { membresias: membresias || [], congelamientos: congelamientos || [], compras: compras || [], asistencias: asistencias || [], suscripciones: suscripciones || [], reservas: reservas || [], fijo: fijo || [] };
+  return { membresias: membresias || [], congelamientos: congelamientos || [], compras: compras || [], asistencias: asistencias || [], suscripciones: suscripciones || [], reservas: reservas || [], fijo: fijo || [], _uid: uid };
 }
 
 function estadoMembresia(plan){
@@ -270,13 +274,40 @@ function proximaReserva(plan){
     .sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)))[0] || null;
 }
 
+/* Sesiones de terapia: disponibles (sin agendar), agendadas (todavía no pasan) y total.
+   Una sesión agendada se consume cuando su hora ya pasó o cuando se escaneó el QR. */
+function resumenSesiones(plan, cat){
+  const hs = planes.horarios || [];
+  const esTerapia = (r)=> cat === "terapia" || (hs.find(h => h.id === r.horario_id) || {}).categoria === "terapia";
+  const ahora = new Date();
+  const ter = (plan.reservas || []).filter(esTerapia);
+  const agendadas = ter.filter(r => r.estado === "confirmada" && new Date(r.inicio) > ahora)
+    .sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)));
+  const consumidas = ter.filter(r => ["asistio", "no_asistio", "cancelada_tarde"].includes(r.estado) || (r.estado === "confirmada" && new Date(r.inicio) <= ahora)).length;
+  const disponibles = Math.max(0, plan.saldo || 0);
+  return { disponibles, agendadas, consumidas, total: disponibles + agendadas.length };
+}
+function sesionesHTML(rs, opts = {}){
+  const { baja, propio = true } = opts;
+  const prox = rs.agendadas.slice(0, 4);
+  return `
+    <div class="ses-cuenta" role="group" aria-label="Sesiones de terapia">
+      <div class="ses-n disp"><span class="num${baja ? " baja" : ""}"${opts.idSaldo ? ` id="${opts.idSaldo}"` : ""}>${rs.disponibles}</span><span class="ses-l">Disponibles</span><span class="ses-s">por agendar</span></div>
+      <div class="ses-n agen"><span class="num">${rs.agendadas.length}</span><span class="ses-l">Agendadas</span><span class="ses-s">por hacer</span></div>
+      <div class="ses-n total"><span class="num">${rs.total}</span><span class="ses-l">Total</span><span class="ses-s">${rs.consumidas ? plural(rs.consumidas, "realizada", "realizadas") : "&nbsp;"}</span></div>
+    </div>
+    ${prox.length ? `<div class="ses-prox"><p class="ses-prox-t">${propio ? "Tus próximas sesiones" : "Próximas sesiones"}</p>
+      <ul>${prox.map(r => `<li><span class="num">${fmtFechaHora(r.inicio)}</span></li>`).join("")}${rs.agendadas.length > prox.length ? `<li class="muted">y ${rs.agendadas.length - prox.length} más</li>` : ""}</ul></div>` : ""}`;
+}
+
 async function renderPlanAlumno(profile){
   const box = document.getElementById("planCard");
   if(!box) return;
   const cat = profile.categoria;
-  const plan = await cargarPlanDe(profile.id, cat);
+  const [plan] = await Promise.all([cargarPlanDe(profile.id, cat), cargarHorarios()]);
   if(!document.getElementById("planCard")) return;
-  const saldoPrevio = state.plan && typeof state.plan.saldo === "number" ? state.plan.saldo : null;
+  const saldoPrevio = state.plan && state.plan._uid === profile.id && typeof state.plan.saldo === "number" ? state.plan.saldo : null;
+  const propio = !paraDe(profile);
   state.plan = plan;
   const inicio = profile.fecha_inicio ? `<span>En Gymnika desde el <strong>${fmtFecha(profile.fecha_inicio, true)}</strong></span>` : "";
   const prox = proximaReserva(plan);
@@ -288,17 +319,12 @@ async function renderPlanAlumno(profile){
     /* Cada reserva descuenta 1: si el saldo bajó desde la última vez, el número cae (único movimiento del panel) */
     const bajo = saldoPrevio !== null && plan.saldo < saldoPrevio;
     box.innerHTML = `
-      <div class="perfil">
-        <div class="perfil-saldo">
-          <span class="plan-num num${bajo ? " baja" : ""}" id="saldoTokens">${plan.saldo}</span>
-          <span class="plan-unit">${plan.saldo === 1 ? "sesión disponible" : "sesiones disponibles"}</span>
-        </div>
-        <div class="perfil-acciones">
-          ${botonEscanerHTML()}
-          <button type="button" class="btn-outline" id="btnComprar">Comprar sesiones</button>
-        </div>
+      ${sesionesHTML(resumenSesiones(plan, cat), { baja: bajo, propio, idSaldo: "saldoTokens" })}
+      <div class="perfil-acciones ses-acciones">
+        ${botonEscanerHTML()}
+        <button type="button" class="btn-outline" id="btnComprar">Comprar sesiones</button>
       </div>
-      ${proxHTML}
+      ${resumenSesiones(plan, cat).agendadas.length ? "" : proxHTML}
       ${inicio ? `<div class="plan-meta muted">${inicio}</div>` : ""}
       ${avisoComprasHTML(plan.compras)}`;
   } else {
@@ -313,42 +339,79 @@ async function renderPlanAlumno(profile){
     } else if(est.futura){
       estadoHTML = `<span class="plan-num plan-word">Desde el ${fmtFecha(est.futura.inicio, false)}</span><span class="plan-unit">hasta el ${fmtFecha(est.finTotal, true)}</span>`;
     } else {
-      estadoHTML = `<span class="plan-num plan-word off">${est.ultima ? "Vencido" : "Sin acceso"}</span><span class="plan-unit">${est.ultima ? "venció el " + fmtFecha(est.ultima.fin, true) : "Compra tu acceso mensual para empezar"}</span>`;
+      estadoHTML = `<span class="plan-num plan-word off">${est.ultima ? "Vencido" : "Sin acceso"}</span><span class="plan-unit">${est.ultima ? "venció el " + fmtFecha(est.ultima.fin, true) : cat === "transicion" ? "Tu master coach te habilitará el acceso" : "Compra tu acceso mensual para empezar"}</span>`;
     }
     const asistMes = plan.asistencias.filter(a => String(a.fecha).startsWith(hoy.slice(0, 7))).length;
     const terHTML = cat === "transicion" ? `
       <div class="trans-ter">
-        <div><p class="eyebrow">Terapia</p>
-          <div class="perfil-saldo"><span class="plan-num num">${plan.saldo}</span><span class="plan-unit">${plan.saldo === 1 ? "sesión disponible" : "sesiones disponibles"}</span></div></div>
+        <p class="eyebrow">Terapia</p>
+        ${sesionesHTML(resumenSesiones(plan, cat), { propio })}
         <button type="button" class="btn-outline" id="btnComprarTer">Comprar sesiones</button>
       </div>` : "";
+    /* Transición: el acceso de fortalecimiento se cobra y coordina en el centro; lo habilita un master coach */
+    const accionFort = cat === "transicion"
+      ? `<p class="muted trans-nota">Tu acceso a fortalecimiento lo coordina y habilita tu master coach.</p>`
+      : `<button type="button" class="btn-outline" id="btnComprar">${est.vigente || est.futura ? "Renovar acceso" : "Comprar acceso mensual"}</button>`;
     box.innerHTML = `
+      ${terHTML}
       ${cat === "transicion" ? `<p class="eyebrow trans-eyebrow">Fortalecimiento</p>` : ""}
       <div class="perfil">
         <div class="plan-big">${estadoHTML}</div>
         <div class="perfil-acciones">
           ${botonEscanerHTML()}
-          <button type="button" class="btn-outline" id="btnComprar">${est.vigente || est.futura ? "Renovar acceso" : "Comprar acceso mensual"}</button>
+          ${accionFort}
         </div>
       </div>
-      ${terHTML}
       ${medidorHTML(plan.asistencias)}
       ${proxHTML}
       <div class="plan-meta muted">${inicio}<span>Entrenamientos este mes: <strong>${asistMes}</strong></span>
         ${plan.congelamientos.length ? `<span>Congelamientos: <strong>${plan.congelamientos.length}</strong></span>` : ""}</div>
       ${suscripcionHTML(plan, false)}
       ${avisoComprasHTML(plan.compras)}
+      ${cat === "fortalecimiento" ? `
+      <div class="pedir-ter">
+        <div><p class="pedir-ter-t">¿Necesitas terapia?</p><p class="muted">Si tienes una molestia o lesión, pide sesiones de terapia 1 a 1 y un master coach te escribe para coordinar.</p></div>
+        <button type="button" class="btn-outline" id="btnPedirTerapia">Solicitar sesiones de terapia</button>
+      </div>` : ""}
       ${plan.congelamientos.length ? `
       <details class="records"><summary>Congelamientos (${plan.congelamientos.length})</summary>
         <ul class="mov-list">${plan.congelamientos.map(c => `<li><span class="mov-txt">Del ${fmtFecha(c.desde)} al ${fmtFecha(c.hasta)}${c.motivo ? " · " + esc(c.motivo) : ""}</span></li>`).join("")}</ul>
       </details>` : ""}`;
   }
-  document.getElementById("btnComprar").onclick = ()=> abrirCompra(cat === "transicion" ? perfilEn(profile, "fortalecimiento") : profile);
+  const bcomp = document.getElementById("btnComprar");
+  if(bcomp) bcomp.onclick = ()=> abrirCompra(profile);
+  const bpt = document.getElementById("btnPedirTerapia");
+  if(bpt) bpt.onclick = ()=> abrirSolicitudTerapia(profile);
   const bt = document.getElementById("btnComprarTer");
   if(bt) bt.onclick = ()=> abrirCompra(perfilEn(profile, "terapia"));
   box.querySelectorAll("[data-escanear]").forEach(b => { b.onclick = abrirEscanerQR; });
   box.querySelectorAll("[data-rueda]").forEach(b => { b.onclick = ()=> abrirRueda(plan.asistencias); });
   mostrarConsejoDelDia();
+}
+
+/* Alumno de fortalecimiento que necesita terapia: el mensaje les llega directo a los master coach */
+function abrirSolicitudTerapia(profile){
+  const propio = !paraDe(profile);
+  const d = openDialog("Solicitar sesiones de terapia", `
+    <p style="margin-top:0">Avisaremos a los master coach para que te escriban y coordinen la terapia 1 a 1${propio ? "" : " de " + esc(primerNombre(profile.nombre))}.</p>
+    <label for="pedTerMsg">¿Qué molestia ${propio ? "tienes" : "tiene"}? <span class="muted">(opcional)</span></label>
+    <textarea id="pedTerMsg" rows="3" maxlength="400" placeholder="Ej: me duele el hombro derecho al levantar el brazo"></textarea>
+    <button type="button" class="btn-primary" id="btnEnviarPedTer">Enviar solicitud</button>
+    <div id="pedTerMsgBox" aria-live="polite"></div>`);
+  const btn = d.el.querySelector("#btnEnviarPedTer");
+  btn.onclick = ()=> withBusy(btn, "Enviando…", async ()=>{
+    const { data, error } = await sb.rpc("solicitar_terapia", conPara({ p_mensaje: d.el.querySelector("#pedTerMsg").value.trim() || null }, profile));
+    if(error){ showError(d.el.querySelector("#pedTerMsgBox"), error); return; }
+    const r = typeof data === "string" ? JSON.parse(data) : (data || {});
+    d.el.querySelector(".sheet-body").innerHTML = `
+      <div class="done-box">
+        <span class="done-icon" aria-hidden="true">✓</span>
+        <h3>${r.repetida ? "Ya enviamos tu solicitud" : "Solicitud enviada"}</h3>
+        <p>${r.repetida ? "Los master coach ya la tienen. Te escribirán pronto para coordinar." : "Los master coach ya recibieron tu mensaje y te escribirán para coordinar la terapia 1 a 1."}</p>
+        <button type="button" class="btn-primary" data-ok>Entendido</button>
+      </div>`;
+    const ok = d.el.querySelector("[data-ok]"); if(ok){ ok.onclick = d.close; ok.focus(); }
+  });
 }
 
 /* Consejo del día en una ventana: solo la primera vez que el alumno abre la app cada día */
@@ -384,8 +447,16 @@ function movimientoTexto(m){
 
 /* ---------- Comprar sesiones o acceso (Yape / Plin / transferencia) ---------- */
 async function abrirCompra(profile){
+  if(esEquipo()){
+    openDialog("Sumar sesiones o acceso", `<p style="margin-top:0">Desde el panel del equipo no se registran pagos.</p>
+      <p class="muted">Para terapia usa <strong>Ajustar</strong> en su plan para sumar sesiones. Para fortalecimiento usa <strong>Habilitar acceso</strong>.</p>`);
+    return;
+  }
+  /* En transición se compran sesiones de terapia; el acceso de fortalecimiento lo habilita un master */
+  if(perfilReal(profile).categoria === "transicion") profile = perfilEn(profile, "terapia");
   const [aj, paquetes] = await Promise.all([cargarAjustes(true), cargarPaquetes(true)]);
-  const lista = paquetes.filter(p => p.activo && p.categoria === profile.categoria);
+  /* Para un hijo se paga con comprobante (la suscripción de Mercado Pago queda a nombre de quien la crea) */
+  const lista = paquetes.filter(p => p.activo && p.categoria === profile.categoria && !(paraDe(profile) && p.modalidad === "suscripcion"));
   if(!lista.length){ openDialog("Comprar", emptyHTML("Todavía no hay paquetes disponibles. Escríbele a tu coach.")); return; }
   const base = lista.find(p => p.sesiones === 1);
   const esSusc = (p)=> p.modalidad === "suscripcion";
@@ -490,7 +561,7 @@ async function abrirCompra(profile){
         const listo = await prepararComprobante(archivo);
         if(listo.size > 5 * 1024 * 1024){ showMsg(msg, "error", "La imagen pesa más de 5 MB. Envía una captura de pantalla."); return; }
         const ext = (listo.type.split("/")[1] || "jpg").replace("jpeg", "jpg").replace(/[^a-z0-9]/g, "");
-        path = `${profile.id}/${Date.now()}.${ext}`;
+        path = `${(state.session && state.session.user && state.session.user.id) || profile.id}/${Date.now()}.${ext}`;
         const { error: upErr } = await sb.storage.from("comprobantes").upload(path, listo, { contentType: listo.type, upsert: false });
         if(upErr){ showError(msg, upErr); return; }
       }
@@ -581,9 +652,10 @@ async function renderReservasAlumno(profile){
   const desde = fechaISO(primero) < hoyISO ? hoyISO : fechaISO(primero);
   const [{ data: ocup }, plan] = await Promise.all([
     sb.rpc("ocupacion", { p_desde: desde, p_hasta: fechaISO(ultimo) }),
-    state.plan ? Promise.resolve(state.plan) : cargarPlanDe(profile.id, perfilReal(profile).categoria)
+    state.plan && state.plan._uid === real.id ? Promise.resolve(state.plan) : cargarPlanDe(real.id, real.categoria)
   ]);
   if(!document.getElementById("reservarCard")) return;
+  state.plan = plan;
   const mias = (plan.reservas || []).filter(r => ["confirmada", "espera", "asistio"].includes(r.estado));
   const saldo = plan.saldo || 0;
 
@@ -622,10 +694,10 @@ async function renderReservasAlumno(profile){
         ${["L", "M", "M", "J", "V", "S", "D"].map(x => `<span class="cal-dow" aria-hidden="true">${x}</span>`).join("")}
         ${celdas.join("")}
       </div>
-      <p class="cal-leyenda muted"><span><i class="lg lg-disp"></i>Con horarios</span><span><i class="lg lg-mia"></i>Tu reserva</span>${esTer ? "" : `<span><i class="lg lg-sin"></i>Fuera de tu acceso</span>`}</p>
+      <p class="cal-leyenda muted"><span><i class="lg lg-disp"></i>Con horarios</span><span><i class="lg lg-mia"></i>${paraDe(profile) ? "Su reserva" : "Tu reserva"}</span>${esTer ? "" : `<span><i class="lg lg-sin"></i>Fuera de tu acceso</span>`}</p>
     </div>
     <div class="cal-dia" id="calDia" aria-live="polite"></div>
-    ${esTer && saldo < 1 ? `<div class="plan-alert" style="margin-top:12px">No tienes sesiones disponibles. <button type="button" class="link-inline" id="btnComprarDesdeReservas">Compra un paquete</button> para reservar.</div>` : ""}
+    ${esTer && saldo < 1 ? `<div class="plan-alert" style="margin-top:12px">${avisoSinSesionesHTML(profile)}</div>` : ""}
     <div id="reservarMsg" aria-live="polite"></div>`;
 
   const pintarDia = ()=>{
@@ -638,9 +710,9 @@ async function renderReservasAlumno(profile){
     const yaTieneDia = mias.some(r => r.fecha === iso && ["confirmada", "espera", "asistio"].includes(r.estado));
     diaBox.innerHTML = `
       <h3 class="cal-dia-t">${fechaLarga(iso)}${iso === hoyISO ? " · hoy" : ""}</h3>
-      ${yaTieneDia && slots.some(h => !mias.some(r => r.horario_id === h.id && r.fecha === iso)) ? `<p class="plan-alert" role="status">Ya tienes un horario este día. Solo se puede reservar uno por día; si quieres cambiarlo, cancela el que tienes.</p>` : ""}
+      ${yaTieneDia && slots.some(h => !mias.some(r => r.horario_id === h.id && r.fecha === iso)) ? `<p class="plan-alert" role="status">${paraDe(profile) ? "Ya tiene un horario este día. Solo se puede reservar uno por día; para cambiarlo, cancela el que tiene." : "Ya tienes un horario este día. Solo se puede reservar uno por día; si quieres cambiarlo, cancela el que tienes."}</p>` : ""}
       ${!slots.length ? emptyHTML(iso < hoyISO ? "Este día ya pasó." : "No hay horarios disponibles este día. Elige otro.") : ""}
-      ${slots.length && sinAcceso ? `<p class="plan-alert warn">Tu acceso mensual no cubre este día. <button type="button" class="link-inline" data-comprar>Renuévalo</button> para reservar.</p>` : ""}
+      ${slots.length && sinAcceso ? `<p class="plan-alert warn">${avisoSinAccesoHTML(profile)}</p>` : ""}
       <ul class="slot-list">
         ${slots.map(h => {
           const o = (ocup || []).find(x => x.horario_id === h.id && x.fecha === iso) || { confirmadas: 0, en_espera: 0, lugares: [] };
@@ -650,10 +722,10 @@ async function renderReservasAlumno(profile){
           const lleno = libres === 0;
           const pct = Math.min(100, Math.round(o.confirmadas / h.aforo * 100));
           let accion;
-          if(mia) accion = `<span class="slot-tag ${mia.estado === "espera" ? "wait" : "ok"}">${mia.estado === "espera" ? "En lista de espera" : mia.estado === "asistio" ? "Asististe ✓" : "Reservado ✓"}</span>`;
+          if(mia) accion = `<span class="slot-tag ${mia.estado === "espera" ? "wait" : "ok"}">${mia.estado === "espera" ? "En lista de espera" : mia.estado === "asistio" ? (paraDe(profile) ? "Asistió ✓" : "Asististe ✓") : "Reservado ✓"}</span>`;
           else if(pasado) accion = `<span class="slot-tag off">Ya pasó</span>`;
           else if(sinAcceso) accion = `<span class="slot-tag off">Sin acceso</span>`;
-          else if(yaTieneDia) accion = `<span class="slot-tag off">Ya tienes otro</span>`;
+          else if(yaTieneDia) accion = `<span class="slot-tag off">${paraDe(profile) ? "Ya tiene otro" : "Ya tienes otro"}</span>`;
           else if(lleno && !esTer) accion = `<span class="slot-tag off">Lleno</span>`;
           else accion = `<button type="button" class="${lleno ? "btn-outline" : "btn-primary"} slot-btn" data-reservar="${esc(h.id)}">${lleno ? "Lista de espera" : "Reservar"}</button>`;
           return `
@@ -703,6 +775,17 @@ async function renderReservasAlumno(profile){
   renderMisReservas(profile);
 }
 
+/* Avisos del calendario según quién reserva: el alumno, su papá o mamá, o un master desde el panel */
+function avisoSinAccesoHTML(profile){
+  if(esEquipo()) return `Su acceso no cubre este día. Habilítalo con <strong>Habilitar acceso</strong> en su plan.`;
+  if(perfilReal(profile).categoria === "transicion") return `${paraDe(profile) ? "Su" : "Tu"} acceso a fortalecimiento no cubre este día. Lo habilita el master coach.`;
+  return `${paraDe(profile) ? "Su" : "Tu"} acceso mensual no cubre este día. <button type="button" class="link-inline" data-comprar>Renuévalo</button> para reservar.`;
+}
+function avisoSinSesionesHTML(profile){
+  if(esEquipo()) return `No tiene sesiones disponibles. Súmale sesiones con <strong>Ajustar</strong> en su plan para poder agendar.`;
+  return `${paraDe(profile) ? "No tiene" : "No tienes"} sesiones disponibles. <button type="button" class="link-inline" id="btnComprarDesdeReservas">Compra un paquete</button> para reservar.`;
+}
+
 /* ---------- Fortalecimiento: horario fijo semanal (una hora por día; se reserva solo cada semana) ---------- */
 function horarioFijoHTML(plan, hs){
   const elegidos = hs.filter(h => (plan.fijo || []).some(f => f.horario_id === h.id)).sort((a, b) => a.dia_semana - b.dia_semana);
@@ -742,16 +825,16 @@ function abrirHorarioFijo(profile, plan, hs){
     const btn = d.el.querySelector("#btnGuardarFijo");
     withBusy(btn, "Guardando…", async ()=>{
       const ids = [...form.querySelectorAll('input[type="radio"]:checked')].map(i => i.value).filter(Boolean);
-      const { data, error } = await sb.rpc("guardar_horario_fijo", { p_horarios: ids });
+      const { data, error } = await sb.rpc("guardar_horario_fijo", conPara({ p_horarios: ids }, profile));
       if(error){ showError(d.el.querySelector("#fijoMsg"), error); return; }
       d.close();
       await refrescarReservas(profile);
       const r = typeof data === "string" ? JSON.parse(data) : (data || {});
       const partes = [];
-      if(!ids.length) partes.push("Quitaste tu horario fijo.");
-      else if(!r.hasta) partes.push("Horario guardado. Se reservará apenas tengas tu acceso activo.");
+      if(!ids.length) partes.push(paraDe(profile) ? "Horario fijo quitado." : "Quitaste tu horario fijo.");
+      else if(!r.hasta) partes.push(paraDe(profile) ? "Horario guardado. Se reservará apenas tenga su acceso activo." : "Horario guardado. Se reservará apenas tengas tu acceso activo.");
       else if(r.reservadas) partes.push(`Listo: ${plural(r.reservadas, "reserva nueva", "reservas nuevas")} hasta el ${fmtFecha(r.hasta, true)}.`);
-      else partes.push(`Horario guardado. Tus reservas están listas hasta el ${fmtFecha(r.hasta, true)}.`);
+      else partes.push(`Horario guardado. ${paraDe(profile) ? "Sus" : "Tus"} reservas están listas hasta el ${fmtFecha(r.hasta, true)}.`);
       if(r.llenas) partes.push(`${plural(r.llenas, "día estaba lleno", "días estaban llenos")}: elige otra hora para esos días en el calendario.`);
       if(r.canceladas) partes.push(`Se cancelaron ${plural(r.canceladas, "reserva", "reservas")} del horario anterior.`);
       showMsg(document.getElementById("reservarMsg"), "ok", partes.join(" "));
@@ -765,54 +848,88 @@ function limiteCancelacion(inicio, aj){
 
 function confirmarReserva(profile, h, fecha, o, aj, saldo){
   const esTer = profile.categoria === "terapia";
+  const propio = !paraDe(profile);
+  const master = esEquipo();
   const ini = inicioLocal(fecha, h.hora);
   const lleno = o.confirmadas >= h.aforo;
   const limite = limiteCancelacion(ini, aj);
   if(esTer && saldo < 1){
-    const d = openDialog("Necesitas sesiones", `<p>Para reservar necesitas al menos 1 sesión disponible.</p><button type="button" class="btn-primary" id="dlgComprar">Comprar sesiones</button>`);
+    if(master){ openDialog("Sin sesiones disponibles", `<p style="margin-top:0">${avisoSinSesionesHTML(profile)}</p>`); return; }
+    const d = openDialog("Necesitas sesiones", `<p>Para reservar ${propio ? "necesitas" : "necesita"} al menos 1 sesión disponible.</p><button type="button" class="btn-primary" id="dlgComprar">Comprar sesiones</button>`);
     d.el.querySelector("#dlgComprar").onclick = ()=>{ d.close(); abrirCompra(profile); };
     return;
   }
   const lugaresHTML = (esTer && !lleno && aj.seleccion_lugar) ? `
-    <p class="step-title" style="margin-top:14px">Elige tu lugar</p>
+    <p class="step-title" style="margin-top:14px">Elige ${propio ? "tu" : "su"} lugar</p>
     <div class="spot-grid">${Array.from({ length: h.aforo }, (_, i) => i + 1).map(n => {
       const ocupado = (o.lugares || []).includes(n);
       return `<label class="spot${ocupado ? " taken" : ""}"><input type="radio" name="lugar" value="${n}" ${ocupado ? "disabled" : ""}><span class="num">${n}</span></label>`;
     }).join("")}</div>` : "";
   const reglas = esTer
     ? `${lleno
-        ? `<p>Este horario está lleno. Si se libera un cupo, tu reserva se confirma sola y se usa 1 sesión de tu saldo. Te avisaremos en el inbox.</p>`
-        : `<p>Se usará <strong>1 sesión</strong> de tu saldo (te quedarán ${saldo - 1}).</p>`}
-       <p class="muted">Puedes cancelar sin costo hasta el <strong>${fmtFechaHora(limite.toISOString())}</strong>. Después de eso, o si no asistes, la sesión se pierde.</p>`
-    : `<p>Tu cupo queda guardado. Al llegar, escanea el QR de recepción desde la app.</p>
-       <p class="muted">Si no puedes venir, cancela antes de la hora para liberar tu cupo.</p>`;
-  const d = openDialog(lleno ? "Unirte a la lista de espera" : esTer ? "Confirmar reserva" : "Confirmar horario", `
+        ? `<p>Este horario está lleno. Si se libera un cupo, la reserva se confirma sola y se usa 1 sesión ${propio ? "de tu saldo. Te avisaremos en el inbox." : "de su saldo."}</p>`
+        : `<p>Se usará <strong>1 sesión</strong> de ${propio ? "tu" : "su"} saldo (${propio ? "te" : "le"} quedarán ${saldo - 1}).</p>`}
+       <p class="muted">${master ? "Si el centro la cancela, la sesión se le devuelve." : `Puedes cancelar sin costo hasta el <strong>${fmtFechaHora(limite.toISOString())}</strong>. Después de eso, o si no asiste, la sesión se pierde.`}</p>`
+    : `<p>El cupo queda guardado. Al llegar, ${propio ? "escanea" : "se escanea"} el QR de recepción desde la app.</p>
+       <p class="muted">Si no puede venir, conviene cancelar antes de la hora para liberar el cupo.</p>`;
+  /* El master puede agendar la misma hora varias semanas seguidas (para que nadie pierda su horario de siempre) */
+  const limISO = limiteReserva();
+  const maxSemanas = Math.min(8, Math.floor(diasEntre(fecha, limISO) / 7) + 1);
+  const repetirHTML = master && !lleno && maxSemanas > 1 ? `
+    <label for="repSemanas">Repetir</label>
+    <select id="repSemanas">${Array.from({ length: maxSemanas }, (_, i) => i + 1).map(n => `<option value="${n}">${n === 1 ? "Solo esta fecha" : `${n} semanas seguidas (mismo día y hora)`}</option>`).join("")}</select>
+    <p class="muted" style="margin-top:6px">${esTer ? "Cada fecha usa 1 sesión de su saldo." : "Se agenda mientras su acceso cubra esas fechas."}</p>` : "";
+  const d = openDialog(lleno ? "Unirse a la lista de espera" : master ? `Agendar a ${primerNombre(profile.nombre) || "el alumno"}` : esTer ? "Confirmar reserva" : "Confirmar horario", `
     <div class="confirm-slot">
       <span class="cs-day">${DIAS_SEMANA[h.dia_semana]} ${ini.getDate()} de ${MESES_LARGOS[ini.getMonth()]}</span>
       <span class="cs-time num">${horaCorta(h.hora)}</span>
-      <span class="muted">${h.duracion_min} minutos · ${esTer ? "Terapia" : "Fortalecimiento"}</span>
+      <span class="muted">${h.duracion_min} minutos · ${esTer ? "Terapia" : "Fortalecimiento"}${propio ? "" : " · " + esc(profile.nombre || "")}</span>
     </div>
     ${reglas}
     ${lugaresHTML}
-    <button type="button" class="btn-primary" id="btnConfirmarReserva">${lleno ? "Unirme a la lista de espera" : "Confirmar reserva"}</button>
+    ${repetirHTML}
+    <button type="button" class="btn-primary" id="btnConfirmarReserva">${lleno ? "Unirse a la lista de espera" : master ? "Agendar" : "Confirmar reserva"}</button>
     <div id="confirmMsg" aria-live="polite"></div>`);
   const btn = d.el.querySelector("#btnConfirmarReserva");
   btn.onclick = ()=> withBusy(btn, "Reservando…", async ()=>{
     const lugarSel = d.el.querySelector('input[name="lugar"]:checked');
     if(lugaresHTML && !lugarSel){ showMsg(d.el.querySelector("#confirmMsg"), "error", "Elige un lugar."); return; }
-    const { data, error } = await sb.rpc("reservar", { p_horario: h.id, p_fecha: fecha, p_lugar: lugarSel ? Number(lugarSel.value) : null });
+    const sel = d.el.querySelector("#repSemanas");
+    const semanas = sel ? Number(sel.value) : 1;
+    if(semanas > 1){
+      const hechas = [], fallas = [];
+      for(let i = 0; i < semanas; i++){
+        const f = fechaISO(sumarDias(parseFecha(fecha), i * 7));
+        const { error } = await sb.rpc("reservar", conPara({ p_horario: h.id, p_fecha: f, p_lugar: null }, profile));
+        if(error) fallas.push(`${fmtFecha(f)}: ${errorES(error)}`); else hechas.push(f);
+      }
+      d.close();
+      await refrescarReservas(profile);
+      showMsg(document.getElementById("reservarMsg"), hechas.length ? "ok" : "error",
+        `${hechas.length ? `Agendadas ${plural(hechas.length, "fecha", "fechas")} a las ${horaCorta(h.hora)}.` : "No se pudo agendar."}${fallas.length ? " No se agendó: " + fallas.join(" · ") : ""}`);
+      return;
+    }
+    const { data, error } = await sb.rpc("reservar", conPara({ p_horario: h.id, p_fecha: fecha, p_lugar: lugarSel ? Number(lugarSel.value) : null }, profile));
     if(error){ showError(d.el.querySelector("#confirmMsg"), error); return; }
     d.close();
     await refrescarReservas(profile);
     const res = typeof data === "string" ? JSON.parse(data) : data;
     showMsg(document.getElementById("reservarMsg"), "ok", res && res.estado === "espera"
-      ? `Estás en la lista de espera (puesto ${res.posicion}). Te avisaremos si se libera un cupo.`
-      : `Reserva confirmada: ${fmtFechaHora(ini.toISOString())}${res && res.lugar ? " · lugar " + res.lugar : ""}.`);
+      ? `En lista de espera (puesto ${res.posicion}).${propio ? " Te avisaremos si se libera un cupo." : ""}`
+      : `${master ? "Agendado" : "Reserva confirmada"}: ${fmtFechaHora(ini.toISOString())}${res && res.lugar ? " · lugar " + res.lugar : ""}.`);
   });
 }
 
 async function refrescarReservas(profile){
-  await renderPlanAlumno(perfilReal(profile));
+  const real = perfilReal(profile);
+  if(esEquipo()){
+    /* Master agendando desde la ficha del alumno: se recarga su plan y el panel del coach */
+    state.plan = await cargarPlanDe(real.id, real.categoria);
+    await renderReservasAlumno(profile);
+    if(document.getElementById("planCard")) await renderPlanCoach(real);
+    return;
+  }
+  await renderPlanAlumno(real);
   await renderReservasAlumno(profile);
 }
 
@@ -820,6 +937,8 @@ function renderMisReservas(profile){
   const box = document.getElementById("misReservasCard");
   if(!box) return;
   const esTer = profile.categoria === "terapia";
+  const propio = !paraDe(profile);
+  const master = esEquipo();
   const aj = planes.ajustes || { horas_cancelacion: 24 };
   const horarios = planes.horarios || [];
   const ahora = new Date();
@@ -832,8 +951,9 @@ function renderMisReservas(profile){
   const regla = (r)=>{
     const empezo = new Date(r.inicio) <= ahora;
     if(r.estado === "espera") return "Si se libera un cupo, se confirma sola.";
-    if(empezo) return "Registra tu asistencia con el botón Escanear QR.";
-    if(!esTer) return "Si no puedes venir, cancela para liberar tu cupo.";
+    if(master) return r.origen === "master" ? "Agendada por un master. Si la cancelas, se le avisa." : "Si la cancelas, se le avisa" + (esTer ? " y la sesión se le devuelve." : ".");
+    if(empezo) return propio ? "Registra tu asistencia con el botón Escanear QR." : "Al llegar, escanea el QR desde tu cuenta: se registra su asistencia.";
+    if(!esTer) return propio ? "Si no puedes venir, cancela para liberar tu cupo." : "Si no puede venir, cancela para liberar el cupo.";
     const limite = limiteCancelacion(r.inicio, aj);
     return limite > ahora ? `Cancelación sin costo hasta el ${fmtFechaHora(limite.toISOString())}.` : "Si cancelas ahora, la sesión se pierde.";
   };
@@ -845,8 +965,8 @@ function renderMisReservas(profile){
         <p class="muted res-rule">${regla(r)}</p>
         ${new Date(r.inicio) <= ahora ? "" : `<button type="button" class="btn-danger" data-cancelar="${esc(r.id)}">${r.estado === "espera" ? "Salir de la lista" : "Cancelar"}</button>`}
       </li>`).join("")}</ul>`
-      : emptyHTML(esTer ? "No tienes reservas próximas." : "No tienes horarios reservados. Sin reserva, el QR no registra tu entrada.")}
-    <div class="qr-hint"><span class="qr-ico" aria-hidden="true">▣</span><span>Al llegar, toca <strong>Escanear QR</strong> y apunta al código de recepción para registrar tu asistencia.</span></div>
+      : emptyHTML(esTer ? (propio ? "No tienes reservas próximas." : "No tiene reservas próximas.") : propio ? "No tienes horarios reservados. Sin reserva, el QR no registra tu entrada." : "No tiene horarios reservados.")}
+    ${master ? "" : `<div class="qr-hint"><span class="qr-ico" aria-hidden="true">▣</span><span>Al llegar, toca <strong>Escanear QR</strong> y apunta al código de recepción para registrar ${propio ? "tu asistencia" : "la asistencia (la tuya y la de tus hijos)"}.</span></div>`}
     ${pasadas.length ? `<details class="records"><summary>Historial (${pasadas.length})</summary>
       <ul class="mov-list">${pasadas.map(r => `<li><span class="mov-txt">${fmtFechaHora(r.inicio)}</span><span class="res-state st-${estadoVisible(r)}">${ESTADO_RESERVA[estadoVisible(r)]}</span></li>`).join("")}</ul></details>` : ""}
     <div id="misResMsg" aria-live="polite"></div>`;
@@ -856,9 +976,10 @@ function renderMisReservas(profile){
       const enPlazo = limiteCancelacion(r.inicio, aj) > new Date();
       const d = openDialog(r.estado === "espera" ? "Salir de la lista de espera" : "Cancelar reserva", `
         <p><strong>${fmtFechaHora(r.inicio)}</strong></p>
-        ${r.estado === "espera" ? "<p>Saldrás de la lista de espera. No se descuenta nada.</p>"
-          : !esTer ? "<p>Se libera tu cupo para otra persona. Puedes reservar otro horario cuando quieras.</p>"
-          : enPlazo ? `<p>Estás dentro del plazo: <strong>la sesión vuelve a tu saldo</strong>.</p>`
+        ${r.estado === "espera" ? "<p>Sale de la lista de espera. No se descuenta nada.</p>"
+          : master ? `<p>Se libera el cupo y se le avisa.${esTer ? " <strong>La sesión vuelve a su saldo.</strong>" : ""}</p>`
+          : !esTer ? "<p>Se libera el cupo para otra persona. Se puede reservar otro horario cuando quieras.</p>"
+          : enPlazo ? `<p>Dentro del plazo: <strong>la sesión vuelve al saldo</strong>.</p>`
           : `<p class="plan-alert warn">Faltan menos de ${aj.horas_cancelacion} horas: <strong>si cancelas, la sesión se pierde</strong>.</p>`}
         <button type="button" class="btn-primary danger-fill" id="btnSiCancelar">Sí, cancelar</button>
         <button type="button" class="btn-link" id="btnNoCancelar" style="margin-top:6px">Volver</button>
@@ -871,9 +992,9 @@ function renderMisReservas(profile){
         d.close();
         await refrescarReservas(profile);
         const res = typeof data === "string" ? JSON.parse(data) : data;
-        showMsg(document.getElementById("misResMsg"), "ok", r.estado === "espera" ? "Saliste de la lista de espera."
-          : !esTer ? "Reserva cancelada. Tu cupo quedó libre."
-          : res && res.devuelto ? "Reserva cancelada. La sesión volvió a tu saldo." : "Reserva cancelada fuera de plazo: la sesión no se devuelve.");
+        showMsg(document.getElementById("misResMsg"), "ok", r.estado === "espera" ? "Listo, salió de la lista de espera."
+          : !esTer ? "Reserva cancelada. El cupo quedó libre."
+          : res && res.devuelto ? "Reserva cancelada. La sesión volvió al saldo." : "Reserva cancelada fuera de plazo: la sesión no se devuelve.");
       });
     };
   });
@@ -998,11 +1119,14 @@ async function procesarCheckin(codigo){
     loadInbox();
     return;
   }
+  const otros = Array.isArray(res.otros) ? res.otros : [];
+  const propio = res.propio !== false;
   openDialog("Asistencia registrada", `
     <div class="checkin-res ok"><span class="ck-icon" aria-hidden="true">✓</span>
-      <p class="ck-name">${esc(state.profile.nombre || "")}</p>
-      <p>${res.repetido ? "Ya habías registrado tu llegada." : esFort ? esc(MEDIDOR[0].txt) : "¡Bienvenido a Gymnika!"}</p>
+      <p class="ck-name">${esc(res.nombre || state.profile.nombre || "")}</p>
+      <p>${res.repetido ? (propio ? "Ya habías registrado tu llegada." : "Su llegada ya estaba registrada.") : esFort && propio ? esc(MEDIDOR[0].txt) : "¡Bienvenido a Gymnika!"}</p>
+      ${otros.length ? `<p>También registramos a <strong>${esc(listaNombres(otros))}</strong>.</p>` : ""}
       <p class="muted">${res.inicio ? (esFort ? "Horario de las " : "Sesión de las ") + fmtFechaHora(res.inicio).split("· ")[1] : ""}${res.vence ? " · tu acceso vence el " + fmtFecha(res.vence, true) : ""}</p>
     </div>`);
-  if(document.getElementById("planCard")) refrescarReservas(state.profile);
+  if(document.getElementById("planCard")) refrescarReservas((state.detail && state.detail.profile) || state.profile);
 }

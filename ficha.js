@@ -75,6 +75,12 @@ async function renderAthleteDetail(profile, isCoach, container){
   ].filter(Boolean).map(t=>`<li class="chip">${esc(t)}</li>`);
   if(isCoach && tieneLesion(profile.lesiones)) chips.push(`<li class="chip warn">Lesión: ${esc(profile.lesiones)}</li>`);
   if(isCoach && profile.autorizacion_medica === false) chips.push(`<li class="chip warn">Sin autorización médica</li>`);
+  if(isCoach && profile.tutor_id){
+    const tutor = state.athleteList.find(a => a.id === profile.tutor_id);
+    chips.push(`<li class="chip">Menor · a cargo de ${esc(tutor ? tutor.nombre : "su papá o mamá")}</li>`);
+  }
+  /* Papá o mamá viendo el panel de su hijo (ficha sin cuenta propia) */
+  const esHijo = !isCoach && state.profile && profile.id !== state.profile.id;
 
   const tip = tipDelDia();
   const cat = profile.categoria;
@@ -92,14 +98,16 @@ async function renderAthleteDetail(profile, isCoach, container){
     const consejos = `
     ${panelHTML("notasCard", "Consejos de tu coach", 6, { cls: "coach-voice", eyebrow: "Tu coach" })}
     ${panelHTML("tipCard", esc(tip.titulo), 6, { cls: "coach-voice", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}`;
+    const familia = !esHijo && !state.profile.tutor_id ? panelHTML("familiaCard", "Mi familia", 12, { eyebrow: "Hijos a tu cargo" }) : "";
     tabsAlumno = esTerapia ? {
       inicio: `
-    ${panelHTML("planCard", "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
+    ${panelHTML("planCard", esHijo ? "Sus sesiones" : "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
     ${estirar}
-    ${consejos}`,
+    ${consejos}
+    ${familia}`,
       reservar: `
     ${panelHTML("reservarCard", "Reservar sesión", 8, { note: "Cada reserva usa 1 sesión" })}
-    ${panelHTML("misReservasCard", "Mis reservas", 4)}`,
+    ${panelHTML("misReservasCard", esHijo ? "Sus reservas" : "Mis reservas", 4)}`,
       progreso: `
     ${resumenHTML}
     ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}`,
@@ -107,12 +115,13 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("fichaCard", "Datos personales", 12)}`
     } : {
       inicio: `
-    ${panelHTML("planCard", cat === "transicion" ? "Mi plan" : "Mi acceso", 12, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}
+    ${panelHTML("planCard", cat === "transicion" ? (esHijo ? "Su plan" : "Mi plan") : (esHijo ? "Su acceso" : "Mi acceso"), 12, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}
     ${estirar}
-    ${consejos}`,
+    ${consejos}
+    ${familia}`,
       reservar: `
     ${panelHTML("reservarCard", "Reservar horario", 8, { note: "Obligatorio para entrar" })}
-    ${panelHTML("misReservasCard", "Mis horarios", 4)}`,
+    ${panelHTML("misReservasCard", esHijo ? "Sus horarios" : "Mis horarios", 4)}`,
       progreso: `
     ${macroHTML}
     ${resumenHTML}
@@ -128,6 +137,7 @@ async function renderAthleteDetail(profile, isCoach, container){
   } else if(esTerapia){
     panels = `
     ${panelHTML("planCard", esMaster() ? "Plan y pagos" : "Sesiones", 12, { eyebrow: "Terapia" })}
+    ${agendaMasterHTML(profile)}
     ${panelHTML("notasCard", "Notas del coach", 6)}
     ${panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 6)}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
@@ -136,6 +146,7 @@ async function renderAthleteDetail(profile, isCoach, container){
   } else {
     panels = `
     ${panelHTML("planCard", esMaster() ? "Plan y pagos" : cat === "transicion" ? "Plan" : "Acceso", 12, { eyebrow: cat ? CATEGORIAS[cat].nombre + (cat === "transicion" ? " · terapia y fortalecimiento" : "") : "Sin categoría" })}
+    ${agendaMasterHTML(profile)}
     ${macroHTML}
     ${resumenHTML}
     ${panelHTML("notasCard", "Notas del coach", 6)}
@@ -198,8 +209,97 @@ async function renderAthleteDetail(profile, isCoach, container){
   if(hay("tiemposCard")) renderTiempos(tiempos || [], uid, isCoach);
   if(hay("nutricionCard")) renderNutricion(profile, uid, isCoach, solicitudes || []);
   renderEstiramientos(profile, uid, isCoach);
-  if(isCoach) await renderPlanCoach(profile);
-  else { await renderPlanAlumno(profile); await renderReservasAlumno(profile); }
+  container.querySelectorAll("[data-volver-panel]").forEach(b => { b.onclick = volverAMiPanel; });
+  if(isCoach){
+    await renderPlanCoach(profile);
+    if(token === state.renderToken && hay("reservarCard")) await renderReservasAlumno(profile);
+  } else {
+    await renderPlanAlumno(profile); await renderReservasAlumno(profile);
+    if(hay("familiaCard")) renderFamilia();
+  }
+}
+
+/* Master: agenda horarios por el alumno desde su ficha (por ejemplo, para que nadie pierda su horario de siempre) */
+function agendaMasterHTML(profile){
+  if(!esMaster() || !profile.categoria) return "";
+  return `
+    ${panelHTML("reservarCard", `Agendar a ${esc(primerNombre(profile.nombre) || "este alumno")}`, 12, { eyebrow: "Agenda", note: "Reservas a su nombre", cls: "agenda-master" })}
+    ${panelHTML("misReservasCard", "Sus reservas", 12)}`;
+}
+
+/* ---- Mi familia: hijos sin cuenta propia que el papá o la mamá maneja desde su panel ---- */
+async function cargarHijos(){
+  const { data, error } = await sb.from("profiles").select("*").eq("tutor_id", state.profile.id).order("nombre");
+  state.hijos = error ? [] : (data || []);
+  return state.hijos;
+}
+async function renderFamilia(){
+  if(!document.getElementById("familiaCard")) return;
+  const hijos = await cargarHijos();
+  const box = document.getElementById("familiaCard");
+  if(!box) return;
+  box.innerHTML = `
+    ${hijos.length ? `<ul class="familia-list">${hijos.map(h => {
+      const edad = calcEdad(h.fecha_nacimiento);
+      const sub = [h.categoria ? CATEGORIAS[h.categoria].nombre : null, edad !== null ? `${edad} años` : null].filter(Boolean).join(" · ");
+      return `
+      <li class="familia-item">
+        <span class="avatar" aria-hidden="true">${esc(initials(h.nombre || ""))}</span>
+        <span class="familia-info"><strong>${esc(h.nombre || "")}</strong><span class="muted">${esc(sub)}</span></span>
+        <button type="button" class="btn-outline" data-ver-hijo="${esc(h.id)}">Ver su panel</button>
+      </li>`; }).join("")}</ul>`
+      : `<p class="muted" style="margin-top:0">¿Vienes con tus hijos? Agrégalos aquí para reservar sus horarios, ver sus sesiones y su ficha desde tu cuenta. No necesitan correo ni contraseña.</p>`}
+    <button type="button" class="${hijos.length ? "btn-link" : "btn-outline"} familia-add" id="btnAgregarHijo">+ Agregar hijo o hija</button>
+    <div id="familiaMsg" aria-live="polite"></div>`;
+  box.querySelectorAll("[data-ver-hijo]").forEach(b => { b.onclick = ()=> verPanelHijo(hijos.find(h => h.id === b.dataset.verHijo)); });
+  document.getElementById("btnAgregarHijo").onclick = abrirAgregarHijo;
+}
+async function verPanelHijo(hijo){
+  if(!hijo) return;
+  history.replaceState(null, "", "#/inicio");
+  window.scrollTo(0, 0);
+  await renderAthleteDetail(hijo, false, document.getElementById("athleteMain"));
+}
+async function volverAMiPanel(){
+  history.replaceState(null, "", "#/inicio");
+  window.scrollTo(0, 0);
+  await renderAthleteDetail(state.profile, false, document.getElementById("athleteMain"));
+}
+function abrirAgregarHijo(){
+  const d = openDialog("Agregar hijo o hija", `
+    <form id="hijoForm" novalidate>
+      <div class="form-grid">
+        <div class="full">${categoriaPickerHTML("h_", null).replace("¿A qué vienes a Gymnika?", "¿A qué viene a Gymnika?")}</div>
+        <div class="full"><label for="h_nombre">Nombre completo<span class="req" aria-hidden="true">*</span></label><input id="h_nombre" autocomplete="off" required></div>
+        <div><label for="h_fnac">Fecha de nacimiento<span class="req" aria-hidden="true">*</span></label><input type="date" id="h_fnac" max="${todayStr()}" required></div>
+        <div><label for="h_sexo">Sexo <span class="muted">(opcional)</span></label><select id="h_sexo"><option value="">—</option><option value="F">Femenino</option><option value="M">Masculino</option></select></div>
+        <div class="full"><label for="h_les">Lesión o molestia <span class="muted">(obligatorio si viene a terapia)</span></label><input id="h_les" autocomplete="off"></div>
+      </div>
+      <p class="muted">Su ficha queda a tu cargo: tú reservas sus horarios, pagas sus sesiones y recibes sus avisos. No necesita correo ni contraseña.</p>
+      <button type="submit" class="btn-primary" id="btnGuardarHijo">Agregar</button>
+      <div id="hijoMsg" aria-live="polite"></div>
+    </form>`);
+  const form = d.el.querySelector("#hijoForm");
+  form.onsubmit = (e)=>{
+    e.preventDefault();
+    const btn = d.el.querySelector("#btnGuardarHijo");
+    withBusy(btn, "Guardando…", async ()=>{
+      const msg = d.el.querySelector("#hijoMsg");
+      const cat = categoriaElegida("h_");
+      const nombre = d.el.querySelector("#h_nombre").value.trim();
+      const fnac = d.el.querySelector("#h_fnac").value;
+      const les = d.el.querySelector("#h_les").value.trim();
+      if(!cat){ showMsg(msg, "error", "Elige si viene a terapia o a fortalecimiento."); return; }
+      if(!nombre){ showMsg(msg, "error", "Escribe su nombre completo."); return; }
+      if(!fnac){ showMsg(msg, "error", "Escribe su fecha de nacimiento."); return; }
+      if(cat === "terapia" && !les){ showMsg(msg, "error", "Cuéntanos su lesión o molestia para preparar la terapia."); return; }
+      const { error } = await sb.rpc("agregar_hijo", { p_nombre: nombre, p_fecha_nacimiento: fnac, p_categoria: cat, p_lesiones: les || null, p_sexo: d.el.querySelector("#h_sexo").value || null });
+      if(error){ showError(msg, error); return; }
+      d.close();
+      await renderFamilia();
+      showMsg(document.getElementById("familiaMsg"), "ok", `Listo: ${primerNombre(nombre)} ya está en tu familia. Toca «Ver su panel» para reservar sus horarios.`);
+    });
+  };
 }
 
 /* ---- Resumen "Tu proceso": se calcula con los datos que ya existen ---- */
@@ -295,6 +395,26 @@ function fichaFieldsInnerHTML(profile, required, prefix){
     </div>
   `;
 }
+/* Registro y "un último paso": solo fecha de nacimiento (para la edad), teléfono y lesión (obligatoria en terapia) */
+function registroCamposHTML(profile, prefix){
+  const v = (x)=> esc(x ?? "");
+  const req = '<span class="req" aria-hidden="true">*</span>';
+  return `
+    <div><label for="${prefix}fnac">Fecha de nacimiento${req}</label><input type="date" id="${prefix}fnac" required value="${v(profile.fecha_nacimiento)}" max="${todayStr()}"></div>
+    <div><label for="${prefix}tel">Teléfono (WhatsApp)${req}</label><input type="tel" inputmode="tel" autocomplete="tel" id="${prefix}tel" required value="${v(profile.telefono)}" placeholder="Ej: 987 654 321"></div>
+    <div class="full"><label for="${prefix}les">Lesión o molestia <span class="muted">(obligatorio si vienes a terapia)</span></label>
+      <input id="${prefix}les" value="${v(profile.lesiones)}" placeholder="Ej: dolor de rodilla derecha al correr"></div>`;
+}
+function registroDatos(prefix, categoria){
+  const val = (id)=> (document.getElementById(prefix + id).value || "").trim();
+  const payload = { fecha_nacimiento: val("fnac") || null, telefono: val("tel") || null, lesiones: val("les") || null };
+  let falta = null;
+  if(!payload.fecha_nacimiento) falta = "Escribe tu fecha de nacimiento.";
+  else if(payload.fecha_nacimiento > todayStr()) falta = "Revisa tu fecha de nacimiento.";
+  else if(!payload.telefono || payload.telefono.replace(/\D/g, "").length < 6) falta = "Escribe tu número de teléfono.";
+  else if(pideLesion(categoria) && !payload.lesiones) falta = "Cuéntanos tu lesión o molestia para preparar tu terapia.";
+  return { payload, falta };
+}
 function fichaFieldsHTML(profile, required, prefix){
   return `<div class="form-grid">${fichaFieldsInnerHTML(profile, required, prefix)}</div>
     <button type="button" class="btn-primary" id="btnSaveFicha${required?"Gate":""}">${required?"Guardar y continuar":"Guardar ficha"}</button>
@@ -320,8 +440,7 @@ function collectFichaFields(prefix, required){
   if(nombreEl) payload.nombre = nombreEl.value.trim();
   let missing = false;
   if(required){
-    const checkKeys = prefix==="su_" ? FICHA_REQUIRED.filter(k=>k!=="nombre") : FICHA_REQUIRED;
-    missing = checkKeys.some(k => payload[k] === null || payload[k] === undefined || String(payload[k]).trim() === "");
+    missing = FICHA_REQUIRED.some(k => payload[k] === null || payload[k] === undefined || String(payload[k]).trim() === "");
   }
   return { payload, missing };
 }
@@ -1199,6 +1318,11 @@ function detalleAlumnoHTML(profile, chips, tabs, fallo){
   return `
     <div class="detail detail-alumno">
       ${nav}
+      ${state.profile && profile.id !== state.profile.id ? `
+      <div class="viendo-hijo" role="status">
+        <span>Estás en el panel de <strong>${esc(profile.nombre || "")}</strong></span>
+        <button type="button" class="btn-outline" data-volver-panel>Volver a mi panel</button>
+      </div>` : ""}
       <div id="detailMsg">${fallo ? `<div class="error" role="alert">${esc("Parte de la ficha no cargó. " + errorES(fallo.error))}</div>` : ""}</div>
       <section class="tab-alumno" data-tab="inicio" aria-label="Inicio">
         <header class="detail-head perfil-head">

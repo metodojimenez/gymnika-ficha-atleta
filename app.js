@@ -29,6 +29,7 @@ const SECCIONES_COACH = {
   hoy:         { t: "Hoy",      ico: "◉" },
   agenda:      { t: "Horario",  ico: "◷" },
   rutinas:     { t: "Rutinas",  ico: "R" },
+  tareas:      { t: "Tareas",   ico: "✓", master: true },
   pagos:       { t: "Pagos",    ico: "S/", master: true },
   resumen:     { t: "Resumen",  ico: "▤", master: true },
   equipo:      { t: "Equipo",   ico: "☰", master: true },
@@ -131,7 +132,7 @@ function errorES(error){
   const hit = ERROR_ES.find(([re]) => re.test(m));
   if(hit) return hit[1];
   /* Mensajes propios de la base de datos (reservas, pagos, check-in): ya vienen en español */
-  if(error && (error.code === "P0001" || error.code === "42501") && /[áéíóúñ¿]|^(No |Ese |Ya |Solo |La |El |Este |Esta |Tu |Primero|Inicia|Las )/.test(m)) return m;
+  if(error && (error.code === "P0001" || error.code === "42501") && /[áéíóúñ¿]|^(No |Ese |Ya |Solo |La |El |Este |Esta |Tu |Su |Primero|Inicia|Las |Escribe|Elige|Llegaste|Una |Se puede|Uno )/.test(m)) return m;
   return "No se pudo completar la acción. Inténtalo de nuevo.";
 }
 function showMsg(el, type, text){
@@ -274,8 +275,8 @@ function setAuthTab(isLogin){
           <div class="full"><label for="suEmail">Email<span class="req" aria-hidden="true">*</span></label><input type="email" id="suEmail" autocomplete="email" inputmode="email" placeholder="nombre@correo.com" required></div>
           <div><label for="suPass">Contraseña<span class="req" aria-hidden="true">*</span></label><input type="password" id="suPass" autocomplete="new-password" placeholder="Mínimo 6 caracteres" required></div>
           <div><label for="suPass2">Confirmar contraseña<span class="req" aria-hidden="true">*</span></label><input type="password" id="suPass2" autocomplete="new-password" placeholder="Repite la contraseña" required></div>
-          <p class="eyebrow form-section">Tu información</p>
-          ${fichaFieldsInnerHTML({}, true, "su_")}
+          <p class="eyebrow form-section">Tus datos</p>
+          ${registroCamposHTML({}, "su_")}
           ${terminosCheckHTML("su_")}
         </div>
         <button type="submit" class="btn-primary" id="btnSignup">Crear cuenta</button>
@@ -374,26 +375,37 @@ async function doSignup(){
     const pass = document.getElementById("suPass").value;
     const pass2 = document.getElementById("suPass2").value;
     const msg = document.getElementById("authMsg");
-    if(!nombre || !email || !pass || !pass2){ showMsg(msg, "error", "Completa todos los campos."); return; }
+    if(!nombre || !email || !pass || !pass2){ showMsg(msg, "error", "Completa tu nombre, email y contraseña."); return; }
     if(pass.length < 6){ showMsg(msg, "error", "La contraseña debe tener al menos 6 caracteres."); return; }
     if(pass !== pass2){ showMsg(msg, "error", "Las contraseñas no coinciden."); return; }
     const categoria = categoriaElegida("su_");
     if(!categoria){ showMsg(msg, "error", "Elige si vienes a terapia o a fortalecimiento."); return; }
-    const { payload: fichaPayload, missing } = collectFichaFields("su_", true);
-    if(missing){ showMsg(msg, "error", "Completa toda tu información personal, disponibilidad y objetivos."); return; }
+    const { payload: fichaPayload, falta } = registroDatos("su_", categoria);
+    if(falta){ showMsg(msg, "error", falta); return; }
     if(!document.getElementById("su_terminos").checked){ showMsg(msg, "error", "Para crear tu cuenta debes aceptar los términos y condiciones."); return; }
     fichaPayload.nombre = nombre;
     fichaPayload.categoria = categoria;
     fichaPayload.acepto_terminos_at = new Date().toISOString();
-    const { data, error } = await sb.auth.signUp({ email, password: pass, options: { data: { nombre, categoria, acepto_terminos: "true" } } });
+    /* Todo lo del registro viaja con la cuenta: si confirma el correo después (o en otro teléfono), la ficha ya queda lista */
+    const { data, error } = await sb.auth.signUp({ email, password: pass, options: {
+      emailRedirectTo: location.origin + location.pathname,
+      data: { nombre, categoria, acepto_terminos: "true", telefono: fichaPayload.telefono, fecha_nacimiento: fichaPayload.fecha_nacimiento, lesiones: fichaPayload.lesiones }
+    } });
     if(error){ showError(msg, error); return; }
     if(data.session){
       const { error: upErr } = await sb.from("profiles").update(fichaPayload).eq("id", data.session.user.id);
-      if(upErr) console.error(upErr); // si falla, la pantalla "completa tu ficha" la vuelve a pedir
+      if(upErr) console.error(upErr);
       await bootAfterAuth();
     } else {
-      showMsg(msg, "ok", "Cuenta creada. Revisa tu correo para confirmarla. Al iniciar sesión por primera vez te pediremos tu información una vez más para guardarla.");
-      setTimeout(()=>{ if(document.getElementById("tabLogin")) setAuthTab(true); }, 3200);
+      document.getElementById("authCard").innerHTML = `
+        <div class="done-box">
+          <span class="done-icon" aria-hidden="true">✓</span>
+          <h3>Revisa tu correo</h3>
+          <p>Te enviamos un correo a <strong>${esc(email)}</strong>. Toca <strong>Confirmar mi cuenta</strong> y entrarás directo a tu ficha: no tienes que llenar nada más.</p>
+          <p class="muted">Si no lo ves en unos minutos, revisa la carpeta de spam o promociones.</p>
+          <button type="button" class="btn-outline" id="btnYaConfirme">Ya confirmé, iniciar sesión</button>
+        </div>`;
+      document.getElementById("btnYaConfirme").onclick = ()=>{ setAuthTab(true); const e = document.getElementById("loginEmail"); if(e){ e.value = email; document.getElementById("loginPass").focus(); } };
     }
   });
 }
@@ -623,11 +635,29 @@ function renderMacro(eventos, animate){
 }
 
 /* ====================== ARRANQUE ====================== */
-const FICHA_REQUIRED = ["nombre","fecha_nacimiento","sexo","telefono","contacto_emergencia","altura_cm","deporte","nivel_experiencia","disponibilidad","objetivo","plazo_objetivo"];
+/* Registro simple: solo nombre, fecha de nacimiento (edad), teléfono y, si viene a terapia, su lesión. Lo demás se completa después en "Mi ficha". */
+const FICHA_REQUIRED = ["nombre","fecha_nacimiento","telefono"];
+const pideLesion = (cat)=> cat === "terapia" || cat === "transicion";
+const vacio = (x)=> x === null || x === undefined || String(x).trim() === "";
 function isProfileComplete(p){
-  return FICHA_REQUIRED.every(k => p[k] !== null && p[k] !== undefined && String(p[k]).trim() !== "")
-    && (p.autorizacion_medica === true || p.autorizacion_medica === false)
-    && !!p.categoria && !!p.acepto_terminos_at;
+  return FICHA_REQUIRED.every(k => !vacio(p[k]))
+    && !!p.categoria && !!p.acepto_terminos_at
+    && (!pideLesion(p.categoria) || !vacio(p.lesiones));
+}
+/* Si la ficha quedó incompleta pero la cuenta trae los datos del registro (confirmó el correo después), se copian solos */
+async function completarDesdeRegistro(profile, user){
+  const m = (user && user.user_metadata) || {};
+  const parche = {};
+  if(vacio(profile.nombre) && !vacio(m.nombre)) parche.nombre = String(m.nombre).trim();
+  if(vacio(profile.telefono) && !vacio(m.telefono)) parche.telefono = String(m.telefono).trim();
+  if(vacio(profile.fecha_nacimiento) && /^\d{4}-\d{2}-\d{2}$/.test(m.fecha_nacimiento || "")) parche.fecha_nacimiento = m.fecha_nacimiento;
+  if(vacio(profile.lesiones) && !vacio(m.lesiones)) parche.lesiones = String(m.lesiones).trim();
+  if(!profile.categoria && ["terapia", "fortalecimiento"].includes(m.categoria)) parche.categoria = m.categoria;
+  if(!profile.acepto_terminos_at && m.acepto_terminos === "true") parche.acepto_terminos_at = new Date().toISOString();
+  if(!Object.keys(parche).length) return profile;
+  const { error } = await sb.from("profiles").update(parche).eq("id", profile.id);
+  if(error){ console.error(error); return profile; }
+  return { ...profile, ...parche };
 }
 
 async function bootAfterAuth(){
@@ -653,7 +683,8 @@ async function bootAfterAuth(){
   }
   state.profile = profile;
   if(esEquipo(profile)){ tomarCheckinPendiente(); renderCoachHome(); return; }
-  if(!isProfileComplete(profile)){ renderCompleteProfileGate(profile); return; }
+  if(!isProfileComplete(profile)) state.profile = await completarDesdeRegistro(profile, session.user);
+  if(!isProfileComplete(state.profile)){ renderCompleteProfileGate(state.profile); return; }
   await renderAthleteHome();
   const codigo = tomarCheckinPendiente();
   if(codigo) procesarCheckin(codigo);
@@ -661,16 +692,17 @@ async function bootAfterAuth(){
 
 function renderCompleteProfileGate(profile){
   authShell(`
-    <p class="eyebrow">Completa tu ficha</p>
-    <h1>Antes de empezar</h1>
-    <p class="lede" style="margin:10px 0 20px">Necesitamos tu información personal y tus objetivos para activar tu cuenta. Esto no incluye medidas corporales: esas las cargas después.</p>
+    <p class="eyebrow">Un último paso</p>
+    <h1>Completa tus datos</h1>
+    <p class="lede" style="margin:10px 0 20px">Solo lo básico para activar tu cuenta. El resto lo puedes completar cuando quieras en «Mi ficha».</p>
     <div class="card" id="gateCard"></div>
     <button type="button" class="btn-link" id="btnLogoutGate" style="margin-top:10px">Salir</button>
   `);
   document.getElementById("btnLogoutGate").onclick = doLogout;
   document.getElementById("gateCard").innerHTML = `<div class="form-grid">
       ${profile.categoria ? "" : `<div class="full">${categoriaPickerHTML("g_", null)}</div>`}
-      ${fichaFieldsInnerHTML(profile, true, "g_")}
+      <div class="full"><label for="g_nombre">Nombre completo<span class="req" aria-hidden="true">*</span></label><input id="g_nombre" autocomplete="name" value="${esc(profile.nombre || "")}" required></div>
+      ${registroCamposHTML(profile, "g_")}
       ${profile.acepto_terminos_at ? "" : terminosCheckHTML("g_")}
     </div>
     <button type="button" class="btn-primary" id="btnSaveFichaGate">Guardar y continuar</button>
@@ -678,13 +710,14 @@ function renderCompleteProfileGate(profile){
   activarLinksTerminos(document.getElementById("gateCard"));
   const btn = document.getElementById("btnSaveFichaGate");
   btn.onclick = ()=> withBusy(btn, "Guardando…", async ()=>{
-    const { payload, missing } = collectFichaFields("g_", true);
     const msg = document.getElementById("gateMsg");
-    if(!profile.categoria){
-      payload.categoria = categoriaElegida("g_");
-      if(!payload.categoria){ showMsg(msg, "error", "Elige si vienes a terapia o a fortalecimiento."); return; }
-    }
-    if(missing){ showMsg(msg, "error", "Completa todos los campos antes de continuar."); return; }
+    const cat = profile.categoria || categoriaElegida("g_");
+    if(!cat){ showMsg(msg, "error", "Elige si vienes a terapia o a fortalecimiento."); return; }
+    const { payload, falta } = registroDatos("g_", cat);
+    payload.nombre = document.getElementById("g_nombre").value.trim();
+    if(!payload.nombre){ showMsg(msg, "error", "Escribe tu nombre completo."); return; }
+    if(falta){ showMsg(msg, "error", falta); return; }
+    if(!profile.categoria) payload.categoria = cat;
     if(!profile.acepto_terminos_at){
       if(!document.getElementById("g_terminos").checked){ showMsg(msg, "error", "Debes aceptar los términos y condiciones para continuar."); return; }
       payload.acepto_terminos_at = new Date().toISOString();
@@ -779,7 +812,7 @@ const inbox = { items: [], enabled: true, timer: null, open: false, cargando: fa
 const INBOX_SECCION = {
   consejos: "notasCard", plan: "nutricionCard", compensacion: "estiramientosCard", ficha: "fichaCard",
   medidas: "medidasCard", fuerza: "fuerzaCard", tiempos: "tiemposCard", eventos: "agendaCard",
-  pago: "planCard", reserva: "misReservasCard", sesiones: "planCard", acceso: "planCard", checkin_error: "misReservasCard"
+  pago: "planCard", reserva: "misReservasCard", sesiones: "planCard", acceso: "planCard", checkin_error: "misReservasCard", recordatorio: "misReservasCard"
 };
 function tiempoRelativo(iso){
   const d = new Date(iso); if(isNaN(d)) return "";
@@ -831,7 +864,7 @@ async function loadInbox(){
 /* ====================== VENTANAS EMERGENTES (MASTER) ======================
    Cuando un alumno reserva un horario, el master ve una ventana emergente en la app y, si dio permiso,
    una notificación del sistema en este dispositivo. Funciona mientras la app esté abierta (aunque esté en otra pestaña). */
-const TIPOS_EMERGENTES = ["reserva_nueva", "checkin_error"];
+const TIPOS_EMERGENTES = ["reserva_nueva", "checkin_error", "solicitud_terapia", "tarea"];
 /* Un aviso cuenta como nuevo por id y hora: si la base lo actualiza (mismo alumno en pocos minutos) también se avisa */
 const claveAviso = (n)=> n.id + "|" + n.created_at;
 function avisarNuevas(items){
@@ -949,16 +982,17 @@ function mostrarEmergente(n){
   }
   const el = document.createElement("div");
   el.className = "emergente" + (n.tipo === "checkin_error" ? " alerta" : ""); el.setAttribute("role", "status");
-  el.innerHTML = `<span class="em-ico" aria-hidden="true">${n.tipo === "checkin_error" ? "!" : "◷"}</span>
+  const ver = n.tipo === "tarea" ? ["✓", "Ver tareas", "#/tareas"] : n.tipo === "solicitud_terapia" ? ["✚", "Ver ficha", "#/atleta/" + encodeURIComponent(n.atleta_id || "")] : [n.tipo === "checkin_error" ? "!" : "◷", "Ver horario", "#/agenda"];
+  el.innerHTML = `<span class="em-ico" aria-hidden="true">${ver[0]}</span>
     <div class="em-txt"><strong>${esc(n.titulo)}</strong>${n.mensaje ? `<span>${esc(n.mensaje)}</span>` : ""}</div>
-    <div class="em-acc"><button type="button" class="btn-link" data-ver>Ver horario</button><button type="button" class="icon-btn" data-cerrar aria-label="Cerrar aviso">✕</button></div>`;
+    <div class="em-acc"><button type="button" class="btn-link" data-ver>${ver[1]}</button><button type="button" class="icon-btn" data-cerrar aria-label="Cerrar aviso">✕</button></div>`;
   const cerrar = ()=>{ el.classList.add("sale"); setTimeout(()=> el.remove(), 220); };
   el.querySelector("[data-cerrar]").onclick = cerrar;
-  el.querySelector("[data-ver]").onclick = ()=>{ cerrar(); marcarLeida([n.id]); if(location.hash === "#/agenda") showCoachRoute(); else location.hash = "#/agenda"; };
+  el.querySelector("[data-ver]").onclick = ()=>{ cerrar(); abrirNotificacion(n.id); };
   pila.prepend(el);
   while(pila.children.length > 4) pila.lastElementChild.remove();
-  setTimeout(cerrar, 12000);
-  notificarSistema(n, "#/agenda");
+  setTimeout(cerrar, n.tipo === "solicitud_terapia" ? 30000 : 12000);
+  notificarSistema(n, ver[2]);
 }
 function renderInboxBadge(){
   const btn = document.getElementById("btnInbox"), badge = document.getElementById("inboxBadge");
@@ -1046,6 +1080,7 @@ async function abrirNotificacion(id){
   if(esEquipo()){
     if((n.tipo === "pago" || n.tipo === "pago_aprobado") && esMaster()){ if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos"; return; }
     if(n.tipo === "checkin" || n.tipo === "reserva_nueva" || n.tipo === "checkin_error"){ if(location.hash === "#/agenda") showCoachRoute(); else location.hash = "#/agenda"; return; }
+    if(n.tipo === "tarea"){ if(location.hash === "#/tareas") showCoachRoute(); else location.hash = "#/tareas"; return; }
     if(!n.atleta_id) return;
     if(!state.athleteList.some(a => a.id === n.atleta_id)) await refreshCoachAside();
     const destino = "#/atleta/" + encodeURIComponent(n.atleta_id);
@@ -1072,7 +1107,7 @@ function routeAthleteId(){
   return m ? decodeURIComponent(m[1]) : null;
 }
 function routeCoachSeccion(){
-  const m = location.hash.match(/^#\/(hoy|agenda|rutinas|pagos|resumen|equipo|comunicados|ajustes)\b/);
+  const m = location.hash.match(/^#\/(hoy|agenda|rutinas|tareas|pagos|resumen|equipo|comunicados|ajustes)\b/);
   return m ? m[1] : null;
 }
 /* Alertas del equipo (última semana de acceso en fortalecimiento, 2 o menos sesiones en terapia) */
@@ -1082,7 +1117,8 @@ async function cargarAlertas(){
   return state.alertas;
 }
 function alertaTexto(a){
-  if(a.tipo === "sesiones") return a.valor <= 0 ? "Sin sesiones" : a.valor === 1 ? "Le queda 1 sesión" : `Le quedan ${a.valor} sesiones`;
+  /* Terapia: ya no tiene sesiones por agendar; valor = sesiones agendadas que le quedan por hacer */
+  if(a.tipo === "sesiones") return a.valor <= 0 ? "Sin sesiones" : a.valor === 1 ? "Le queda 1 agendada" : `Le quedan ${a.valor} agendadas`;
   return a.valor <= 1 ? "Su acceso vence hoy" : `Última semana · vence en ${a.valor} días`;
 }
 
@@ -1103,7 +1139,7 @@ async function renderCoachHome(){
   if(routeAthleteId() || routeCoachSeccion()) document.getElementById("coachLayout").classList.add("has-selection");
   await refreshCoachAside();
   showCoachRoute();
-  if(esMaster()) actualizarBadgePagos();
+  if(esMaster()){ actualizarBadgePagos(); actualizarBadgeTareas(); }
 }
 
 async function refreshCoachAside(){
@@ -1134,7 +1170,7 @@ async function refreshCoachAside(){
       </div>
     </div>`}
     <nav class="coach-nav n-${secciones.length}" aria-label="Secciones del coach">
-      ${secciones.map(k => `<a href="#/${k}" data-nav="${k}"><span class="cn-ico" aria-hidden="true">${SECCIONES_COACH[k].ico}</span>${SECCIONES_COACH[k].t}${k === "pagos" ? `<span class="cn-badge" id="navPagosBadge" hidden></span>` : k === "hoy" && state.alertas.length ? `<span class="cn-badge alerta" aria-label="${plural(state.alertas.length, "alerta", "alertas")}">${state.alertas.length}</span>` : ""}</a>`).join("")}
+      ${secciones.map(k => `<a href="#/${k}" data-nav="${k}"><span class="cn-ico" aria-hidden="true">${SECCIONES_COACH[k].ico}</span>${SECCIONES_COACH[k].t}${k === "pagos" ? `<span class="cn-badge" id="navPagosBadge" hidden></span>` : k === "tareas" ? `<span class="cn-badge" id="navTareasBadge" hidden></span>` : k === "hoy" && state.alertas.length ? `<span class="cn-badge alerta" aria-label="${plural(state.alertas.length, "alerta", "alertas")}">${state.alertas.length}</span>` : ""}</a>`).join("")}
     </nav>
     ${error ? `<div class="error" role="alert">${esc(errorES(error))}</div>` : ""}
     ${(solicitudesPend && solicitudesPend.length) ? `
@@ -1214,6 +1250,7 @@ function renderAthleteListInto(list){
     if(a.categoria && (!areaCoach() || a.categoria === "transicion")) flags.push(`<span class="flag cat-${a.categoria}">${CATEGORIAS[a.categoria].nombre}</span>`);
     if(tieneLesion(a.lesiones)) flags.push(`<span class="flag warn">Lesión</span>`);
     if(a.autorizacion_medica === false) flags.push(`<span class="flag warn">Sin autorización médica</span>`);
+    if(a.tutor_id) flags.push(`<span class="flag info">Menor</span>`);
     if(!isProfileComplete(a)) flags.push(`<span class="flag info">Ficha incompleta</span>`);
     const sub = [a.deporte, a.nivel_experiencia].filter(Boolean).join(" · ") || a.objetivo || "Sin deporte registrado";
     const active = a.id === state.viewingAthleteId;
@@ -1256,6 +1293,7 @@ async function showCoachRoute(){
     else if(seccion === "hoy") await renderCoachHoy(main);
     else if(seccion === "agenda") await renderCoachAgenda(main);
     else if(seccion === "rutinas") renderCoachRutinas(main);
+    else if(seccion === "tareas") await renderCoachTareas(main);
     else if(seccion === "resumen") await renderCoachResumen(main);
     else if(seccion === "equipo") await renderCoachEquipo(main);
     else if(seccion === "comunicados") await renderCoachComunicados(main);

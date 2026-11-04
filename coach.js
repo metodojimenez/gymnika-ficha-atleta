@@ -13,8 +13,11 @@ async function renderPlanCoach(profile){
       <button type="button" class="btn-outline" id="btnGuardarCat">Guardar</button>
     </div><div id="catMsg" aria-live="polite"></div>`;
   if(!cat){ box.innerHTML = catSelect + `<p class="muted" style="margin-top:10px">Elige la categoría para ver sus sesiones o su acceso mensual.</p>`; bindCat(); return; }
-  const plan = await cargarPlanDe(profile.id, cat);
+  const [plan] = await Promise.all([cargarPlanDe(profile.id, cat), cargarHorarios()]);
   if(!document.getElementById("planCard")) return;
+  const rs = resumenSesiones(plan, cat);
+  const avisoSesiones = rs.disponibles <= 0 && rs.agendadas.length <= 2 && (plan.movs || []).length
+    ? `<p class="plan-alert warn" role="status">${rs.agendadas.length ? `Ya agendó todas sus sesiones: le ${rs.agendadas.length === 1 ? "queda 1" : "quedan 2"} por hacer.` : "No le quedan sesiones."}${master ? " Conviene ofrecerle un nuevo paquete." : ""}</p>` : "";
   const comprasHTML = master && plan.compras.length ? `
     <details class="records"><summary>Pagos (${plan.compras.length})</summary>
       <ul class="mov-list">${plan.compras.map(c => `<li><span class="mov-txt">${esc(c.paquete_nombre)} · ${dinero(c.monto, c.moneda)} · ${esc(METODOS_PAGO[c.metodo] || c.metodo)}</span>
@@ -26,10 +29,8 @@ async function renderPlanCoach(profile){
     const prox = plan.reservas.filter(r => ["confirmada","espera"].includes(r.estado) && new Date(r.inicio) > ahora)
       .sort((a,b)=> String(a.inicio).localeCompare(String(b.inicio)));
     box.innerHTML = catSelect + riesgoPickerHTML(profile) + `
-      <div class="plan-hero compact">
-        <div class="plan-big"><span class="plan-num num">${plan.saldo}</span><span class="plan-unit">${plan.saldo === 1 ? "sesión disponible" : "sesiones disponibles"}</span></div>
-      </div>
-      ${plan.saldo <= 2 ? `<p class="plan-alert warn" role="status">${plan.saldo <= 0 ? "No le quedan sesiones." : plan.saldo === 1 ? "Le queda 1 sesión." : "Le quedan 2 sesiones."}${master ? " Conviene ofrecerle un nuevo paquete." : ""}</p>` : ""}
+      ${sesionesHTML(rs, { propio: false })}
+      ${avisoSesiones}
       ${master ? `<div class="inline-add tokens-adj">
         <input type="number" id="adjCant" inputmode="numeric" placeholder="+2 o −1" aria-label="Sesiones a sumar o restar">
         <input id="adjNota" placeholder="Motivo (ej: cortesía)" aria-label="Motivo del ajuste">
@@ -54,6 +55,7 @@ async function renderPlanCoach(profile){
       const { error } = await sb.rpc("ajustar_tokens", { p_user: profile.id, p_cantidad: n, p_nota: document.getElementById("adjNota").value });
       if(error){ showError(msg, error); return; }
       await renderPlanCoach(profile);
+      if(document.getElementById("reservarCard")){ state.plan = null; await renderReservasAlumno(profile); }
       showMsg(document.getElementById("adjMsg"), "ok", "Saldo actualizado.");
     });
     box.querySelectorAll("[data-coach-cancelar]").forEach(b => {
@@ -76,7 +78,8 @@ async function renderPlanCoach(profile){
     <div class="trans-ter-coach">
       <p class="eyebrow">Terapia</p>
       ${riesgoPickerHTML(profile)}
-      <div class="plan-big"><span class="plan-num num">${plan.saldo}</span><span class="plan-unit">${plan.saldo === 1 ? "sesión disponible" : "sesiones disponibles"}</span></div>
+      ${sesionesHTML(rs, { propio: false })}
+      ${avisoSesiones}
       ${master ? `<div class="inline-add tokens-adj">
         <input type="number" id="adjCant" inputmode="numeric" placeholder="+2 o −1" aria-label="Sesiones a sumar o restar">
         <input id="adjNota" placeholder="Motivo (ej: cortesía)" aria-label="Motivo del ajuste">
@@ -93,12 +96,36 @@ async function renderPlanCoach(profile){
         : `<span class="plan-num plan-word off">${est.ultima ? "Vencido" : "Sin acceso"}</span><span class="plan-unit">${est.ultima ? "venció el " + fmtFecha(est.ultima.fin, true) : ""}</span>`}
     </div></div>
     ${alertaAccesoHTML(profile.id)}
+    ${master ? `
+    <div class="acceso-adj">
+      <p class="acceso-adj-t">Habilitar acceso${cat === "transicion" ? " a fortalecimiento" : ""}</p>
+      <div class="inline-add">
+        <div><label for="accDesde" style="margin-top:0">Desde</label><input type="date" id="accDesde" value="${esc(est.finTotal && est.finTotal >= hoy ? fechaISO(sumarDias(parseFecha(est.finTotal), 1)) : hoy)}"></div>
+        <div><label for="accDias" style="margin-top:0">Días</label><input type="number" id="accDias" inputmode="numeric" min="1" max="400" value="30"></div>
+        <button type="button" class="btn-outline" id="btnAsignarAcceso">Habilitar</button>
+      </div>
+      <p class="muted">${cat === "transicion" ? "En transición el acceso se cobra y coordina en el centro. Al habilitarlo, se le avisa para que escoja su horario." : "Para pagos coordinados en el centro. Se le avisa para que escoja su horario."}</p>
+      <div id="accMsg" aria-live="polite"></div>
+    </div>` : ""}
     ${master ? suscripcionHTML(plan, true) : ""}
     <p class="muted">Asistencias registradas: <strong>${plan.asistencias.length}</strong>${plan.asistencias[0] ? " · última: " + fmtFecha(plan.asistencias[0].fecha) : ""}</p>
     ${plan.congelamientos.length ? `<details class="records"><summary>Congelamientos (${plan.congelamientos.length})</summary>
       <ul class="mov-list">${plan.congelamientos.map(c => `<li><span class="mov-txt">Del ${fmtFecha(c.desde)} al ${fmtFecha(c.hasta)}${c.motivo ? " · " + esc(c.motivo) : ""}</span></li>`).join("")}</ul></details>` : ""}
     ${comprasHTML}`;
   bindCat();
+  const bacc = document.getElementById("btnAsignarAcceso");
+  if(bacc) bacc.onclick = ()=> withBusy(bacc, "…", async ()=>{
+    const desde = document.getElementById("accDesde").value;
+    const dias = parseInt(document.getElementById("accDias").value, 10);
+    const msg = document.getElementById("accMsg");
+    if(!desde){ showMsg(msg, "error", "Elige desde qué día."); return; }
+    if(!dias || dias < 1){ showMsg(msg, "error", "Escribe cuántos días de acceso."); return; }
+    const { data, error } = await sb.rpc("asignar_acceso", { p_user: profile.id, p_desde: desde, p_dias: dias });
+    if(error){ showError(msg, error); return; }
+    await renderPlanCoach(profile);
+    if(document.getElementById("reservarCard")){ state.plan = null; await renderReservasAlumno(profile); }
+    showMsg(document.getElementById("accMsg"), "ok", `Acceso habilitado hasta el ${fmtFecha(data, true)}. Ya puede escoger su horario.`);
+  });
   if(cat === "transicion"){
     bindRiesgo(profile);
     const ba = document.getElementById("btnAjustar");
@@ -109,6 +136,7 @@ async function renderPlanCoach(profile){
       const { error } = await sb.rpc("ajustar_tokens", { p_user: profile.id, p_cantidad: n, p_nota: document.getElementById("adjNota").value });
       if(error){ showError(msg, error); return; }
       await renderPlanCoach(profile);
+      if(document.getElementById("reservarCard")){ state.plan = null; await renderReservasAlumno(profile); }
       showMsg(document.getElementById("adjMsg"), "ok", "Saldo actualizado.");
     });
   }
@@ -651,8 +679,8 @@ function alertasListaHTML(alertas){
 }
 async function renderCoachHoy(main){
   const area = areaCoach();
-  const nota = !area ? "Fortalecimiento: última semana de acceso · Terapia: 2 sesiones o menos"
-    : area === "terapia" ? "Pacientes con 2 sesiones o menos" : "Alumnos en su última semana de acceso";
+  const nota = !area ? "Fortalecimiento: última semana de acceso · Terapia: sin sesiones por agendar y 2 o menos agendadas"
+    : area === "terapia" ? "Pacientes sin sesiones por agendar y con 2 o menos agendadas" : "Alumnos en su última semana de acceso";
   main.innerHTML = `<div class="detail"><header class="detail-head">
     <a class="back" href="#/">← Atletas</a>
     <p class="eyebrow">${esc(ROLES_EQUIPO[state.profile.role] || "Panel del coach")}</p><h1>Hoy</h1>
@@ -928,4 +956,122 @@ async function pintarHistorialConsejos(){
   pintar("");
   const q = document.getElementById("histConsBuscar");
   if(q) q.oninput = ()=> pintar(q.value);
+}
+
+/* ====================== MASTER: TAREAS DEL EQUIPO ======================
+   Una sola lista compartida entre los master coach: cualquiera agrega, asigna a alguien y marca como hecha.
+   Si una tarea se asigna a otro master, a esa persona le llega un aviso. */
+const tareasUI = { filtro: "todas" };
+function mastersEquipo(){ return (state.equipo || []).filter(p => p.role === "coach").sort((a, b) => String(a.nombre).localeCompare(String(b.nombre))); }
+async function renderCoachTareas(main){
+  const masters = mastersEquipo();
+  main.innerHTML = `<div class="detail"><header class="detail-head">
+      <a class="back" href="#/">← Atletas</a>
+      <p class="eyebrow">Master coach</p><h1>Tareas</h1>
+      <p class="muted" style="margin-top:6px">Lista compartida del equipo master: cualquiera agrega, asigna y marca como hecha.</p>
+    </header>
+    <section class="panel tareas-panel" aria-label="Tareas del equipo">
+      <form id="tareaForm" class="tarea-form" novalidate>
+        <label for="tareaTexto" class="sr-only">Nueva tarea</label>
+        <input id="tareaTexto" maxlength="500" placeholder="Nueva tarea" autocomplete="off">
+        <div class="tarea-opts">
+          <div><label for="tareaPara">Para</label>
+            <select id="tareaPara"><option value="">Cualquiera</option>${masters.map(m => `<option value="${esc(m.id)}"${m.id === state.profile.id ? " selected" : ""}>${esc(m.id === state.profile.id ? "Yo" : m.nombre || "Master")}</option>`).join("")}</select></div>
+          <div><label for="tareaFecha">Para cuándo <span class="muted">(opcional)</span></label><input type="date" id="tareaFecha" min="${todayStr()}"></div>
+          <button class="btn-primary" type="submit" id="btnTarea">Agregar</button>
+        </div>
+      </form>
+      <div id="tareaMsg" aria-live="polite"></div>
+      <div class="seg tareas-filtro" role="group" aria-label="Qué tareas ver">
+        <button type="button" data-tfiltro="todas" aria-pressed="${tareasUI.filtro === "todas"}">Todas</button>
+        <button type="button" data-tfiltro="mias" aria-pressed="${tareasUI.filtro === "mias"}">Mías</button>
+      </div>
+      <div id="tareasLista" aria-live="polite"><div class="skel skel-block"></div></div>
+    </section></div>`;
+  main.querySelectorAll("[data-tfiltro]").forEach(b => {
+    b.onclick = ()=>{
+      tareasUI.filtro = b.dataset.tfiltro;
+      main.querySelectorAll("[data-tfiltro]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+      pintarTareas();
+    };
+  });
+  const form = document.getElementById("tareaForm");
+  form.onsubmit = (e)=>{
+    e.preventDefault();
+    const btn = document.getElementById("btnTarea");
+    withBusy(btn, "…", async ()=>{
+      const msg = document.getElementById("tareaMsg");
+      const texto = document.getElementById("tareaTexto").value.trim();
+      if(!texto){ showMsg(msg, "error", "Escribe la tarea."); return; }
+      const { error } = await sb.from("tareas_equipo").insert({
+        texto, asignada_a: document.getElementById("tareaPara").value || null,
+        fecha_limite: document.getElementById("tareaFecha").value || null
+      });
+      if(error){ showError(msg, error); return; }
+      document.getElementById("tareaTexto").value = "";
+      document.getElementById("tareaFecha").value = "";
+      msg.innerHTML = "";
+      await pintarTareas();
+      actualizarBadgeTareas();
+      document.getElementById("tareaTexto").focus();
+    });
+  };
+  await pintarTareas();
+}
+async function pintarTareas(){
+  const box = document.getElementById("tareasLista");
+  if(!box) return;
+  const { data, error } = await sb.from("tareas_equipo").select("*").order("created_at", { ascending: false }).limit(300);
+  if(!document.getElementById("tareasLista")) return;
+  if(error){ box.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
+  const yo = state.profile.id;
+  const nombre = (id)=> id === yo ? "ti" : ((state.equipo || []).find(p => p.id === id) || {}).nombre || "otro master";
+  const todas = (data || []).filter(t => tareasUI.filtro !== "mias" || t.asignada_a === yo || (!t.asignada_a && t.creado_por === yo));
+  const hoy = todayStr();
+  const pend = todas.filter(t => !t.hecha).sort((a, b) =>
+    (a.fecha_limite || "9999").localeCompare(b.fecha_limite || "9999") || String(b.created_at).localeCompare(String(a.created_at)));
+  const hechas = todas.filter(t => t.hecha).sort((a, b) => String(b.hecha_at).localeCompare(String(a.hecha_at))).slice(0, 40);
+  const item = (t)=>{
+    const vence = t.fecha_limite ? (t.fecha_limite < hoy && !t.hecha ? `<span class="tarea-vence tarde">Venció el ${fmtFecha(t.fecha_limite)}</span>`
+      : `<span class="tarea-vence${t.fecha_limite === hoy ? " hoy" : ""}">${t.fecha_limite === hoy ? "Para hoy" : "Para el " + fmtFecha(t.fecha_limite)}</span>`) : "";
+    const meta = t.hecha
+      ? `${t.hecha_por === yo ? "La hiciste tú" : "Hecha por " + esc(nombre(t.hecha_por))}${t.hecha_at ? " · " + esc(tiempoRelativo(t.hecha_at).toLowerCase()) : ""}`
+      : `${t.asignada_a ? "Para " + esc(nombre(t.asignada_a)) : "Para cualquiera"} · ${t.creado_por === yo ? "la agregaste tú" : "la agregó " + esc(nombre(t.creado_por))}`;
+    return `
+      <li class="tarea${t.hecha ? " hecha" : ""}${t.asignada_a === yo && !t.hecha ? " mia" : ""}">
+        <label class="tarea-check"><input type="checkbox" data-hecha="${esc(t.id)}" ${t.hecha ? "checked" : ""}><span class="sr-only">${t.hecha ? "Marcar como pendiente" : "Marcar como hecha"}</span></label>
+        <div class="tarea-txt"><p>${esc(t.texto)}</p><p class="tarea-meta">${vence}<span>${meta}</span></p></div>
+        <button type="button" class="icon-btn tarea-del" data-borrar-tarea="${esc(t.id)}" aria-label="Borrar tarea">✕</button>
+      </li>`;
+  };
+  box.innerHTML = `
+    ${pend.length ? `<ul class="tareas-lista">${pend.map(item).join("")}</ul>` : emptyHTML(tareasUI.filtro === "mias" ? "No tienes tareas pendientes." : "No hay tareas pendientes. ¡Todo al día!")}
+    ${hechas.length ? `<details class="records"><summary>Hechas (${hechas.length})</summary><ul class="tareas-lista">${hechas.map(item).join("")}</ul></details>` : ""}`;
+  box.querySelectorAll("[data-hecha]").forEach(c => {
+    c.onchange = async ()=>{
+      c.disabled = true;
+      const { error: e2 } = await sb.from("tareas_equipo").update({ hecha: c.checked }).eq("id", c.dataset.hecha);
+      if(e2){ c.disabled = false; c.checked = !c.checked; showError(document.getElementById("tareaMsg"), e2); return; }
+      await pintarTareas();
+      actualizarBadgeTareas();
+    };
+  });
+  box.querySelectorAll("[data-borrar-tarea]").forEach(b => {
+    b.onclick = async ()=>{
+      if(!confirm("¿Borrar esta tarea?")) return;
+      const { error: e3 } = await sb.from("tareas_equipo").delete().eq("id", b.dataset.borrarTarea);
+      if(e3){ showError(document.getElementById("tareaMsg"), e3); return; }
+      await pintarTareas();
+      actualizarBadgeTareas();
+    };
+  });
+}
+/* Número de tareas pendientes en el menú (asignadas a mí o a cualquiera) */
+async function actualizarBadgeTareas(){
+  const b = document.getElementById("navTareasBadge");
+  if(!b || !esMaster()) return;
+  const { data, error } = await sb.from("tareas_equipo").select("id,asignada_a").eq("hecha", false);
+  const n = error ? 0 : (data || []).filter(t => !t.asignada_a || t.asignada_a === state.profile.id).length;
+  b.hidden = !n; b.textContent = n || "";
+  b.setAttribute("aria-label", plural(n, "tarea pendiente", "tareas pendientes"));
 }

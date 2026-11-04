@@ -250,6 +250,9 @@
 
 /* ---------- Equipo por roles: menú, alertas, Hoy, Resumen, Equipo ---------- */
 .coach-nav.n-3{ grid-template-columns:repeat(3, minmax(0, 1fr)); }
+/* Master: 9 secciones en dos filas */
+.coach-nav.n-9{ grid-template-columns:repeat(5, minmax(0, 1fr)); }
+@media (max-width: 480px){ .coach-nav.n-9 a{ font-size:12.5px; padding:9px 2px; } .coach-nav.n-9 .cn-badge{ right:3px; top:3px; } }
 .coach-nav a{ min-width:0; }
 .coach-nav .cn-badge.alerta{ background:var(--danger); }
 .flag.alerta{ color:#fff; background:var(--danger); border-color:var(--danger); }
@@ -539,3 +542,74 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .ll-lista textarea{ width:100%; min-height:60px; }
 .ll-acc{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:6px; }
 .ll-acc .btn-outline{ margin-top:0; }
+
+/* Sesiones de terapia: disponibles · agendadas · total, con las próximas fechas */
+.ses-cuenta{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; position:relative; z-index:1; }
+.ses-n{ display:flex; flex-direction:column; gap:1px; min-width:0; padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:var(--surface); }
+.ses-n .num{ font-family:var(--font-display); font-weight:800; font-size:clamp(32px, 3vw + 16px, 48px); line-height:1; letter-spacing:-.02em; color:var(--ink); }
+.ses-n.disp{ border-color:rgba(14,124,134,.35); background:var(--accent-tint); }
+.ses-n.disp .num{ color:var(--accent-2); }
+.ses-n .num.baja{ display:inline-block; animation:saldo-baja .7s var(--ease) both; }
+.ses-l{ font-weight:700; font-size:14px; }
+.ses-s{ font-size:12.5px; color:var(--ink-soft); }
+.ses-prox{ margin-top:10px; position:relative; z-index:1; }
+.ses-prox-t{ margin:0 0 6px; font-size:13px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; }
+.ses-prox ul{ list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:6px; }
+.ses-prox li{ padding:5px 10px; border-radius:999px; border:1px solid var(--line); background:var(--surface); font-size:14px; }
+.ses-acciones{ margin-top:12px; }
+.trans-ter{ display:block; }
+.trans-ter .btn-outline{ margin-top:10px; }
+.trans-nota{ margin:0; font-size:14px; max-width:260px; }
+@media (max-width: 420px){
+  .ses-cuenta{ gap:6px; }
+  .ses-n{ padding:8px 9px; }
+  .ses-l{ font-size:13px; }
+}
+
+/* Fortalecimiento: pedir sesiones de terapia */
+.pedir-ter{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:14px; padding:12px 14px; border-radius:12px; border:1px dashed var(--line-strong); position:relative; z-index:1; }
+.pedir-ter > div{ flex:1 1 240px; min-width:0; }
+.pedir-ter-t{ margin:0; font-weight:700; }
+.pedir-ter .muted{ margin:2px 0 0; font-size:14px; }
+.pedir-ter .btn-outline{ margin-top:0; }
+
+/* Mi familia: hijos a cargo del papá o la mamá */
+.familia-list{ list-style:none; margin:0 0 6px; padding:0; display:grid; gap:8px; }
+.familia-item{ display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface); flex-wrap:wrap; }
+.familia-info{ display:flex; flex-direction:column; min-width:0; flex:1 1 140px; }
+.familia-info strong{ overflow-wrap:anywhere; }
+.familia-item .btn-outline{ margin-top:0; }
+.familia-add{ margin-top:6px; }
+.viendo-hijo{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin:0 0 14px; padding:10px 14px; border-radius:12px;
+  background:var(--coach-soft); border:1px solid var(--coach-line); }
+.viendo-hijo .btn-outline{ margin-top:0; }
+
+/* Coach: habilitar acceso de fortalecimiento */
+.acceso-adj{ margin:12px 0; padding:12px 14px; border-radius:12px; border:1px solid var(--line); background:var(--paper); }
+.acceso-adj-t{ margin:0 0 8px; font-weight:700; }
+.acceso-adj .inline-add{ align-items:end; }
+.acceso-adj .inline-add > div{ flex:1 1 130px; min-width:0; }
+.acceso-adj .muted{ margin:8px 0 0; font-size:13.5px; }
+
+/* Master: tareas del equipo */
+.tareas-panel{ margin-top:4px; }
+.tarea-form input#tareaTexto{ width:100%; }
+.tarea-opts{ display:flex; align-items:end; gap:10px; flex-wrap:wrap; margin-top:8px; }
+.tarea-opts > div{ flex:1 1 150px; min-width:0; }
+.tarea-opts label{ margin-top:0; }
+.tarea-opts .btn-primary{ margin-top:0; flex:0 0 auto; }
+.tareas-filtro{ margin:16px 0 10px; }
+.tareas-lista{ list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.tarea{ display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+.tarea.mia{ border-color:rgba(14,124,134,.4); box-shadow:inset 4px 0 0 var(--accent); }
+.tarea.hecha .tarea-txt p:first-child{ text-decoration:line-through; color:var(--ink-faint); }
+.tarea-check{ display:flex; align-items:center; justify-content:center; min-width:32px; min-height:32px; margin:0; }
+.tarea-check input{ width:22px; height:22px; accent-color:var(--accent); }
+.tarea-txt{ flex:1; min-width:0; }
+.tarea-txt p{ margin:0; overflow-wrap:anywhere; }
+.tarea-meta{ display:flex; flex-wrap:wrap; gap:4px 10px; margin-top:3px !important; font-size:13px; color:var(--ink-soft); }
+.tarea-vence{ font-weight:700; color:var(--ink); }
+.tarea-vence.hoy{ color:var(--accent-2); }
+.tarea-vence.tarde{ color:var(--danger); }
+.tarea-del{ flex:none; opacity:.6; }
+.tarea-del:hover, .tarea-del:focus-visible{ opacity:1; }
