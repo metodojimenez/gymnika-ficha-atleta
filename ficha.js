@@ -1278,14 +1278,20 @@ window.addEventListener("DOMContentLoaded", ()=>{
     app.innerHTML = `<div class="boot" role="alert"><span class="boot-mark">GYMNIKA</span><span class="muted">No se pudo conectar. Revisa tu internet y recarga la página.</span></div>`;
     return;
   }
-  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  /* La sesión queda guardada en el teléfono y se renueva sola: solo se cierra con "Salir" */
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   setupChartDefaults();
   /* Llegada desde el QR de recepción: #/checkin/CODIGO */
   const codigoQR = codigoCheckinDeURL();
   if(codigoQR){ guardarCheckinPendiente(codigoQR); history.replaceState(null, "", location.pathname + location.search); }
   sb.auth.onAuthStateChange((event, session) => {
     if(event === "PASSWORD_RECOVERY"){ recoveryMode = true; setTimeout(renderNewPassword, 0); return; }
+    if(session) state.session = session;
     if(!session){ state.session=null; state.profile=null; }
+  });
+  /* Al volver a la app (teléfono bloqueado, otra app), renueva la sesión enseguida */
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.visibilityState === "visible") sb.auth.startAutoRefresh(); else sb.auth.stopAutoRefresh();
   });
   bootAfterAuth();
 });

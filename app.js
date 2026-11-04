@@ -386,27 +386,20 @@ async function doSignup(){
     fichaPayload.nombre = nombre;
     fichaPayload.categoria = categoria;
     fichaPayload.acepto_terminos_at = new Date().toISOString();
-    /* Todo lo del registro viaja con la cuenta: si confirma el correo después (o en otro teléfono), la ficha ya queda lista */
-    const { data, error } = await sb.auth.signUp({ email, password: pass, options: {
-      emailRedirectTo: location.origin + location.pathname,
-      data: { nombre, categoria, acepto_terminos: "true", telefono: fichaPayload.telefono, fecha_nacimiento: fichaPayload.fecha_nacimiento, lesiones: fichaPayload.lesiones }
+    /* La cuenta se crea ya confirmada (sin correo de confirmación) y la app entra sola */
+    const { error: regErr } = await sb.functions.invoke("registro", { body: {
+      email, password: pass, nombre, categoria, acepto_terminos: true,
+      telefono: fichaPayload.telefono, fecha_nacimiento: fichaPayload.fecha_nacimiento, lesiones: fichaPayload.lesiones
     } });
-    if(error){ showError(msg, error); return; }
-    if(data.session){
-      const { error: upErr } = await sb.from("profiles").update(fichaPayload).eq("id", data.session.user.id);
-      if(upErr) console.error(upErr);
-      await bootAfterAuth();
-    } else {
-      document.getElementById("authCard").innerHTML = `
-        <div class="done-box">
-          <span class="done-icon" aria-hidden="true">✓</span>
-          <h3>Revisa tu correo</h3>
-          <p>Te enviamos un correo a <strong>${esc(email)}</strong>. Toca <strong>Confirmar mi cuenta</strong> y entrarás directo a tu ficha: no tienes que llenar nada más.</p>
-          <p class="muted">Si no lo ves en unos minutos, revisa la carpeta de spam o promociones.</p>
-          <button type="button" class="btn-outline" id="btnYaConfirme">Ya confirmé, iniciar sesión</button>
-        </div>`;
-      document.getElementById("btnYaConfirme").onclick = ()=>{ setAuthTab(true); const e = document.getElementById("loginEmail"); if(e){ e.value = email; document.getElementById("loginPass").focus(); } };
+    if(regErr){
+      let texto = "No pudimos crear tu cuenta. Revisa tu internet e inténtalo de nuevo.";
+      try { const det = regErr.context && await regErr.context.json(); if(det && det.error) texto = det.error; } catch { /* sin detalle */ }
+      showMsg(msg, "error", texto);
+      return;
     }
+    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if(error){ showError(msg, error); return; }
+    await bootAfterAuth();
   });
 }
 
@@ -678,6 +671,8 @@ async function bootAfterAuth(){
   const { data: profile, error } = await sb.from("profiles").select("*").eq("id", session.user.id).single();
   if(error || !profile){
     const sinFila = error && (error.code === "PGRST116" || /0 rows|no rows/i.test((error.message || "") + " " + (error.details || "")));
+    /* Sin internet o servidor lento: la sesión sigue guardada; se ofrece reintentar en vez de pedir la contraseña */
+    if(error && !sinFila && !/jwt|refresh token|401|403/i.test((error.message || "") + " " + (error.code || ""))){ renderSinConexion(); return; }
     renderAuth(error && !sinFila ? errorES(error) : null);
     return;
   }
@@ -688,6 +683,15 @@ async function bootAfterAuth(){
   await renderAthleteHome();
   const codigo = tomarCheckinPendiente();
   if(codigo) procesarCheckin(codigo);
+}
+
+function renderSinConexion(){
+  document.body.className = "";
+  app.innerHTML = `<div class="boot" role="alert"><span class="boot-mark">GYMNIKA</span>
+    <span class="muted">No pudimos conectar. Tu sesión sigue abierta.</span>
+    <button type="button" class="btn-primary" id="btnReintentar" style="width:auto;margin-top:14px">Reintentar</button></div>`;
+  document.getElementById("btnReintentar").onclick = ()=> bootAfterAuth();
+  window.addEventListener("online", ()=>{ if(document.getElementById("btnReintentar")) bootAfterAuth(); }, { once: true });
 }
 
 function renderCompleteProfileGate(profile){
