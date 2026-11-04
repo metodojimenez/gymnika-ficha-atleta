@@ -626,3 +626,4 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .tarea-grupo.mio .tarea-n{ background:var(--accent); color:#fff; }
 .tarea-check input:disabled{ opacity:.35; }
 .aviso-version{ grid-template-columns:1fr; z-index:70; }
+.tarea-grupo.todos .avatar{ background:var(--coach-soft); color:var(--coach-2); }

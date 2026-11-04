@@ -695,7 +695,7 @@ async function renderCoachHoy(main){
         ${formTareaHTML("master")}
         <div id="tareasMasterLista"><div class="skel skel-block"></div></div></section>` : ""}
       <section class="panel ${esMaster() ? "span-6" : "span-12"} tareas-panel" id="tareasEquipo" aria-labelledby="hTe"><div class="panel-head"><h2 id="hTe">Tareas del equipo</h2><span class="muted" id="teCuenta"></span></div>
-        <p class="muted tareas-nota">${esMaster() ? "Asígnale tareas a cada coach: le llega un aviso y la ve aquí con su nombre." : "Las tareas que te asignan los master. Márcalas cuando las termines."}</p>
+        <p class="muted tareas-nota">${esMaster() ? "Asígnale tareas a un coach o a todos. Cada coach ve solo las suyas y las que son para todos." : "Tus tareas y las que son para todo el equipo. Márcalas cuando las termines."}</p>
         ${formTareaHTML("equipo")}
         <div id="tareasEquipoMsg" aria-live="polite"></div>
         <div id="tareasEquipoLista"><div class="skel skel-block"></div></div></section>
@@ -972,7 +972,7 @@ async function pintarHistorialConsejos(){
 }
 
 /* ====================== TAREAS EN "HOY" ======================
-   Dos listas: "Tareas de los master" (solo master coach, compartida: cualquiera agrega, asigna y marca hecha) y
+   Dos listas: "Tareas de los master" (solo master coach, compartida: los master agregan, asignan y marcan hecha) y
    "Tareas del equipo" (cada tarea va a un coach; todo el equipo la ve en un apartado con el nombre de cada uno).
    Los master agregan y asignan; cada coach marca como hechas las suyas. A quien se le asigna le llega un aviso. */
 const tareasUI = { lista: [] };
@@ -993,7 +993,7 @@ function formTareaHTML(ambito){
       <input id="tt_${ambito}" maxlength="500" placeholder="Nueva tarea" autocomplete="off">
       <div class="tarea-opts">
         <div><label for="tp_${ambito}">Para</label>
-          <select id="tp_${ambito}">${ambito === "master" ? `<option value="">Cualquiera</option>` : `<option value="">Elige a quién</option>`}
+          <select id="tp_${ambito}"><option value="">Todos</option>
             ${gente.map(m => `<option value="${esc(m.id)}">${esc(m.id === state.profile.id ? "Yo" : (m.nombre || "Coach") + (ambito === "equipo" ? " · " + (ROLES_EQUIPO[m.role] || "").replace("Coach de ", "").replace("Coach general", "General").replace("Master coach", "Master") : ""))}</option>`).join("")}
           </select></div>
         <div><label for="tf_${ambito}">Para cuándo <span class="muted">(opcional)</span></label><input type="date" id="tf_${ambito}" min="${todayStr()}"></div>
@@ -1004,13 +1004,13 @@ function formTareaHTML(ambito){
 }
 function itemTareaHTML(t, conPara){
   const yo = state.profile.id, hoy = todayStr();
-  const puedeMarcar = esMaster() || (t.ambito === "equipo" && t.asignada_a === yo);
+  const puedeMarcar = esMaster() || (t.ambito === "equipo" && (!t.asignada_a || t.asignada_a === yo));
   const vence = t.fecha_limite ? (t.fecha_limite < hoy && !t.hecha ? `<span class="tarea-vence tarde">Venció el ${fmtFecha(t.fecha_limite)}</span>`
     : `<span class="tarea-vence${t.fecha_limite === hoy ? " hoy" : ""}">${t.fecha_limite === hoy ? "Para hoy" : "Para el " + fmtFecha(t.fecha_limite)}</span>`) : "";
   const quien = (id)=> id === yo ? "ti" : nombreEquipo(id);
   const meta = t.hecha
     ? `${t.hecha_por === yo ? "La hiciste tú" : "Hecha por " + esc(quien(t.hecha_por))}${t.hecha_at ? " · " + esc(tiempoRelativo(t.hecha_at).toLowerCase()) : ""}`
-    : [conPara ? (t.asignada_a ? "Para " + esc(quien(t.asignada_a)) : "Para cualquiera") : "", t.creado_por === yo ? "la agregaste tú" : "la agregó " + esc(quien(t.creado_por))].filter(Boolean).join(" · ");
+    : [conPara ? (t.asignada_a ? "Para " + esc(quien(t.asignada_a)) : "Para todos") : "", t.creado_por === yo ? "la agregaste tú" : "la agregó " + esc(quien(t.creado_por))].filter(Boolean).join(" · ");
   return `
     <li class="tarea${t.hecha ? " hecha" : ""}${t.asignada_a === yo && !t.hecha ? " mia" : ""}">
       <label class="tarea-check"><input type="checkbox" data-hecha="${esc(t.id)}" ${t.hecha ? "checked" : ""}${puedeMarcar ? "" : " disabled"}><span class="sr-only">${t.hecha ? "Marcar como pendiente" : "Marcar como hecha"}</span></label>
@@ -1037,22 +1037,30 @@ async function pintarTareasHoy(){
     const c = document.getElementById("tmCuenta"); if(c) c.textContent = pend.length ? plural(pend.length, "pendiente", "pendientes") : "";
   }
 
-  /* Tareas del equipo: un apartado por coach con sus pendientes (el tuyo primero) */
+  /* Tareas del equipo: "Para todos", luego las tuyas y (solo los master) un apartado por cada coach.
+     Cada coach solo recibe de la base sus tareas y las que son para todos. */
   const e = tareasUI.lista.filter(t => t.ambito === "equipo");
   const pend = e.filter(t => !t.hecha);
-  const ids = [...new Set(pend.map(t => t.asignada_a))].sort((a, b) =>
-    a === yo ? -1 : b === yo ? 1 : nombreEquipo(a).localeCompare(nombreEquipo(b)));
-  const mias = pend.filter(t => t.asignada_a === yo).length;
+  const todos = pend.filter(t => !t.asignada_a).sort(ordenPend);
+  const ids = [...new Set(pend.filter(t => t.asignada_a).map(t => t.asignada_a))]
+    .filter(id => esMaster() || id === yo)
+    .sort((a, b) => a === yo ? -1 : b === yo ? 1 : nombreEquipo(a).localeCompare(nombreEquipo(b)));
+  const mias = pend.filter(t => t.asignada_a === yo).length + todos.length;
   const c = document.getElementById("teCuenta"); if(c) c.textContent = esMaster() ? (pend.length ? plural(pend.length, "pendiente", "pendientes") : "") : (mias ? `Tienes ${plural(mias, "pendiente", "pendientes")}` : "");
+  const grupo = (clave, titulo, sub, iniciales, lista, mio)=> `
+      <section class="tarea-grupo${mio ? " mio" : ""}${clave === "todos" ? " todos" : ""}" aria-label="${esc(titulo)}">
+        <h3 class="tarea-grupo-t"><span class="avatar" aria-hidden="true">${esc(iniciales)}</span>
+          <span>${esc(titulo)}${sub ? `<small>${esc(sub)}</small>` : ""}</span><span class="tarea-n">${lista.length}</span></h3>
+        <ul class="tareas-lista">${lista.map(t => itemTareaHTML(t, false)).join("")}</ul></section>`;
+  const grupos = [];
+  if(todos.length) grupos.push(grupo("todos", "Para todos", "Todo el equipo la ve; la marca quien la haga", "✦", todos, false));
+  ids.forEach(id => {
+    const persona = (state.equipo || []).find(p => p.id === id);
+    grupos.push(grupo(id, id === yo ? "Tus tareas" : nombreEquipo(id), id === yo ? "" : (ROLES_EQUIPO[(persona || {}).role] || ""),
+      initials(id === yo ? state.profile.nombre || "" : (persona || {}).nombre || ""), pend.filter(t => t.asignada_a === id).sort(ordenPend), id === yo));
+  });
   boxE.innerHTML = `
-    ${ids.length ? ids.map(id => {
-      const suyas = pend.filter(t => t.asignada_a === id).sort(ordenPend);
-      const persona = (state.equipo || []).find(p => p.id === id);
-      return `<section class="tarea-grupo${id === yo ? " mio" : ""}" aria-label="Tareas de ${esc(nombreEquipo(id))}">
-        <h3 class="tarea-grupo-t"><span class="avatar" aria-hidden="true">${esc(initials(id === yo ? state.profile.nombre || "" : (persona || {}).nombre || ""))}</span>
-          <span>${esc(id === yo ? "Tus tareas" : nombreEquipo(id))}${persona && id !== yo ? `<small>${esc(ROLES_EQUIPO[persona.role] || "")}</small>` : ""}</span><span class="tarea-n">${suyas.length}</span></h3>
-        <ul class="tareas-lista">${suyas.map(t => itemTareaHTML(t, false)).join("")}</ul></section>`;
-    }).join("") : emptyHTML("Nadie tiene tareas pendientes.")}
+    ${grupos.length ? grupos.join("") : emptyHTML(esMaster() ? "Nadie tiene tareas pendientes." : "No tienes tareas pendientes.")}
     ${hechasHTML(hechasOrden(e.filter(t => t.hecha)))}`;
 
   document.querySelectorAll(".tareas-panel [data-hecha]").forEach(cb => {
@@ -1083,7 +1091,6 @@ function enlazarFormsTareas(){
         const texto = form.querySelector(`#tt_${ambito}`).value.trim();
         const para = form.querySelector(`#tp_${ambito}`).value || null;
         if(!texto){ showMsg(msg, "error", "Escribe la tarea."); return; }
-        if(ambito === "equipo" && !para){ showMsg(msg, "error", "Elige a qué coach se la asignas."); return; }
         const { error } = await sb.from("tareas_equipo").insert({ texto, ambito, asignada_a: para, fecha_limite: form.querySelector(`#tf_${ambito}`).value || null });
         if(error){ showError(msg, error); return; }
         form.querySelector(`#tt_${ambito}`).value = ""; form.querySelector(`#tf_${ambito}`).value = "";
