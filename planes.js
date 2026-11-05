@@ -1152,10 +1152,53 @@ async function abrirEscanerQR(){
   leer();
 }
 
+/* Titular con hijos: antes de registrar, elige quién llegó (solo yo, yo y mi hijo, solo mi hijo) */
+async function elegirQuienLlego(){
+  const yo = state.profile;
+  const { data: hijos, error } = await sb.from("profiles").select("id, nombre").eq("tutor_id", yo.id).order("nombre");
+  if(error || !hijos || !hijos.length) return null;
+  /* Se marca de antemano a quien tiene reserva a esta hora */
+  const ids = [yo.id, ...hijos.map(h => h.id)];
+  const desde = new Date(Date.now() - 75 * 60000).toISOString(), hasta = new Date(Date.now() + 30 * 60000).toISOString();
+  const { data: res } = await sb.from("reservas").select("user_id, inicio").in("user_id", ids).in("estado", ["confirmada", "asistio"]).gte("inicio", desde).lte("inicio", hasta);
+  const conReserva = new Set((res || []).map(r => r.user_id));
+  const primero = (n)=> primerNombre(n) || "tu hijo/a";
+  return new Promise((listo)=>{
+    let elegido = null;
+    const dlg = openDialog("¿Quién llegó?", hijos.length === 1 ? `
+      <p class="muted" style="margin-top:0">Elige a quién registramos en recepción.</p>
+      <div class="quien-ops">
+        <button type="button" class="quien-op" data-quien="${esc(yo.id)}"><strong>Solo yo</strong><span>${esc(primero(yo.nombre))}${conReserva.has(yo.id) ? " · tiene reserva ahora" : ""}</span></button>
+        <button type="button" class="quien-op" data-quien="${esc(yo.id)},${esc(hijos[0].id)}"><strong>Yo y ${esc(primero(hijos[0].nombre))}</strong><span>Los dos</span></button>
+        <button type="button" class="quien-op" data-quien="${esc(hijos[0].id)}"><strong>Solo ${esc(primero(hijos[0].nombre))}</strong><span>${conReserva.has(hijos[0].id) ? "Tiene reserva ahora" : "Sin mí"}</span></button>
+      </div>` : `
+      <p class="muted" style="margin-top:0">Marca a quiénes registramos en recepción.</p>
+      <div class="quien-lista">
+        ${[{ id: yo.id, nombre: yo.nombre, yo: true }, ...hijos].map(p => `<label class="quien-check">
+          <input type="checkbox" value="${esc(p.id)}"${conReserva.has(p.id) || (!conReserva.size && p.yo) ? " checked" : ""}>
+          <span><strong>${p.yo ? "Yo" : esc(primero(p.nombre))}</strong>${conReserva.has(p.id) ? `<span class="muted"> · tiene reserva ahora</span>` : ""}</span></label>`).join("")}
+      </div>
+      <div id="quienMsg" aria-live="polite"></div>
+      <button type="button" class="btn-primary" data-quien-ok>Registrar llegada</button>`);
+    const terminar = (v)=>{ elegido = v; dlg.close(); };
+    dlg.el.querySelectorAll("[data-quien]").forEach(b => { b.onclick = ()=> terminar(b.dataset.quien.split(",")); });
+    const ok = dlg.el.querySelector("[data-quien-ok]");
+    if(ok) ok.onclick = ()=>{
+      const marcados = [...dlg.el.querySelectorAll(".quien-check input:checked")].map(i => i.value);
+      if(!marcados.length){ showMsg(dlg.el.querySelector("#quienMsg"), "error", "Marca al menos a una persona."); return; }
+      terminar(marcados);
+    };
+    /* Al cerrar sin elegir no se registra nada */
+    new MutationObserver((m, obs)=>{ if(!dlg.el.isConnected){ obs.disconnect(); listo(elegido || false); } }).observe(document.body, { childList: true });
+  });
+}
+
 async function procesarCheckin(codigo){
   if(!codigo || !state.profile) return;
   if(esEquipo()){ iniciarTurnoConQR(codigo); return; }
-  const { data, error } = await sb.rpc("registrar_checkin", { p_codigo: codigo });
+  const quienes = state.profile.tutor_id ? null : await elegirQuienLlego();
+  if(quienes === false) return;
+  const { data, error } = await sb.rpc("registrar_checkin", quienes ? { p_codigo: codigo, p_quienes: quienes } : { p_codigo: codigo });
   if(error){
     openDialog("No se registró tu asistencia", `<div class="checkin-res bad"><span class="ck-icon" aria-hidden="true">!</span><p>${esc(errorES(error))}</p></div>`);
     return;
@@ -1180,6 +1223,7 @@ async function procesarCheckin(codigo){
       <p class="ck-name">${esc(res.nombre || state.profile.nombre || "")}</p>
       <p>${res.repetido ? (propio ? "Ya habías registrado tu llegada." : "Su llegada ya estaba registrada.") : esFort && propio ? esc(MEDIDOR[0].txt) : "¡Bienvenido a Gymnika!"}</p>
       ${otros.length ? `<p>También registramos a <strong>${esc(listaNombres(otros))}</strong>.</p>` : ""}
+      ${(res.sin_reserva || []).length ? `<p class="muted">No registramos a <strong>${esc(listaNombres(res.sin_reserva))}</strong>: no tiene reserva a esta hora o su acceso no está activo.</p>` : ""}
       <p class="muted">${res.inicio ? (esFort ? "Horario de las " : "Sesión de las ") + fmtFechaHora(res.inicio).split("· ")[1] : ""}${res.vence ? " · tu acceso vence el " + fmtFecha(res.vence, true) : ""}</p>
     </div>`);
   if(document.getElementById("planCard")) refrescarReservas((state.detail && state.detail.profile) || state.profile);

@@ -75,6 +75,11 @@ function camposBitacoraHTML(pre, d = {}){
     ${t("pendiente", "¿Pendiente para la próxima?")}
     <fieldset class="bit-zonas" data-lista="salida"><legend>¿Con cuánto dolor se va?</legend>
       <div class="zonas-lista">${zonas.map((z, k) => zonaSalidaHTML(pre, k, z)).join("")}</div></fieldset>
+    <div class="bit-fotos-campo"><p class="bit-fotos-tit">Fotos</p>
+      <div class="fotos-previa">${(d._fotos || []).map(f => `<div class="foto-mini" data-foto-id="${esc(f.id)}">
+        <img src="${esc(f.url || "")}" alt="Foto guardada"><button type="button" class="foto-quitar" data-foto-quitar aria-label="Quitar foto">✕</button></div>`).join("")}</div>
+      <label class="btn-outline sm foto-add"><span aria-hidden="true">📷</span> Agregar fotos<input type="file" accept="image/*" multiple data-fotos class="sr-only"></label>
+    </div>
   </div>`;
 }
 /* Tocar la burbuja o la opción marcada la desmarca (ningún campo es obligatorio) + agregar, quitar y nombrar zonas */
@@ -118,6 +123,75 @@ function enlazarCampos(box){
     renombrar(row);
   });
   box.addEventListener("input", (e)=>{ if(e.target.closest("[data-zona-otra]")) renombrar(e.target.closest(".zona-row")); });
+  /* Fotos: se eligen (cámara o galería), se ven en miniatura y se suben al guardar */
+  box.addEventListener("change", (e)=>{
+    const inp = e.target.closest("[data-fotos]");
+    if(!inp) return;
+    const campos = inp.closest(".bit-campos"), previa = campos.querySelector(".fotos-previa");
+    const lista = fotosUI.nuevas.get(campos) || [];
+    [...inp.files].filter(f => /^image\//.test(f.type) || /\.(heic|heif)$/i.test(f.name)).forEach(f => {
+      lista.push(f);
+      previa.insertAdjacentHTML("beforeend", `<div class="foto-mini nueva" data-nueva="${lista.length - 1}">
+        <img src="${URL.createObjectURL(f)}" alt="Foto nueva"><button type="button" class="foto-quitar" data-foto-quitar aria-label="Quitar foto">✕</button></div>`);
+    });
+    fotosUI.nuevas.set(campos, lista);
+    inp.value = "";
+  });
+  box.addEventListener("click", (e)=>{
+    const q = e.target.closest("[data-foto-quitar]");
+    if(!q) return;
+    const mini = q.closest(".foto-mini"), campos = mini.closest(".bit-campos");
+    if(mini.dataset.fotoId){ const b = fotosUI.borrar.get(campos) || []; b.push(mini.dataset.fotoId); fotosUI.borrar.set(campos, b); }
+    else { const l = fotosUI.nuevas.get(campos) || []; l[Number(mini.dataset.nueva)] = null; }
+    mini.remove();
+  });
+}
+const fotosUI = { nuevas: new WeakMap(), borrar: new WeakMap() };
+function fotosDe(box){
+  const campos = box.matches(".bit-campos") ? box : box.querySelector(".bit-campos");
+  return { nuevas: (fotosUI.nuevas.get(campos) || []).filter(Boolean), borrar: fotosUI.borrar.get(campos) || [] };
+}
+/* Achica la foto (máx. 1600 px, JPEG) para que suba rápido desde el celular */
+async function prepararFoto(file){
+  try{
+    const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.82));
+    if(blob) return blob;
+  } catch { /* el navegador no la pudo leer: se sube tal cual */ }
+  return file;
+}
+async function subirFotos(atletaId, entradaId, files){
+  let fallas = 0;
+  for(let i = 0; i < files.length; i++){
+    const listo = await prepararFoto(files[i]);
+    const ext = listo.type === "image/jpeg" ? "jpg" : ((files[i].name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg");
+    const path = `${atletaId}/${entradaId}/${Date.now()}-${i}.${ext}`;
+    const { error: e1 } = await sb.storage.from("bitacora").upload(path, listo, { contentType: listo.type || "image/jpeg", upsert: false });
+    if(e1){ console.error(e1); fallas++; continue; }
+    const { error: e2 } = await sb.from("bitacora_fotos").insert({ bitacora_id: entradaId, atleta_id: atletaId, path, autor_id: state.profile.id });
+    if(e2){ console.error(e2); fallas++; sb.storage.from("bitacora").remove([path]); }
+  }
+  return fallas;
+}
+async function borrarFotos(fotos){
+  if(!fotos.length) return;
+  await sb.storage.from("bitacora").remove(fotos.map(f => f.path));
+  await sb.from("bitacora_fotos").delete().in("id", fotos.map(f => f.id));
+}
+/* Fotos de un alumno con su enlace temporal (1 h) */
+async function cargarFotos(atletaId){
+  const { data, error } = await sb.from("bitacora_fotos").select("id, bitacora_id, path, created_at").eq("atleta_id", atletaId).order("created_at");
+  if(error || !data || !data.length) return [];
+  const { data: urls } = await sb.storage.from("bitacora").createSignedUrls(data.map(f => f.path), 3600);
+  const url = {}; (urls || []).forEach(u => { if(u && u.signedUrl) url[u.path] = u.signedUrl; });
+  return data.map(f => ({ ...f, url: url[f.path] || null }));
+}
+function verFoto(url){
+  openDialog("Foto de la bitácora", `<img class="foto-grande" src="${esc(url)}" alt="Foto de la bitácora">`).el.classList.add("foto-dialog");
 }
 function leerCampos(box, pre){
   const radio = (nombre)=> box.querySelector(`input[name="${pre}${nombre}"]:checked`);
@@ -384,9 +458,13 @@ async function guardarTarjeta(dlg, card, btn){
   if(!p) return;
   const msg = card.querySelector(".mir-msg");
   await withBusy(btn, "Guardando…", async ()=>{
-    const { error } = await sb.from("bitacora").insert({ atleta_id: p.atleta_id, reserva_id: reserva, ...leerCampos(card, card.dataset.pre) });
+    const { data: nueva, error } = await sb.from("bitacora").insert({ atleta_id: p.atleta_id, reserva_id: reserva, ...leerCampos(card, card.dataset.pre) }).select("id").single();
     if(error && !/23505|duplicate|unique/i.test((error.code || "") + " " + (error.message || ""))){ msg.textContent = errorES(error); return; }
     if(error) msg.textContent = "Otro coach ya guardó la bitácora de esta sesión.";
+    let fallas = 0;
+    const fotos = fotosDe(card).nuevas;
+    if(!error && nueva && fotos.length){ msg.textContent = "Subiendo fotos…"; fallas = await subirFotos(p.atleta_id, nueva.id, fotos); }
+    if(fallas) msg.textContent = `Se guardó, pero ${plural(fallas, "foto no se subió", "fotos no se subieron")}. Agrégalas desde la Bitácora.`;
     delete miradorUI.borradores[reserva];
     delete miradorUI.hist[p.atleta_id];
     miradorUI.pend = miradorUI.pend.filter(x => x.reserva_id !== reserva);
@@ -398,7 +476,7 @@ async function guardarTarjeta(dlg, card, btn){
       irATarjeta(dlg, Math.min(i, tarjetas(dlg).length - 1), "instant");
       pintarTurno();
     };
-    if(window.matchMedia("(prefers-reduced-motion: reduce)").matches) fuera(); else setTimeout(fuera, error ? 900 : 320);
+    if(window.matchMedia("(prefers-reduced-motion: reduce)").matches && !fallas) fuera(); else setTimeout(fuera, error || fallas ? 2200 : 320);
     if(document.getElementById("bitLista") && routeBitacoraId() === p.atleta_id) pintarHistorial(p.atleta_id);
   });
 }
@@ -476,6 +554,9 @@ async function pintarHistorial(id){
   if(!document.getElementById("bitLista") || routeBitacoraId() !== id) return;
   if(error){ box.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
   const lista = data || [];
+  const fotos = await cargarFotos(id);
+  if(!document.getElementById("bitLista") || routeBitacoraId() !== id) return;
+  lista.forEach(b => { b._fotos = fotos.filter(f => f.bitacora_id === b.id); });
   document.getElementById("bitCuenta").textContent = lista.length ? plural(lista.length, "entrada", "entradas") : "";
   if(!lista.length){ box.innerHTML = emptyHTML("Todavía no hay entradas. Se llena desde el Mirador cuando llega, o con «Nueva entrada»."); return; }
   const puede = (b)=> b.autor_id === state.profile.id || esMaster();
@@ -487,10 +568,12 @@ async function pintarHistorial(id){
       <div class="bit-meta"><strong>${esc(mayuscula(fechaLarga(b.fecha)))}${b.fecha.slice(0, 4) !== todayStr().slice(0, 4) ? " " + b.fecha.slice(0, 4) : ""}</strong>
         <span class="muted">por ${esc(b.autor_nombre || "el equipo")} · ${esc(horaDe(b.created_at))}${b.reserva_id ? " · sesión" : ""}</span></div>
       ${dolor}
-      ${filas.length ? `<dl class="bit-datos">${filas.join("")}</dl>` : (dolor ? "" : `<p class="muted">Sin notas.</p>`)}
+      ${filas.length ? `<dl class="bit-datos">${filas.join("")}</dl>` : (dolor || b._fotos.length ? "" : `<p class="muted">Sin notas.</p>`)}
+      ${b._fotos.length ? `<div class="bit-fotos">${b._fotos.map(f => f.url ? `<button type="button" class="foto-mini" data-ver-foto="${esc(f.url)}" aria-label="Ver foto"><img src="${esc(f.url)}" alt="" loading="lazy"></button>` : "").join("")}</div>` : ""}
       ${puede(b) ? `<div class="bit-acc"><button type="button" class="btn-link" data-bit-editar="${esc(b.id)}">Editar</button><button type="button" class="btn-link danger" data-bit-borrar="${esc(b.id)}">Borrar</button></div>` : ""}
     </li>`;
   }).join("")}</ol>`;
+  box.querySelectorAll("[data-ver-foto]").forEach(b => { b.onclick = ()=> verFoto(b.dataset.verFoto); });
   box.querySelectorAll("[data-bit-editar]").forEach(btn => { btn.onclick = ()=>{
     const b = lista.find(x => x.id === btn.dataset.bitEditar);
     abrirEntradaBitacora((state.athleteList || []).find(x => x.id === id), b);
@@ -501,6 +584,8 @@ async function pintarHistorial(id){
     dlg.el.querySelector("[data-no]").onclick = dlg.close;
     const si = dlg.el.querySelector("[data-si]");
     si.onclick = ()=> withBusy(si, "Borrando…", async ()=>{
+      const entrada = lista.find(x => x.id === btn.dataset.bitBorrar);
+      if(entrada && entrada._fotos.length) await borrarFotos(entrada._fotos);
       const { error: e } = await sb.from("bitacora").delete().eq("id", btn.dataset.bitBorrar);
       if(e){ showError(dlg.el.querySelector("#bitBorrarMsg"), e); return; }
       dlg.close(); pintarHistorial(id);
@@ -519,10 +604,16 @@ function abrirEntradaBitacora(a, previa){
   const btn = dlg.el.querySelector("#btnGuardarBit");
   btn.onclick = ()=> withBusy(btn, "Guardando…", async ()=>{
     const datos = leerCampos(dlg.el, pre);
-    const { error } = previa
-      ? await sb.from("bitacora").update(datos).eq("id", previa.id)
-      : await sb.from("bitacora").insert({ atleta_id: a.id, ...datos });
-    if(error){ showError(dlg.el.querySelector("#nbMsg"), error); return; }
+    const msg = dlg.el.querySelector("#nbMsg");
+    const { data: fila, error } = previa
+      ? await sb.from("bitacora").update(datos).eq("id", previa.id).select("id").single()
+      : await sb.from("bitacora").insert({ atleta_id: a.id, ...datos }).select("id").single();
+    if(error){ showError(msg, error); return; }
+    const { nuevas, borrar } = fotosDe(dlg.el);
+    if(borrar.length) await borrarFotos((previa._fotos || []).filter(f => borrar.includes(f.id)));
+    let fallas = 0;
+    if(nuevas.length){ showMsg(msg, "ok", "Subiendo fotos…"); fallas = await subirFotos(a.id, (fila && fila.id) || (previa && previa.id), nuevas); }
+    if(fallas){ showMsg(msg, "error", `Se guardó, pero ${plural(fallas, "foto no se subió", "fotos no se subieron")}. Inténtalo de nuevo con «Editar».`); pintarHistorial(a.id); return; }
     dlg.close();
     pintarHistorial(a.id);
   });

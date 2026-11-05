@@ -363,6 +363,7 @@ async function doLogin(){
     if(!email || !pass){ showMsg(msg, "error", "Completa email y contraseña."); return; }
     const { error } = await sb.auth.signInWithPassword({ email, password: pass });
     if(error){ showError(msg, error); return; }
+    prepararTraspasoIOS(email, pass);
     await bootAfterAuth();
   });
 }
@@ -399,15 +400,48 @@ async function doSignup(){
     }
     const { error } = await sb.auth.signInWithPassword({ email, password: pass });
     if(error){ showError(msg, error); return; }
+    prepararTraspasoIOS(email, pass);
     await bootAfterAuth();
   });
 }
+
+/* ====================== SESIÓN EN LA APP INSTALADA (IPHONE) ======================
+   En iPhone la app instalada en la pantalla de inicio no comparte la sesión con Safari: pedía la contraseña otra vez.
+   Al entrar o registrarse en Safari se abre una segunda sesión aparte y se deja en la caché del sitio (CacheStorage,
+   que sí comparten Safari y la app instalada). La app instalada la toma la primera vez que se abre y la borra.
+   En Android la app instalada ya comparte la sesión con Chrome. */
+const TRASPASO = { cache: "gymnika-traspaso", url: "/__traspaso-sesion" };
+async function prepararTraspasoIOS(email, password){
+  if(!esIOS() || appInstalada() || !("caches" in window)) return;
+  try{
+    const aparte = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "gymnika-traspaso" } });
+    const { data, error } = await aparte.auth.signInWithPassword({ email, password });
+    if(error || !data || !data.session) return;
+    const cache = await caches.open(TRASPASO.cache);
+    await cache.put(TRASPASO.url, new Response(JSON.stringify({ rt: data.session.refresh_token, t: Date.now() }), { headers: { "Content-Type": "application/json" } }));
+  } catch { /* sin caché: tendrá que entrar una vez en la app instalada */ }
+}
+async function tomarTraspasoIOS(){
+  if(!appInstalada() || !("caches" in window)) return false;
+  try{
+    const cache = await caches.open(TRASPASO.cache);
+    const r = await cache.match(TRASPASO.url);
+    if(!r) return false;
+    await caches.delete(TRASPASO.cache);
+    const d = await r.json();
+    if(!d || !d.rt || Date.now() - Number(d.t || 0) > 60 * 86400000) return false;
+    const { data, error } = await sb.auth.refreshSession({ refresh_token: d.rt });
+    return !error && !!(data && data.session);
+  } catch { return false; }
+}
+function borrarTraspaso(){ try{ if("caches" in window) caches.delete(TRASPASO.cache); } catch { /* sin caché */ } }
 
 async function doLogout(){
   stopInbox();
   quitarSuscripcionTareas();
   await quitarPushDispositivo();
   avisoPagos.vistos = null; avisoPagos.forzar = true;
+  borrarTraspaso();
   document.getElementById("modalPago")?.remove();
   miradorUI.turno = null; miradorUI.pend = []; miradorUI.vistos = new Set(); miradorUI.borradores = {};
   document.getElementById("modalMirador")?.remove(); document.getElementById("miradorFab")?.remove();
@@ -657,7 +691,9 @@ async function completarDesdeRegistro(profile, user){
 }
 
 async function bootAfterAuth(){
-  const { data: { session } } = await sb.auth.getSession();
+  let { data: { session } } = await sb.auth.getSession();
+  /* App recién instalada en iPhone: toma la sesión que dejó Safari */
+  if(!session && !recoveryMode && await tomarTraspasoIOS()) ({ data: { session } } = await sb.auth.getSession());
   if(recoveryMode){
     if(session){ renderNewPassword(); return; }
     recoveryMode = false;
