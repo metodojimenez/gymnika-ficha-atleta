@@ -776,6 +776,7 @@ async function renderAthleteHome(){
   await renderAthleteDetail(state.profile, false, document.getElementById("athleteMain"));
 }
 
+/* La misma lista (y orden) está en private.enviar_consejo_del_dia(), que manda el consejo como notificación a las 7:00: si cambia una, cambiar la otra */
 const TIPS = [
   "Entrena con constancia: La regularidad supera a la intensidad ocasional.",
   "Prioriza la técnica: Ejecuta cada ejercicio con control y buena postura.",
@@ -821,7 +822,7 @@ function tipDelDia(){
 /* Las notificaciones las crea la base de datos (triggers). La app solo las lee y las marca como leídas. */
 const inbox = { items: [], enabled: true, timer: null, open: false, cargando: false, vistos: null };
 const INBOX_SECCION = {
-  consejos: "notasCard", plan: "nutricionCard", compensacion: "estiramientosCard", ficha: "fichaCard",
+  consejos: "notasCard", consejo: "tipCard", plan: "nutricionCard", compensacion: "estiramientosCard", ficha: "fichaCard",
   medidas: "medidasCard", fuerza: "fuerzaCard", tiempos: "tiemposCard", eventos: "agendaCard",
   pago: "planCard", reserva: "misReservasCard", sesiones: "planCard", acceso: "planCard", checkin_error: "misReservasCard", recordatorio: "misReservasCard"
 };
