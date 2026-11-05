@@ -175,7 +175,8 @@ async function renderAthleteDetail(profile, isCoach, container){
             <h1>${esc(profile.nombre || (isCoach ? "(sin nombre)" : "Mi ficha"))}</h1>
             ${chips.length ? `<ul class="chips">${chips.join("")}</ul>` : ""}
           </div>
-          ${isCoach && esMaster() ? `<button type="button" class="btn-danger" id="btnDelAthlete">Borrar atleta</button>` : ""}
+          ${isCoach ? `<div class="detail-acc"><a class="btn-outline" href="#/bitacora/${encodeURIComponent(profile.id)}"><span aria-hidden="true">✎</span> Bitácora</a>
+            ${esMaster() ? `<button type="button" class="btn-danger" id="btnDelAthlete">Borrar atleta</button>` : ""}</div>` : ""}
         </div>
         <div id="detailMsg">${fallo ? `<div class="error" role="alert">${esc("Parte de la ficha no cargó. " + errorES(fallo.error))}</div>` : ""}</div>
       </header>

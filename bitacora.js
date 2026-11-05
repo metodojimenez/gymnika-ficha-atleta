@@ -10,7 +10,7 @@ const BIT_CAMPOS = [
   ["que_ocurrio", "¿Qué ocurrió?"],
   ["pendiente", "¿Pendiente para la próxima?"]
 ];
-const miradorUI = { turno: null, pend: [], vistos: new Set(), cargando: false, borradores: {} };
+const miradorUI = { turno: null, pend: [], vistos: new Set(), cargando: false, borradores: {}, hist: {} };
 const bitUI = { filtro: "", q: "" };
 
 function routeBitacoraId(){
@@ -85,7 +85,7 @@ async function iniciarTurnoConQR(codigo){
   }
   const res = typeof data === "string" ? JSON.parse(data) : (data || {});
   miradorUI.turno = { id: res.id, inicio: res.inicio };
-  miradorUI.vistos = new Set();
+  miradorUI.vistos = new Set(); miradorUI.hist = {};
   pintarTurno();
   const dlg = openDialog(res.ya_abierto ? "Ya estabas en turno" : "Turno iniciado", `
     <div class="checkin-res ok"><span class="ck-icon" aria-hidden="true">✓</span>
@@ -107,7 +107,7 @@ function confirmarFinTurno(){
   b.onclick = ()=> withBusy(b, "Cerrando…", async ()=>{
     const { error } = await sb.rpc("terminar_turno");
     if(error){ showError(dlg.el.querySelector("#finTurnoMsg"), error); return; }
-    miradorUI.turno = null; miradorUI.pend = []; miradorUI.vistos = new Set(); miradorUI.borradores = {};
+    miradorUI.turno = null; miradorUI.pend = []; miradorUI.vistos = new Set(); miradorUI.borradores = {}; miradorUI.hist = {};
     const m = document.getElementById("modalMirador");
     if(m){ if(m.open) m.close(); m.remove(); }
     pintarTurno();
@@ -158,6 +158,7 @@ async function actualizarMirador(){
     const { data, error } = await sb.rpc("mirador_pendientes");
     if(error){ console.error(error); return; }
     const lista = data || [];
+    await cargarReferencias(lista.map(p => p.atleta_id));
     const nuevos = lista.filter(p => !miradorUI.vistos.has(p.reserva_id));
     nuevos.forEach(p => miradorUI.vistos.add(p.reserva_id));
     miradorUI.pend = lista;
@@ -166,6 +167,31 @@ async function actualizarMirador(){
     if(dlg && dlg.open) sincronizarTarjetas(dlg);
     else if(nuevos.length) abrirMirador(nuevos[0].reserva_id);
   } finally { miradorUI.cargando = false; }
+}
+/* Referencia en cada tarjeta: lo pendiente de la sesión anterior y las últimas 5 entradas de su bitácora */
+async function cargarReferencias(ids){
+  const faltan = [...new Set(ids)].filter(id => !(id in miradorUI.hist));
+  await Promise.all(faltan.map(async id => {
+    const { data, error } = await sb.from("bitacora").select("id, atleta_id, fecha, created_at, autor_nombre, dolor_inicio, dolor_salida, como_llego, que_hizo, que_ocurrio, estiramientos, pendiente")
+      .eq("atleta_id", id).order("fecha", { ascending: false }).order("created_at", { ascending: false }).limit(5);
+    if(!error) miradorUI.hist[id] = data || [];
+  }));
+}
+function referenciasHTML(lista){
+  if(!lista) return "";
+  if(!lista.length) return `<p class="mir-ref-vacio muted">Primera vez en la bitácora: todavía no hay sesiones anteriores.</p>`;
+  const ant = lista[0];
+  const quien = (b)=> `${esc(fmtFecha(b.fecha))}${b.autor_nombre ? " · " + esc(primerNombre(b.autor_nombre)) : ""}`;
+  const dolor = (b)=> b.dolor_inicio || b.dolor_salida ? `<span class="mir-ult-dolor">Dolor ${b.dolor_inicio || "–"} → ${b.dolor_salida || "–"}</span>` : "";
+  const linea = (t, v)=> v ? `<p><strong>${t}</strong> ${esc(v)}</p>` : "";
+  return `<div class="mir-pend${ant.pendiente ? "" : " vacio"}">
+      <p class="mir-pend-tit">Pendiente de la sesión anterior <span class="muted">(${quien(ant)})</span></p>
+      <p class="mir-pend-txt">${ant.pendiente ? esc(ant.pendiente) : "No se dejó nada pendiente."}</p></div>
+    <details class="mir-ult"><summary>Últimas ${lista.length === 1 ? "sesión" : lista.length + " sesiones"}</summary>
+      <ol>${lista.map(b => `<li><p class="mir-ult-meta"><strong>${quien(b)}</strong>${dolor(b)}</p>
+        ${linea("Llegó:", b.como_llego)}${linea("Hizo:", b.que_hizo)}${linea("Ocurrió:", b.que_ocurrio)}
+        ${b.estiramientos === true || b.estiramientos === false ? `<p><strong>Estiramientos:</strong> ${b.estiramientos ? "Sí" : "No"}</p>` : ""}
+        ${linea("Pendiente:", b.pendiente)}</li>`).join("")}</ol></details>`;
 }
 function tarjetaMiradorHTML(p){
   const pre = "m" + p.reserva_id.replace(/[^a-z0-9]/gi, "").slice(0, 12) + "_";
@@ -176,6 +202,7 @@ function tarjetaMiradorHTML(p){
         <p class="muted">${esc(cat)} · ${esc(horaDe(p.inicio))} · llegó ${esc(horaDe(p.checkin_at))}</p></div>
       <a class="link-inline mir-hist" href="#/bitacora/${encodeURIComponent(p.atleta_id)}" data-ir-bitacora>Historial</a></header>
     ${tieneLesion(p.lesiones) ? `<p class="mir-lesion"><strong>Lesión:</strong> ${esc(p.lesiones)}</p>` : ""}
+    ${referenciasHTML(miradorUI.hist[p.atleta_id])}
     ${camposBitacoraHTML(pre, miradorUI.borradores[p.reserva_id] || {})}
     <div class="mir-acc"><span class="mir-msg" aria-live="polite"></span><button type="button" class="btn-primary" data-guardar-mir>Guardar</button></div>
   </article>`;
@@ -278,6 +305,7 @@ async function guardarTarjeta(dlg, card, btn){
     if(error && !/23505|duplicate|unique/i.test((error.code || "") + " " + (error.message || ""))){ msg.textContent = errorES(error); return; }
     if(error) msg.textContent = "Otro coach ya guardó la bitácora de esta sesión.";
     delete miradorUI.borradores[reserva];
+    delete miradorUI.hist[p.atleta_id];
     miradorUI.pend = miradorUI.pend.filter(x => x.reserva_id !== reserva);
     const i = tarjetas(dlg).indexOf(card);
     card.classList.add("saliendo");

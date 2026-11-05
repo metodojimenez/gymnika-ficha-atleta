@@ -756,3 +756,22 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .bit-acc{ display:flex; gap:4px; justify-content:flex-end; margin-top:4px; }
 .bit-acc .btn-link{ min-height:34px; font-size:14px; padding:4px 8px; }
 .mirador-activo .coach-main{ padding-bottom:84px; }
+
+/* Acceso a la bitácora desde la ficha + referencia en el Mirador */
+.detail-acc{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.detail-acc .btn-outline{ margin-top:0; display:inline-flex; align-items:center; gap:6px; text-decoration:none; }
+.mir-pend{ margin-top:10px; padding:10px 12px; border-radius:var(--radius); background:var(--coach-soft); border:1px solid var(--coach-line); }
+.mir-pend.vacio{ background:var(--paper); border-color:var(--line); }
+.mir-pend-tit{ margin:0; font-size:13px; font-weight:700; color:var(--coach); text-transform:uppercase; letter-spacing:.04em; }
+.mir-pend.vacio .mir-pend-tit{ color:var(--ink-soft); }
+.mir-pend-tit .muted{ text-transform:none; letter-spacing:0; font-weight:500; }
+.mir-pend-txt{ margin:4px 0 0; font-size:16px; font-weight:700; white-space:pre-wrap; overflow-wrap:anywhere; }
+.mir-pend.vacio .mir-pend-txt{ font-weight:500; color:var(--ink-soft); font-size:14.5px; }
+.mir-ref-vacio{ margin:10px 2px 0; font-size:14px; }
+.mir-ult{ margin-top:8px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); }
+.mir-ult summary{ cursor:pointer; padding:9px 12px; font-weight:700; font-size:14.5px; color:var(--accent-deep); }
+.mir-ult ol{ list-style:none; margin:0; padding:0 12px 10px; display:grid; gap:8px; }
+.mir-ult li{ padding-top:8px; border-top:1px solid var(--line); font-size:14px; }
+.mir-ult li p{ margin:2px 0 0; overflow-wrap:anywhere; }
+.mir-ult-meta{ display:flex; gap:8px; flex-wrap:wrap; align-items:baseline; }
+.mir-ult-dolor{ font-size:13px; color:var(--ink-soft); }
