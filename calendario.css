@@ -775,3 +775,20 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .mir-ult li p{ margin:2px 0 0; overflow-wrap:anywhere; }
 .mir-ult-meta{ display:flex; gap:8px; flex-wrap:wrap; align-items:baseline; }
 .mir-ult-dolor{ font-size:13px; color:var(--ink-soft); }
+/* Zonas de dolor */
+.bit-zonas{ border:0; margin:0; padding:0; min-width:0; }
+.bit-zonas legend{ font-weight:700; margin-bottom:6px; padding:0; }
+.zonas-lista{ display:grid; gap:10px; }
+.zona-row{ padding:10px; border:1px solid var(--line); border-radius:var(--radius); background:var(--paper); display:grid; gap:8px; }
+.zona-top{ display:flex; gap:8px; align-items:center; }
+.zona-top select{ flex:1; min-width:0; min-height:42px; }
+.zona-quitar{ flex:none; width:38px; height:38px; border:1px solid var(--line); }
+.zonas-lista .zona-row:only-child .zona-quitar{ display:none; }
+.zona-otra{ width:100%; }
+.zona-otra[hidden]{ display:none; }
+.zona-nombre{ margin:0; font-weight:700; font-size:14.5px; color:var(--ink-soft); }
+.zona-add{ margin-top:8px; }
+.bit-dolores{ flex-direction:column; align-items:flex-start; }
+.dolor-zona{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.dz-nombre{ font-weight:700; font-size:14px; min-width:0; flex-basis:100%; }
+.mir-ult-meta .mir-ult-dolor + .mir-ult-dolor::before{ content:"· "; }

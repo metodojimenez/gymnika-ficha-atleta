@@ -21,18 +21,49 @@ const mayuscula = (t)=> String(t || "").charAt(0).toUpperCase() + String(t || ""
 const nivelDolor = (n)=> n >= 7 ? "alto" : n >= 4 ? "medio" : "bajo";
 
 /* ---------- Campos (los mismos en el Mirador y en «Nueva entrada») ---------- */
-function burbujasHTML(campo, pre, valor, titulo){
-  return `<fieldset class="bit-dolor" data-dolor="${campo}">
-    <legend>${esc(titulo)}</legend>
-    <div class="burbujas">${[1,2,3,4,5,6,7,8,9,10].map(n => `
-      <label class="burbuja b-${nivelDolor(n)}"><input type="radio" name="${pre}${campo}" value="${n}"${Number(valor) === n ? " checked" : ""}><span>${n}</span></label>`).join("")}
-    </div></fieldset>`;
+const ZONAS_DOLOR = ["Cabeza", "Cuello", "Hombro derecho", "Hombro izquierdo", "Codo derecho", "Codo izquierdo",
+  "Muñeca o mano derecha", "Muñeca o mano izquierda", "Espalda alta", "Espalda media", "Zona lumbar", "Sacro o coxis",
+  "Cadera derecha", "Cadera izquierda", "Ingle derecha", "Ingle izquierda", "Muslo derecho", "Muslo izquierdo",
+  "Rodilla derecha", "Rodilla izquierda", "Pantorrilla derecha", "Pantorrilla izquierda",
+  "Tobillo derecho", "Tobillo izquierdo", "Pie derecho", "Pie izquierdo"];
+/* Zonas de una entrada; las entradas de antes (sin zonas) se leen como una zona general */
+function zonasDe(d){
+  if(d && Array.isArray(d.zonas) && d.zonas.length) return d.zonas;
+  if(d && (d.dolor_inicio || d.dolor_salida)) return [{ zona: null, inicio: d.dolor_inicio || null, salida: d.dolor_salida || null }];
+  return [];
+}
+const nombreZona = (z)=> (z && z.zona) || "Zona general";
+function burbujasFila(name, valor, etiqueta){
+  return `<div class="burbujas" role="radiogroup" aria-label="${esc(etiqueta)}">${[1,2,3,4,5,6,7,8,9,10].map(n => `
+    <label class="burbuja b-${nivelDolor(n)}"><input type="radio" name="${name}" value="${n}"${Number(valor) === n ? " checked" : ""}><span>${n}</span></label>`).join("")}</div>`;
+}
+function zonaLlegadaHTML(pre, k, z = {}){
+  const otra = z.zona && !ZONAS_DOLOR.includes(z.zona);
+  return `<div class="zona-row" data-z="${k}">
+    <div class="zona-top">
+      <label class="sr-only" for="${pre}zsel${k}">Zona de dolor</label>
+      <select id="${pre}zsel${k}" data-zona-sel>
+        <option value="">Zona general</option>
+        ${ZONAS_DOLOR.map(n => `<option${z.zona === n ? " selected" : ""}>${esc(n)}</option>`).join("")}
+        <option value="__otra"${otra ? " selected" : ""}>Otra zona…</option>
+      </select>
+      <button type="button" class="icon-btn zona-quitar" data-zona-quitar aria-label="Quitar esta zona">✕</button>
+    </div>
+    <input type="text" class="zona-otra" data-zona-otra maxlength="60" placeholder="Escribe la zona" aria-label="Otra zona" value="${otra ? esc(z.zona) : ""}"${otra ? "" : " hidden"}>
+    ${burbujasFila(`${pre}zi${k}`, z.inicio, "Dolor al llegar")}
+  </div>`;
+}
+function zonaSalidaHTML(pre, k, z = {}){
+  return `<div class="zona-row" data-z="${k}"><p class="zona-nombre">${esc(nombreZona(z))}</p>${burbujasFila(`${pre}zs${k}`, z.salida, "Dolor al irse")}</div>`;
 }
 function camposBitacoraHTML(pre, d = {}){
   const t = (campo, titulo)=> `<div class="bit-campo"><label for="${pre}${campo}">${esc(titulo)}</label>
     <textarea id="${pre}${campo}" data-campo="${campo}" rows="2">${esc(d[campo] || "")}</textarea></div>`;
-  return `<div class="bit-campos">
-    ${burbujasHTML("dolor_inicio", pre, d.dolor_inicio, "Nivel de dolor al llegar")}
+  const zonas = zonasDe(d).length ? zonasDe(d) : [{}];
+  return `<div class="bit-campos" data-pre="${pre}" data-zn="${zonas.length}">
+    <fieldset class="bit-zonas" data-lista="llegada"><legend>Dolor al llegar</legend>
+      <div class="zonas-lista">${zonas.map((z, k) => zonaLlegadaHTML(pre, k, z)).join("")}</div>
+      <button type="button" class="btn-outline sm zona-add" data-zona-add>+ Agregar zona</button></fieldset>
     ${t("como_llego", "¿Cómo llegó?")}
     ${t("que_hizo", "¿Qué hizo hoy?")}
     ${t("que_ocurrio", "¿Qué ocurrió?")}
@@ -42,28 +73,79 @@ function camposBitacoraHTML(pre, d = {}){
         <label><input type="radio" name="${pre}estiramientos" value="no"${d.estiramientos === false ? " checked" : ""}><span>No</span></label>
       </div></fieldset>
     ${t("pendiente", "¿Pendiente para la próxima?")}
-    ${burbujasHTML("dolor_salida", pre, d.dolor_salida, "¿Con cuánto dolor se va?")}
+    <fieldset class="bit-zonas" data-lista="salida"><legend>¿Con cuánto dolor se va?</legend>
+      <div class="zonas-lista">${zonas.map((z, k) => zonaSalidaHTML(pre, k, z)).join("")}</div></fieldset>
   </div>`;
 }
-/* Tocar la burbuja o la opción marcada la desmarca: ningún campo es obligatorio */
+/* Tocar la burbuja o la opción marcada la desmarca (ningún campo es obligatorio) + agregar, quitar y nombrar zonas */
 function enlazarCampos(box){
   box.addEventListener("pointerdown", (e)=>{
     const inp = e.target.closest("label")?.querySelector("input[type=radio]");
     if(inp) inp.dataset.estaba = inp.checked ? "1" : "";
   });
+  const filas = (campos, k)=> campos.querySelectorAll(`.zona-row[data-z="${k}"]`);
+  const renombrar = (row)=>{
+    const campos = row.closest(".bit-campos");
+    const sel = row.querySelector("[data-zona-sel]"), otra = row.querySelector("[data-zona-otra]");
+    const nombre = sel.value === "__otra" ? (otra.value.trim() || "Otra zona") : (sel.value || "Zona general");
+    const sal = campos.querySelector(`[data-lista="salida"] .zona-row[data-z="${row.dataset.z}"] .zona-nombre`);
+    if(sal) sal.textContent = nombre;
+  };
   box.addEventListener("click", (e)=>{
     const inp = e.target.closest("input[type=radio]");
-    if(inp && inp.dataset.estaba === "1"){ inp.checked = false; inp.dataset.estaba = ""; inp.dispatchEvent(new Event("change", { bubbles: true })); }
+    if(inp && inp.dataset.estaba === "1"){ inp.checked = false; inp.dataset.estaba = ""; inp.dispatchEvent(new Event("change", { bubbles: true })); return; }
+    const add = e.target.closest("[data-zona-add]");
+    if(add){
+      const campos = add.closest(".bit-campos"), pre = campos.dataset.pre, k = Number(campos.dataset.zn || 0);
+      campos.dataset.zn = k + 1;
+      campos.querySelector('[data-lista="llegada"] .zonas-lista').insertAdjacentHTML("beforeend", zonaLlegadaHTML(pre, k));
+      campos.querySelector('[data-lista="salida"] .zonas-lista').insertAdjacentHTML("beforeend", zonaSalidaHTML(pre, k));
+      campos.querySelector(`[data-lista="llegada"] .zona-row[data-z="${k}"] select`).focus();
+      return;
+    }
+    const quitar = e.target.closest("[data-zona-quitar]");
+    if(quitar){
+      const row = quitar.closest(".zona-row"), campos = row.closest(".bit-campos");
+      filas(campos, row.dataset.z).forEach(f => f.remove());
+    }
   });
+  box.addEventListener("change", (e)=>{
+    const sel = e.target.closest("[data-zona-sel]");
+    if(!sel) return;
+    const row = sel.closest(".zona-row"), otra = row.querySelector("[data-zona-otra]");
+    otra.hidden = sel.value !== "__otra";
+    if(!otra.hidden) otra.focus();
+    renombrar(row);
+  });
+  box.addEventListener("input", (e)=>{ if(e.target.closest("[data-zona-otra]")) renombrar(e.target.closest(".zona-row")); });
 }
 function leerCampos(box, pre){
   const radio = (nombre)=> box.querySelector(`input[name="${pre}${nombre}"]:checked`);
   const d = {};
   BIT_CAMPOS.forEach(([c]) => { const v = (box.querySelector(`[data-campo="${c}"]`)?.value || "").trim(); d[c] = v || null; });
-  ["dolor_inicio", "dolor_salida"].forEach(c => { const r = radio(c); d[c] = r ? Number(r.value) : null; });
+  const zonas = [];
+  box.querySelectorAll('[data-lista="llegada"] .zona-row').forEach(row => {
+    const k = row.dataset.z, sel = row.querySelector("[data-zona-sel]").value;
+    const zona = sel === "__otra" ? (row.querySelector("[data-zona-otra]").value.trim() || null) : (sel || null);
+    const i = radio("zi" + k), s = radio("zs" + k);
+    const z = { zona, inicio: i ? Number(i.value) : null, salida: s ? Number(s.value) : null };
+    if(z.zona || z.inicio || z.salida) zonas.push(z);
+  });
+  d.zonas = zonas.length ? zonas : null;
+  const max = (c)=> zonas.reduce((m, z) => z[c] && z[c] > (m || 0) ? z[c] : m, null);
+  d.dolor_inicio = max("inicio"); d.dolor_salida = max("salida");
   const e = radio("estiramientos");
   d.estiramientos = e ? e.value === "si" : null;
   return d;
+}
+/* Dolor por zona para el historial: «Rodilla derecha 7 → 3» */
+function dolorZonasHTML(b){
+  const zonas = zonasDe(b).filter(z => z.inicio || z.salida);
+  if(!zonas.length) return "";
+  return `<div class="bit-dolores">${zonas.map(z => `<div class="dolor-zona"><span class="dz-nombre">${esc(nombreZona(z))}</span>
+    ${z.inicio ? `<span class="dolor-pill b-${nivelDolor(z.inicio)}">Llegó <strong>${z.inicio}</strong></span>` : ""}
+    ${z.inicio && z.salida ? `<span aria-hidden="true">→</span>` : ""}
+    ${z.salida ? `<span class="dolor-pill b-${nivelDolor(z.salida)}">Se fue <strong>${z.salida}</strong></span>` : ""}</div>`).join("")}</div>`;
 }
 
 /* ---------- Turno ---------- */
@@ -172,7 +254,7 @@ async function actualizarMirador(){
 async function cargarReferencias(ids){
   const faltan = [...new Set(ids)].filter(id => !(id in miradorUI.hist));
   await Promise.all(faltan.map(async id => {
-    const { data, error } = await sb.from("bitacora").select("id, atleta_id, fecha, created_at, autor_nombre, dolor_inicio, dolor_salida, como_llego, que_hizo, que_ocurrio, estiramientos, pendiente")
+    const { data, error } = await sb.from("bitacora").select("id, atleta_id, fecha, created_at, autor_nombre, dolor_inicio, dolor_salida, zonas, como_llego, que_hizo, que_ocurrio, estiramientos, pendiente")
       .eq("atleta_id", id).order("fecha", { ascending: false }).order("created_at", { ascending: false }).limit(5);
     if(!error) miradorUI.hist[id] = data || [];
   }));
@@ -182,7 +264,8 @@ function referenciasHTML(lista){
   if(!lista.length) return `<p class="mir-ref-vacio muted">Primera vez en la bitácora: todavía no hay sesiones anteriores.</p>`;
   const ant = lista[0];
   const quien = (b)=> `${esc(fmtFecha(b.fecha))}${b.autor_nombre ? " · " + esc(primerNombre(b.autor_nombre)) : ""}`;
-  const dolor = (b)=> b.dolor_inicio || b.dolor_salida ? `<span class="mir-ult-dolor">Dolor ${b.dolor_inicio || "–"} → ${b.dolor_salida || "–"}</span>` : "";
+  const dolor = (b)=> zonasDe(b).filter(z => z.inicio || z.salida).map(z =>
+    `<span class="mir-ult-dolor">${esc(z.zona || "Dolor")} ${z.inicio || "–"} → ${z.salida || "–"}</span>`).join("");
   const linea = (t, v)=> v ? `<p><strong>${t}</strong> ${esc(v)}</p>` : "";
   return `<div class="mir-pend${ant.pendiente ? "" : " vacio"}">
       <p class="mir-pend-tit">Pendiente de la sesión anterior <span class="muted">(${quien(ant)})</span></p>
@@ -397,10 +480,7 @@ async function pintarHistorial(id){
   if(!lista.length){ box.innerHTML = emptyHTML("Todavía no hay entradas. Se llena desde el Mirador cuando llega, o con «Nueva entrada»."); return; }
   const puede = (b)=> b.autor_id === state.profile.id || esMaster();
   box.innerHTML = `<ol class="bit-timeline">${lista.map(b => {
-    const dolor = (b.dolor_inicio || b.dolor_salida) ? `<div class="bit-dolores">
-      ${b.dolor_inicio ? `<span class="dolor-pill b-${nivelDolor(b.dolor_inicio)}">Llegó con <strong>${b.dolor_inicio}</strong>/10</span>` : ""}
-      ${b.dolor_inicio && b.dolor_salida ? `<span aria-hidden="true">→</span>` : ""}
-      ${b.dolor_salida ? `<span class="dolor-pill b-${nivelDolor(b.dolor_salida)}">Se fue con <strong>${b.dolor_salida}</strong>/10</span>` : ""}</div>` : "";
+    const dolor = dolorZonasHTML(b);
     const filas = BIT_CAMPOS.filter(([c]) => b[c]).map(([c, t]) => `<div class="bit-fila"><dt>${esc(t)}</dt><dd>${esc(b[c])}</dd></div>`);
     if(b.estiramientos !== null && b.estiramientos !== undefined) filas.splice(2, 0, `<div class="bit-fila"><dt>¿Hizo sus estiramientos?</dt><dd>${b.estiramientos ? "Sí" : "No"}</dd></div>`);
     return `<li class="bit-entrada">
