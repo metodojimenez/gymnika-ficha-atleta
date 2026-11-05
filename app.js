@@ -15,10 +15,10 @@ const MEDIDA_FIELDS = [
 let state = { session: null, profile: null, viewingAthleteId: null, athleteList: [], search: "", renderToken: 0, detail: null };
 
 /* ====================== EQUIPO: ROLES ======================
-   coach = master coach (administra todo: pagos, ajustes, equipo); coach_general ve terapia y fortalecimiento sin nada de administración;
+   coach = master coach (administra todo: pagos, ajustes, equipo); coach_general (Lead coach) ve terapia y fortalecimiento sin nada de administración;
    coach_terapia y coach_fortalecimiento solo ven a los alumnos de su área.
    La base de datos aplica estas mismas reglas; aquí solo se ocultan las partes que cada uno no usa. */
-const ROLES_EQUIPO = { coach: "Master coach", coach_general: "Coach general", coach_terapia: "Coach de terapia", coach_fortalecimiento: "Coach de fortalecimiento" };
+const ROLES_EQUIPO = { coach: "Master coach", coach_general: "Lead coach", coach_terapia: "Coach de terapia", coach_fortalecimiento: "Coach de fortalecimiento" };
 function esEquipo(p = state.profile){ return !!p && Object.prototype.hasOwnProperty.call(ROLES_EQUIPO, p.role); }
 function esMaster(p = state.profile){ return !!p && p.role === "coach"; }
 function areaCoach(p = state.profile){
@@ -27,6 +27,7 @@ function areaCoach(p = state.profile){
 /* Secciones del panel según el rol, en el orden del menú */
 const SECCIONES_COACH = {
   hoy:         { t: "Hoy",      ico: "◉" },
+  bitacora:    { t: "Bitácora", ico: "✎" },
   agenda:      { t: "Horario",  ico: "◷" },
   rutinas:     { t: "Rutinas",  ico: "R" },
   pagos:       { t: "Pagos",    ico: "S/", master: true },
@@ -408,6 +409,8 @@ async function doLogout(){
   await quitarPushDispositivo();
   avisoPagos.vistos = null; avisoPagos.forzar = true;
   document.getElementById("modalPago")?.remove();
+  miradorUI.turno = null; miradorUI.pend = []; miradorUI.vistos = new Set(); miradorUI.borradores = {};
+  document.getElementById("modalMirador")?.remove(); document.getElementById("miradorFab")?.remove();
   await sb.auth.signOut();
   state = { session: null, profile: null, viewingAthleteId: null, athleteList: [], search: "", renderToken: state.renderToken + 1, detail: null };
   if(location.hash) history.replaceState(null, "", location.pathname + location.search);
@@ -677,7 +680,13 @@ async function bootAfterAuth(){
     return;
   }
   state.profile = profile;
-  if(esEquipo(profile)){ tomarCheckinPendiente(); renderCoachHome(); return; }
+  if(esEquipo(profile)){
+    /* El coach escanea el QR de recepción para iniciar su turno */
+    const codigoTurno = tomarCheckinPendiente();
+    await renderCoachHome();
+    if(codigoTurno) iniciarTurnoConQR(codigoTurno);
+    return;
+  }
   if(!isProfileComplete(profile)) state.profile = await completarDesdeRegistro(profile, session.user);
   if(!isProfileComplete(state.profile)){ renderCompleteProfileGate(state.profile); return; }
   await renderAthleteHome();
@@ -861,6 +870,7 @@ async function loadInbox(){
     renderInboxBadge();
     if(inbox.open) renderInboxPanel();
     if(esMaster()) await revisarAvisoPagos();
+    if(miradorUI.turno) actualizarMirador();
   } finally { inbox.cargando = false; }
 }
 /* ====================== VENTANAS EMERGENTES (MASTER) ======================
@@ -877,7 +887,8 @@ function avisarNuevas(items){
   if(primeraVez || !esEquipo()) return;
   const sinLeer = nuevas.filter(n => !n.leida).reverse();
   /* Llegadas con QR: ventana con los que asistieron y un mensaje del coach para cada uno (todo el equipo del área) */
-  sinLeer.filter(n => n.tipo === "checkin").forEach(n => mostrarLlegadas(n));
+  /* En turno, el Mirador reemplaza esta ventana */
+  if(!miradorUI.turno) sinLeer.filter(n => n.tipo === "checkin").forEach(n => mostrarLlegadas(n));
   /* Tareas asignadas: aviso para cualquier coach del equipo */
   sinLeer.filter(n => n.tipo === "tarea").forEach(n => mostrarEmergente(n));
   if(!esMaster()) return;
@@ -1119,7 +1130,7 @@ function routeAthleteId(){
   return m ? decodeURIComponent(m[1]) : null;
 }
 function routeCoachSeccion(){
-  const m = location.hash.match(/^#\/(hoy|agenda|rutinas|pagos|resumen|equipo|comunicados|ajustes)\b/);
+  const m = location.hash.match(/^#\/(hoy|bitacora|agenda|rutinas|pagos|resumen|equipo|comunicados|ajustes)\b/);
   return m ? m[1] : null;
 }
 /* Alertas del equipo (última semana de acceso en fortalecimiento, 2 o menos sesiones en terapia) */
@@ -1151,6 +1162,7 @@ async function renderCoachHome(){
   if(routeAthleteId() || routeCoachSeccion()) document.getElementById("coachLayout").classList.add("has-selection");
   await refreshCoachAside();
   showCoachRoute();
+  cargarTurno();
   if(esMaster()) actualizarBadgePagos();
 }
 
@@ -1303,6 +1315,7 @@ async function showCoachRoute(){
     main.innerHTML = `<div class="skel skel-line" style="width:120px"></div><div class="skel skel-block" style="margin-top:16px"></div>`;
     if(seccion === "pagos") await renderCoachPagos(main);
     else if(seccion === "hoy") await renderCoachHoy(main);
+    else if(seccion === "bitacora") await renderCoachBitacora(main);
     else if(seccion === "agenda") await renderCoachAgenda(main);
     else if(seccion === "rutinas") renderCoachRutinas(main);
     else if(seccion === "resumen") await renderCoachResumen(main);
@@ -1342,6 +1355,7 @@ window.addEventListener("hashchange", ()=>{
   if(codigo){
     history.replaceState(null, "", location.pathname + location.search);
     if(state.profile && !esEquipo() && document.getElementById("athleteMain")) procesarCheckin(codigo);
+    else if(esEquipo() && document.getElementById("coachLayout")) iniciarTurnoConQR(codigo);
     else guardarCheckinPendiente(codigo);
     return;
   }
@@ -1415,7 +1429,7 @@ if(esIOS()) setTimeout(()=> mostrarInstalar("ios"), 1500);
    En el teléfono la app puede quedar abierta días sin recargarse. Al volver a ella revisa si se publicó
    una versión nueva (cambia el ?v= de los archivos) y se actualiza sola; si la persona está escribiendo,
    muestra un aviso con el botón "Actualizar". También renueva la lista de atletas del equipo. */
-const firmaVersion = (html)=> (String(html).match(/\b(?:app|ficha|planes|rutinas|coach|estilos|calendario)\.(?:js|css)\?v=\d+/g) || []).sort().join("|");
+const firmaVersion = (html)=> (String(html).match(/\b(?:app|ficha|planes|rutinas|coach|bitacora|estilos|calendario)\.(?:js|css)\?v=\d+/g) || []).sort().join("|");
 const VERSION_CARGADA = firmaVersion(document.head ? document.head.innerHTML : "");
 const versionUI = { revisada: 0, aside: Date.now() };
 function appOcupada(){

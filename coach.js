@@ -686,6 +686,7 @@ async function renderCoachHoy(main){
     <p class="eyebrow">${esc(ROLES_EQUIPO[state.profile.role] || "Panel del coach")}</p><h1>Hoy</h1>
     <p class="lede hoy-fecha">${esc(fechaLarga(todayStr()))}${area ? " · " + CATEGORIAS[area].nombre : ""}</p></header>
     <div class="grid">
+      ${turnoBarHTML()}
       ${area === "terapia" ? "" : `<section class="panel span-12 rt-hoy" aria-labelledby="hRt"><div class="panel-head"><h2 id="hRt">Rutina de hoy</h2><span class="muted">Fortalecimiento · según los días que viene cada uno</span></div>
         <div id="hoyRutinas"><div class="skel skel-line" style="width:70%"></div></div></section>`}
       <section class="panel span-12 hoy-alertas" aria-labelledby="hAl"><div class="panel-head"><h2 id="hAl">Alertas</h2><span class="muted">${nota}</span></div>
@@ -703,6 +704,7 @@ async function renderCoachHoy(main){
         <div id="hoyBody"><div class="skel skel-block"></div></div>
         <p class="muted wk-nota">Toca un nombre para marcar asistencia, cancelar o abrir su ficha. Se actualiza solo cada 30 segundos.</p></section>
     </div></div>`;
+  pintarTurno();
   enlazarFormsTareas();
   suscribirTareas();
   main.querySelectorAll("[data-ir-equipo]").forEach(l => { l.onclick = (e)=>{ e.preventDefault(); document.getElementById("tareasEquipo").scrollIntoView({ behavior: "smooth", block: "start" }); document.getElementById("tt_equipo")?.focus({ preventScroll: true }); }; });
@@ -871,7 +873,7 @@ async function renderCoachResumen(main){
 
 /* ====================== MASTER: EQUIPO ======================
    Cada persona crea su cuenta en la app (Registrarme) y un master le asigna su rol aquí. */
-const ROL_OPCIONES = [["coach", "Master coach"], ["coach_general", "Coach general (terapia y fortalecimiento)"], ["coach_terapia", "Coach de terapia"], ["coach_fortalecimiento", "Coach de fortalecimiento"]];
+const ROL_OPCIONES = [["coach", "Master coach"], ["coach_general", "Lead coach (terapia y fortalecimiento)"], ["coach_terapia", "Coach de terapia"], ["coach_fortalecimiento", "Coach de fortalecimiento"]];
 function rolSelectHTML(id, actual, conQuitar){
   return `<select data-rol-de="${esc(id)}" aria-label="Rol">
     ${actual === "atleta" || !actual ? `<option value="" selected>Elegir rol…</option>` : ""}
@@ -883,7 +885,7 @@ async function renderCoachEquipo(main){
   main.innerHTML = `<div class="detail"><header class="detail-head">
     <a class="back" href="#/">← Atletas</a>
     <p class="eyebrow">Solo master coach</p><h1>Equipo</h1>
-    <p class="lede" style="margin-top:6px">El master ve todo y administra pagos, ajustes y el equipo. El coach general ve terapia y fortalecimiento, sin pagos ni administración. El coach de terapia y el de fortalecimiento solo ven a los alumnos de su área.</p></header>
+    <p class="lede" style="margin-top:6px">El master ve todo y administra pagos, ajustes y el equipo. El lead coach ve terapia y fortalecimiento, sin pagos ni administración. El coach de terapia y el de fortalecimiento solo ven a los alumnos de su área.</p></header>
     <div class="grid">
       <section class="panel span-12"><div class="panel-head"><h2>Equipo actual</h2><span class="muted" id="eqCount"></span></div>
         <div id="eqLista"><div class="skel skel-block"></div></div></section>
