@@ -56,13 +56,12 @@ async function renderAthleteDetail(profile, isCoach, container){
     sb.from("medidas").select("*").eq("user_id", uid).order("fecha"),
     sb.from("fuerza").select("*").eq("user_id", uid).order("semana"),
     sb.from("ejercicios_fuerza").select("*").eq("user_id", uid).order("created_at"),
-    sb.from("tiempos").select("*").eq("user_id", uid).order("fecha"),
     sb.from("eventos").select("*").eq("user_id", uid).order("fecha"),
     sb.from("solicitudes_nutricion").select("*").eq("user_id", uid).order("fecha", { ascending: false }),
     isCoach ? sb.from("ficha_interna").select("*").eq("user_id", uid).maybeSingle() : Promise.resolve({ data: null })
   ]);
   if(token !== state.renderToken) return; // el coach ya abrió otro atleta
-  const [{ data: medidas }, { data: fuerza }, { data: ejercicios }, { data: tiempos }, { data: eventos }, { data: solicitudes }, { data: interna }] = results;
+  const [{ data: medidas }, { data: fuerza }, { data: ejercicios }, { data: eventos }, { data: solicitudes }, { data: interna }] = results;
   const fallo = results.find(r => r.error);
   state.detail = { medidas: medidas || [], fuerza: fuerza || [], eventos: eventos || [], interna: interna || null };
 
@@ -112,6 +111,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("misReservasCard", esHijo ? "Sus reservas" : "Mis reservas", 4)}`,
       progreso: `
     ${resumenHTML}
+    ${panelHTML("externosCard", "Entrenamiento fuera de Gymnika", 12, { eyebrow: "Tu reloj o a mano" })}
     ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}`,
       ficha: `
     ${panelHTML("fichaCard", "Datos personales", 12)}`
@@ -132,7 +132,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("fuerzaCard", "Progresión de fuerza", 8, { note: "Carga el coach" })}
     ${graficoPeso(4)}
     ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
-    ${panelHTML("tiemposCard", "Tiempos deportivos", 12)}`,
+    ${panelHTML("externosCard", "Entrenamiento fuera de Gymnika", 12, { eyebrow: "Tu reloj o a mano" })}`,
       ficha: `
     ${familia}
     ${panelHTML("agendaCard", "Agenda: viajes y competencias", 6)}
@@ -146,6 +146,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("notasCard", "Notas del coach", 6)}
     ${panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 6)}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
+    ${panelHTML("externosCard", "Entrenamiento fuera de Gymnika", 12, { eyebrow: "Reloj o a mano" })}
     ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
     ${panelHTML("fichaCard", "Datos personales", 12)}`;
   } else {
@@ -159,7 +160,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("fuerzaCard", "Progresión de fuerza", 8)}
     ${graficoPeso(4)}
     ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
-    ${panelHTML("tiemposCard", "Tiempos deportivos", 6)}
+    ${panelHTML("externosCard", "Entrenamiento fuera de Gymnika", 12, { eyebrow: "Reloj o a mano" })}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
     ${panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 6)}
     ${panelHTML("fichaCard", "Datos personales", 6)}`;
@@ -214,7 +215,7 @@ async function renderAthleteDetail(profile, isCoach, container){
   if(hay("agendaCard")) renderAgenda(eventos || [], uid, isCoach);
   renderMedidas(medidas || [], uid, isCoach);
   if(hay("fuerzaCard")) renderFuerza(fuerza || [], ejercicios || [], uid, isCoach);
-  if(hay("tiemposCard")) renderTiempos(tiempos || [], uid, isCoach);
+  if(hay("externosCard")) renderExternos(document.getElementById("externosCard"), uid, { esCoach: isCoach });
   if(hay("nutricionCard")) renderNutricion(profile, uid, isCoach, solicitudes || []);
   renderEstiramientos(profile, uid, isCoach);
   container.querySelectorAll("[data-volver-panel]").forEach(b => { b.onclick = volverAMiPanel; });
@@ -848,116 +849,6 @@ function drawFuerzaChart(fuerza, colorMap){
       interaction:{ mode:"index", intersect:false },
       plugins: { legend: { display:false }, tooltip: { callbacks: { label: (c)=> c.dataset.label+": "+c.parsed.y+" kg" } } },
       scales: { y: { title:{display:true,text:"kg"}, grace:"5%" }, x: { grid:{display:false} } }
-    }
-  });
-}
-
-/* ---- Tiempos ---- */
-let tiemposChartInstance = null;
-
-function renderTiempos(tiempos, uid, isCoach){
-  const box = document.getElementById("tiemposCard");
-  const pruebas = [...new Set(tiempos.map(t=>t.prueba))];
-  const colorFor = (p)=> CHART_COLORS[pruebas.indexOf(p) % CHART_COLORS.length];
-
-  const rows = [...tiempos].reverse().map(t => `
-    <tr>
-      <td>${fmtFecha(t.fecha)}</td><td style="text-align:left">${esc(t.prueba)}</td><td>${fmt(t.valor)} ${esc(t.unidad)}</td>
-      <td class="actions"><button type="button" class="btn-danger icon" data-delt="${esc(t.id)}" aria-label="Borrar ${esc(t.prueba)} del ${fmtFecha(t.fecha)}">✕</button></td>
-    </tr>
-  `).join("");
-
-  box.innerHTML = `
-    <div id="tiemposLegend" class="legend"></div>
-    <div class="chart-box"><canvas id="tiemposChart" role="img" aria-label="Gráfico de tiempos deportivos"></canvas></div>
-    ${tiempos.length ? `
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th scope="col">Fecha</th><th scope="col" style="text-align:left">Prueba</th><th scope="col">Tiempo</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>` : emptyHTML("Sin tiempos registrados. Agrega tu primera prueba para seguir su evolución.")}
-    <div id="tiemposListMsg" aria-live="polite"></div>
-    <button type="button" class="btn-outline btn-block" id="btnAddTiempo" style="margin-top:14px">+ Agregar tiempo</button>
-    <div id="tiempoForm"></div>
-  `;
-  drawTiemposChart(tiempos, colorFor);
-
-  const reload = async ()=>{
-    const { data, error } = await sb.from("tiempos").select("*").eq("user_id",uid).order("fecha");
-    if(error){ showError(document.getElementById("tiemposListMsg"), error); return; }
-    renderTiempos(data||[], uid, isCoach);
-  };
-
-  document.getElementById("btnAddTiempo").onclick = ()=>{
-    document.getElementById("tiempoForm").innerHTML = `
-      <label for="t_fecha">Fecha</label><input type="date" id="t_fecha" value="${todayStr()}">
-      <label for="t_prueba">Prueba / evento</label><input id="t_prueba" placeholder="Ej: 100m libre, 5K, salto largo">
-      <div class="row">
-        <div><label for="t_valor">Tiempo / valor</label><input type="number" inputmode="decimal" step="0.01" id="t_valor"></div>
-        <div><label for="t_unidad">Unidad</label>
-          <select id="t_unidad">
-            <option value="seg">segundos</option>
-            <option value="min">minutos</option>
-            <option value="m">metros</option>
-            <option value="pts">puntos</option>
-          </select>
-        </div>
-      </div>
-      <button type="button" class="btn-primary" id="btnSaveTiempo">Guardar</button>
-      <div id="tiempoMsg" aria-live="polite"></div>
-    `;
-    document.getElementById("t_prueba").focus();
-    const saveBtn = document.getElementById("btnSaveTiempo");
-    saveBtn.onclick = ()=> withBusy(saveBtn, "Guardando…", async ()=>{
-      const fecha = document.getElementById("t_fecha").value;
-      const prueba = document.getElementById("t_prueba").value.trim();
-      const valor = parseFloat(document.getElementById("t_valor").value);
-      const msg = document.getElementById("tiempoMsg");
-      if(!fecha || !prueba || isNaN(valor)){ showMsg(msg, "error", "Completa fecha, prueba y valor."); return; }
-      const payload = { user_id: uid, fecha, prueba, valor, unidad: document.getElementById("t_unidad").value };
-      const { error } = await sb.from("tiempos").insert(payload);
-      if(error){ showError(msg, error); return; }
-      await reload();
-    });
-  };
-  box.querySelectorAll("[data-delt]").forEach(btn=>{
-    btn.onclick = ()=> withBusy(btn, "…", async ()=>{
-      const { error } = await sb.from("tiempos").delete().eq("id", btn.dataset.delt);
-      if(error){ showError(document.getElementById("tiemposListMsg"), error); return; }
-      await reload();
-    });
-  });
-}
-
-function drawTiemposChart(tiempos, colorFor){
-  const legendBox = document.getElementById("tiemposLegend");
-  const canvas = document.getElementById("tiemposChart");
-  if(tiemposChartInstance){ tiemposChartInstance.destroy(); tiemposChartInstance = null; }
-  if(!tiempos.length || !window.Chart){
-    legendBox.innerHTML = "";
-    canvas.parentElement.style.display = "none";
-    return;
-  }
-  canvas.parentElement.style.display = "block";
-  const allDates = [...new Set(tiempos.map(t=>t.fecha))].sort();
-  const pruebas = [...new Set(tiempos.map(t=>t.prueba))];
-  legendBox.innerHTML = pruebas.map(p=>`<span><span class="dot" style="background:${esc(colorFor(p))}"></span>${esc(p)}</span>`).join("");
-  const datasets = pruebas.map(p=>{
-    const puntos = allDates.map(d=>{
-      const reg = tiempos.find(t=>t.fecha===d && t.prueba===p);
-      return reg ? reg.valor : null;
-    });
-    return lineDataset(p, puntos, colorFor(p));
-  });
-  tiemposChartInstance = new Chart(canvas, {
-    type: "line",
-    data: { labels: allDates.map(d=>fmtFecha(d, false)), datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction:{ mode:"index", intersect:false },
-      plugins: { legend: { display:false }, tooltip: { callbacks: { label: (c)=> c.dataset.label+": "+c.parsed.y } } },
-      scales: { x: { grid:{display:false} }, y: { grace:"5%" } }
     }
   });
 }

@@ -550,19 +550,23 @@ async function renderBitacoraAtleta(main, id){
       <button type="button" role="tab" data-bit-tab="sesiones" aria-selected="true">Sesiones</button>
       <button type="button" role="tab" data-bit-tab="consejos" aria-selected="false">Consejos al atleta</button>
       <button type="button" role="tab" data-bit-tab="internos" aria-selected="false">Comentarios internos</button>
+      <button type="button" role="tab" data-bit-tab="externos" aria-selected="false">Fuera de Gymnika</button>
     </div>
     <section class="panel span-12" data-bit-panel="sesiones" aria-labelledby="bitHist"><div class="panel-head"><h2 id="bitHist">Historial de sesiones</h2><span class="muted" id="bitCuenta"></span></div>
       <div id="bitLista"><div class="skel skel-block"></div></div></section>
     <section class="panel span-12" data-bit-panel="consejos" hidden aria-labelledby="bitCons"><div class="panel-head"><h2 id="bitCons">Consejos al atleta</h2><span class="muted">El atleta ve el último en su inicio</span></div>
       <div id="bitConsejos"><div class="skel skel-block"></div></div></section>
     <section class="panel span-12" data-bit-panel="internos" hidden aria-labelledby="bitInt"><div class="panel-head"><h2 id="bitInt">Comentarios internos</h2><span class="muted">Solo los ve el equipo</span></div>
-      <div id="bitInternos"><div class="skel skel-block"></div></div></section></div>`;
+      <div id="bitInternos"><div class="skel skel-block"></div></div></section>
+    <section class="panel span-12" data-bit-panel="externos" hidden aria-labelledby="bitExt"><div class="panel-head"><h2 id="bitExt">Entrenamiento fuera de Gymnika</h2><span class="muted">Del reloj o anotado a mano</span></div>
+      <div id="bitExternos"><div class="skel skel-block"></div></div></section></div>`;
   document.getElementById("btnNuevaBit").onclick = ()=> abrirEntradaBitacora(a);
   main.querySelectorAll("[data-bit-tab]").forEach(b => { b.onclick = ()=>{
     main.querySelectorAll("[data-bit-tab]").forEach(x => x.setAttribute("aria-selected", String(x === b)));
     main.querySelectorAll("[data-bit-panel]").forEach(p => { p.hidden = p.dataset.bitPanel !== b.dataset.bitTab; });
   }; });
-  await Promise.all([pintarHistorial(id), pintarNotasHistorial(a, "consejos"), pintarNotasHistorial(a, "internos")]);
+  await Promise.all([pintarHistorial(id), pintarNotasHistorial(a, "consejos"), pintarNotasHistorial(a, "internos"),
+    renderExternos(document.getElementById("bitExternos"), a.id, { esCoach: true })]);
 }
 /* Consejos al atleta (profiles.consejos_coach) y comentarios internos (ficha_interna.comentarios):
    cada vez que se guarda uno nuevo, la base lo deja en su historial con autor y fecha */

@@ -856,3 +856,53 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .hoy-acc .btn-outline{ margin-top:0; border-color:rgba(255,255,255,.6); color:#fff; background:transparent; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; flex:1 1 160px; }
 @media (max-width: 560px){ .hoy-acc{ justify-content:stretch; } }
 .hoy-fecha{ font-size:.55em; font-weight:600; opacity:.85; white-space:nowrap; }
+/* Entrenamiento fuera de Gymnika */
+.ext-botones{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.ext-botones .btn-primary, .ext-botones .btn-outline{ margin-top:0; width:100%; min-height:52px; display:inline-flex; align-items:center; justify-content:center; gap:8px; font-size:16px; cursor:pointer; }
+.ext-subir:focus-within{ outline:3px solid var(--accent); outline-offset:2px; }
+@media (max-width: 380px){ .ext-botones{ grid-template-columns:1fr; } }
+.ext-formatos{ margin:8px 0 0; font-size:14px; }
+.ext-resumen{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; margin-top:14px; }
+.ext-resumen div{ border:1px solid var(--line); border-radius:12px; padding:8px 10px; background:var(--surface); min-width:0; }
+.ext-resumen span{ display:block; font-size:11.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); }
+.ext-resumen strong{ display:block; font-family:var(--font-display); font-size:21px; margin-top:2px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+@media (max-width: 560px){ .ext-resumen{ grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+.ext-resumen-nota{ margin:4px 0 0; font-size:13px; text-align:right; }
+.ext-lista{ list-style:none; margin:14px 0 0; padding:0; display:grid; gap:10px; }
+.ext-item{ display:grid; grid-template-columns:44px 1fr; gap:12px; padding:12px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); }
+.ext-item.ext-alerta{ border-color:#F1C7C2; background:#FFF8F7; }
+.ext-ico{ width:44px; height:44px; border-radius:12px; display:grid; place-items:center; font-size:22px; background:var(--accent-tint); }
+.ext-cuerpo{ min-width:0; }
+.ext-cuerpo h3{ margin:0; font-size:16px; line-height:1.3; }
+.ext-cuerpo p{ margin:3px 0 0; font-size:14px; color:var(--ink-soft); overflow-wrap:anywhere; }
+.ext-reloj{ font-size:14px; }
+.ext-pills{ display:flex; gap:6px; flex-wrap:wrap; }
+.ext-coment{ font-style:italic; color:var(--ink) !important; }
+.ext-acc{ display:flex; gap:2px; justify-content:flex-end; flex-wrap:wrap; }
+.ext-acc .btn-link{ min-height:34px; padding:4px 8px; font-size:14px; }
+.ext-dialog .sheet{ max-width:600px; }
+.ext-archivo{ display:flex; gap:8px; align-items:center; padding:8px 12px; border-radius:10px; background:var(--accent-tint); font-size:14px; margin-bottom:12px; overflow-wrap:anywhere; }
+.ext-lbl{ font-weight:700; margin:14px 0 6px; }
+.ext-deportes{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:6px; }
+.ext-dep{ position:relative; }
+.ext-dep input, .ext-op input{ position:absolute; opacity:0; inset:0; margin:0; z-index:1; cursor:pointer; }
+.ext-dep span{ display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 4px; border:1.5px solid var(--line-strong); border-radius:12px; font-weight:700; font-size:13.5px; background:var(--surface); text-align:center; }
+.ext-dep b{ font-size:22px; font-weight:400; }
+.ext-dep input:checked + span, .ext-op input:checked + span{ border-color:var(--accent-deep); background:var(--accent-deep); color:#fff; }
+.ext-dep input:focus-visible + span, .ext-op input:focus-visible + span{ outline:3px solid var(--accent); outline-offset:2px; }
+.ext-grid{ display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; }
+.ext-grid:empty{ display:none; }
+.ext-campo.full{ grid-column:1 / -1; }
+.ext-campo label{ margin-top:10px; }
+.ext-campo .ext-lbl{ margin:10px 0 6px; }
+.ext-campo input{ width:100%; }
+.ext-tiempo{ display:flex; align-items:center; gap:6px; }
+.ext-tiempo input{ width:64px; text-align:center; }
+.ext-ops{ display:flex; flex-wrap:wrap; gap:6px; }
+.ext-op{ position:relative; }
+.ext-op span{ display:inline-flex; align-items:center; min-height:40px; padding:4px 14px; border:1.5px solid var(--line-strong); border-radius:999px; font-weight:700; font-size:14px; background:var(--surface); }
+.ext-curva{ margin-top:12px; border:1px solid var(--line); border-radius:12px; padding:10px 12px 6px; background:var(--surface); }
+.ext-curva p{ margin:0 0 4px; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); }
+.ext-marcas{ margin-bottom:12px; }
+.ext-pasos{ margin:0; padding-left:22px; display:grid; gap:8px; }
+.ext-pasos li{ padding-left:4px; }
