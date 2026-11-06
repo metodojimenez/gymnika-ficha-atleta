@@ -813,3 +813,17 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .foto-add{ justify-self:start; display:inline-flex; align-items:center; gap:6px; cursor:pointer; margin-top:0; }
 .foto-add:focus-within{ outline:3px solid var(--accent); outline-offset:2px; }
 .foto-grande{ display:block; width:100%; height:auto; max-height:75vh; object-fit:contain; border-radius:10px; }
+
+/* Ojo de la contraseña */
+.pass-wrap{ position:relative; }
+.pass-wrap input{ padding-right:52px; width:100%; }
+.pass-ojo{ position:absolute; right:4px; top:50%; transform:translateY(-50%); width:44px; height:44px; display:grid; place-items:center;
+  border-radius:10px; color:var(--ink-soft); background:transparent; }
+.pass-ojo:hover{ color:var(--ink); }
+.pass-ojo[aria-pressed="true"]{ color:var(--accent-deep); }
+.pass-ojo:focus-visible{ outline:3px solid var(--accent); outline-offset:-3px; }
+/* Acceso que le queda (cabecera de la ficha, master) */
+.acceso-chip{ font-weight:700; }
+.acceso-chip.acc-ok{ background:#EEF8F1; color:#1F7A43; border-color:#A9D9BA; }
+.acceso-chip.acc-poco{ background:#FDF3E7; color:#9A5512; border-color:#F0C48F; }
+.acceso-chip.acc-fin{ background:#FCEDEB; color:#B42318; border-color:#F1C7C2; }

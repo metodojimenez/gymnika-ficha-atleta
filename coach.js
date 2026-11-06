@@ -1,4 +1,29 @@
 /* ====================== COACH: PLAN DEL ALUMNO ====================== */
+/* Chip en la cabecera de la ficha (solo master): días de acceso que le quedan o sesiones de terapia */
+function pintarAccesoChip(plan, cat, rs){
+  const chip = document.getElementById("accesoChip");
+  if(!chip) return;
+  const hoy = todayStr();
+  let txt = "", nivel = "ok";
+  if(cat === "terapia"){
+    const n = rs.disponibles;
+    txt = n > 0 ? `${plural(n, "sesión disponible", "sesiones disponibles")}` : "Sin sesiones disponibles";
+    nivel = n > 2 ? "ok" : n > 0 ? "poco" : "fin";
+  } else {
+    const est = estadoMembresia(plan);
+    if(est.congelado){ txt = `Acceso congelado hasta el ${fmtFecha(est.congelado.hasta)}`; nivel = "poco"; }
+    else if(est.vigente){
+      const d = diasEntre(hoy, est.finTotal) + 1;
+      txt = `Acceso: ${plural(d, "día", "días")} · vence el ${fmtFecha(est.finTotal)}`;
+      nivel = d > 7 ? "ok" : "poco";
+    }
+    else if(est.futura){ txt = `Acceso desde el ${fmtFecha(est.futura.inicio)} · ${plural(diasEntre(est.futura.inicio, est.finTotal) + 1, "día", "días")}`; }
+    else { txt = est.ultima ? `Acceso vencido el ${fmtFecha(est.ultima.fin)}` : "Sin acceso"; nivel = "fin"; }
+  }
+  chip.textContent = txt;
+  chip.className = "chip acceso-chip acc-" + nivel;
+  chip.hidden = false;
+}
 async function renderPlanCoach(profile){
   const box = document.getElementById("planCard");
   if(!box) return;
@@ -16,6 +41,7 @@ async function renderPlanCoach(profile){
   const [plan] = await Promise.all([cargarPlanDe(profile.id, cat), cargarHorarios()]);
   if(!document.getElementById("planCard")) return;
   const rs = resumenSesiones(plan, cat);
+  pintarAccesoChip(plan, cat, rs);
   const avisoSesiones = rs.disponibles <= 0 && rs.agendadas.length <= 2 && (plan.movs || []).length
     ? `<p class="plan-alert warn" role="status">${rs.agendadas.length ? `Ya agendó todas sus sesiones: le ${rs.agendadas.length === 1 ? "queda 1" : "quedan 2"} por hacer.` : "No le quedan sesiones."}${master ? " Conviene ofrecerle un nuevo paquete." : ""}</p>` : "";
   const comprasHTML = master && plan.compras.length ? `

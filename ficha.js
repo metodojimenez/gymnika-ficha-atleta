@@ -161,6 +161,8 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("fichaCard", "Datos personales", 6)}`;
   }
   if(isCoach && cat) chips.unshift(`<li class="chip cat-chip cat-${cat}">${CATEGORIAS[cat].nombre}</li>`);
+  /* El master ve de un vistazo cuánto acceso le queda (se llena al cargar su plan) */
+  if(isCoach && cat && esMaster()) chips.splice(1, 0, `<li class="chip acceso-chip" id="accesoChip" hidden></li>`);
   state.detail.profile = profile;
 
   if(tabsAlumno){
@@ -1110,6 +1112,17 @@ function renderNutricion(profile, uid, isCoach, solicitudes){
 
 /* ---- Compensación: en fortalecimiento solo el menú Gymnika y las rotaciones de cadera.
    La base y el tobillo quedan solo para la rutina de estiramiento diaria de terapia. ---- */
+/* Rutina de estiramiento diaria (terapia): este orden es el que ve el alumno */
+const ESTIRAMIENTO_DIARIO_GRUPOS = [
+  { grupo: "Cucarachas", items: ["Cucarachas piernas estiradas", "Cucarachas piernas dobladas", "Cucarachas con una pierna estirada y una doblada", "Cucarachas con brazos estirados sobre la cabeza"] },
+  { grupo: "Gatos", items: ["Gatos", "Gatos distancia corta", "Gatos sobre los codos", "Gatos codos pegados a las rodillas"] },
+  { grupo: "Rotaciones", items: ["Cachetadas", "Tobillos cruzados", "Palanquita", "Señorita", "Caballero", "Ballet"] },
+  { grupo: "Pivoteos", items: ["Pivoteos piernas dobladas", "Pivoteos piernas estiradas", "Pivoteo piernas dobladas en el aire", "Pivoteo de costado posición fetal"] },
+  { grupo: "Libro", items: ["Libro abierto", "Libro cerrado"] },
+  { grupo: "Cuello", items: ["Cuello sí", "Cuello no"] }
+];
+/* Nombres que tenían las fichas de terapia antes de esta lista */
+const ESTIRAMIENTO_DIARIO_RENOMBRES = { "Patada de Ballet": "Ballet", "Señorita ballet": "Ballet", "Señoritas": "Señorita" };
 const COMPENSACION_GRUPOS = [
   { grupo: "Base", items: ["Bird dog"], soloTerapia: true },
   { grupo: "Menú Gymnika", items: ["Ranas", "San José", "Aperturas en L", "El 4 (estiramiento de glúteo)", "Hinge de cadera", "Good morning", "Pivoteos de cadera"] },
@@ -1126,12 +1139,13 @@ function renderEstiramientos(profile, uid, isCoach){
   const box = document.getElementById("estiramientosCard");
   const esTerapia = profile.categoria === "terapia";
   const nota = esTerapia ? ESTIRAMIENTO_DIARIO_NOTA : COMPENSACION_NOTA;
-  const actuales = [...new Set((profile.estiramientos || []).map(e => ESTIRAMIENTO_RENOMBRES[e] || e))];
+  const renombres = esTerapia ? ESTIRAMIENTO_DIARIO_RENOMBRES : ESTIRAMIENTO_RENOMBRES;
+  const actuales = [...new Set((profile.estiramientos || []).map(e => renombres[e] || e))];
 
   /* El alumno ve solo su rutina personalizada; el menú de opciones y la regla de armado son para el coach */
   if(!isCoach){ pintarEstiramientosAlumno(box, actuales, uid, esTerapia, esTerapia ? ESTIRAMIENTO_DIARIO_NOTA : COMPENSACION_NOTA_ALUMNO); return; }
 
-  const grupos = COMPENSACION_GRUPOS.filter(g => esTerapia || !g.soloTerapia);
+  const grupos = esTerapia ? ESTIRAMIENTO_DIARIO_GRUPOS : COMPENSACION_GRUPOS.filter(g => !g.soloTerapia);
   const predet = grupos.flatMap(g => g.items);
   let customList = actuales.filter(e => !predet.includes(e));
   let marcados = new Set(actuales.filter(e => predet.includes(e)));
