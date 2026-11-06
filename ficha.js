@@ -1008,15 +1008,17 @@ function renderNutricion(profile, uid, isCoach, solicitudes){
 /* ---- Rutina de estiramiento diaria (todas las categorías): se hace en las mañanas.
    Este orden es el que ve el alumno. ---- */
 const ESTIRAMIENTO_DIARIO_GRUPOS = [
-  { grupo: "Cucarachas", items: ["Cucarachas piernas estiradas", "Cucarachas piernas dobladas", "Cucarachas con una pierna estirada y una doblada", "Cucarachas con brazos estirados sobre la cabeza"] },
+  { grupo: "Cucarachas", items: ["Cucarachas piernas estiradas", "Cucarachas piernas dobladas", "Cucarachas con una pierna estirada y una doblada", "Cucarachas con brazos estirados sobre la cabeza y piernas estiradas", "Cucarachas en posición de caballero"] },
   { grupo: "Gatos", items: ["Gatos", "Gatos distancia corta", "Gatos sobre los codos", "Gatos codos pegados a las rodillas"] },
-  { grupo: "Rotaciones", items: ["Cachetadas", "Tobillos cruzados", "Palanquita", "Señorita", "Caballero", "Ballet"] },
+  { grupo: "Rotaciones", items: ["Cachetadas", "Jesucristo", "Palanquita", "Señorita", "Caballero", "Ballet"] },
+  { grupo: "Rotaciones con cucarachas", items: ["Cachetadas con cucarachas", "Jesucristo con cucarachas", "Palanquita con cucarachas", "Señorita con cucarachas", "Caballero con cucarachas", "Ballet con cucarachas"] },
   { grupo: "Pivoteos", items: ["Pivoteos piernas dobladas", "Pivoteos piernas estiradas", "Pivoteo piernas dobladas en el aire", "Pivoteo de costado posición fetal"] },
   { grupo: "Libro", items: ["Libro abierto", "Libro cerrado"] },
   { grupo: "Cuello", items: ["Cuello sí", "Cuello no"] }
 ];
 /* Nombres que tenían las fichas antes de esta lista */
-const ESTIRAMIENTO_DIARIO_RENOMBRES = { "Patada de Ballet": "Ballet", "Señorita ballet": "Ballet", "Señoritas": "Señorita" };
+const ESTIRAMIENTO_DIARIO_RENOMBRES = { "Patada de Ballet": "Ballet", "Señorita ballet": "Ballet", "Señoritas": "Señorita", "Tobillos cruzados": "Jesucristo",
+  "Cucarachas con brazos estirados sobre la cabeza": "Cucarachas con brazos estirados sobre la cabeza y piernas estiradas" };
 const ESTIRAMIENTO_DIARIO_NOTA = "Hazla todas las mañanas, de forma constante. La finalidad es prepararnos para empezar bien el día: no debes luchar contra el dolor.";
 function renderEstiramientos(profile, uid, isCoach){
   const box = document.getElementById("estiramientosCard");
