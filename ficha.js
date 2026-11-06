@@ -94,7 +94,7 @@ async function renderAthleteDetail(profile, isCoach, container){
   const macroHTML = `<section class="panel macro span-12" id="macroCard" aria-label="Macrociclo"></section>`;
   let panels, tabsAlumno = null;
   if(!isCoach){
-    const estirar = panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 12, { eyebrow: esTerapia ? "Todos los días" : "Compensación diaria" });
+    const estirar = panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 12, { eyebrow: "Todas las mañanas" });
     const familia = !esHijo && !state.profile.tutor_id ? panelHTML("familiaCard", "Mi familia", 12, { eyebrow: "Hijos a tu cargo" }) : "";
     /* Inicio: próxima sesión con el botón del QR, estiramientos diarios y consejo del coach; abajo, su plan */
     const hoyAlumno = `<section class="panel span-12 hoy-alumno" id="inicioHoyCard" aria-label="${esHijo ? "Su próxima sesión" : "Tu próxima sesión"}"><div class="skel skel-block"></div></section>`;
@@ -161,7 +161,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
     ${panelHTML("tiemposCard", "Tiempos deportivos", 6)}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
-    ${panelHTML("estiramientosCard", "Compensación", 6)}
+    ${panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 6)}
     ${panelHTML("fichaCard", "Datos personales", 6)}`;
   }
   if(isCoach && cat) chips.unshift(`<li class="chip cat-chip cat-${cat}">${CATEGORIAS[cat].nombre}</li>`);
@@ -1114,9 +1114,8 @@ function renderNutricion(profile, uid, isCoach, solicitudes){
   });
 }
 
-/* ---- Compensación: en fortalecimiento solo el menú Gymnika y las rotaciones de cadera.
-   La base y el tobillo quedan solo para la rutina de estiramiento diaria de terapia. ---- */
-/* Rutina de estiramiento diaria (terapia): este orden es el que ve el alumno */
+/* ---- Rutina de estiramiento diaria (todas las categorías): se hace en las mañanas.
+   Este orden es el que ve el alumno. ---- */
 const ESTIRAMIENTO_DIARIO_GRUPOS = [
   { grupo: "Cucarachas", items: ["Cucarachas piernas estiradas", "Cucarachas piernas dobladas", "Cucarachas con una pierna estirada y una doblada", "Cucarachas con brazos estirados sobre la cabeza"] },
   { grupo: "Gatos", items: ["Gatos", "Gatos distancia corta", "Gatos sobre los codos", "Gatos codos pegados a las rodillas"] },
@@ -1125,38 +1124,25 @@ const ESTIRAMIENTO_DIARIO_GRUPOS = [
   { grupo: "Libro", items: ["Libro abierto", "Libro cerrado"] },
   { grupo: "Cuello", items: ["Cuello sí", "Cuello no"] }
 ];
-/* Nombres que tenían las fichas de terapia antes de esta lista */
+/* Nombres que tenían las fichas antes de esta lista */
 const ESTIRAMIENTO_DIARIO_RENOMBRES = { "Patada de Ballet": "Ballet", "Señorita ballet": "Ballet", "Señoritas": "Señorita" };
-const COMPENSACION_GRUPOS = [
-  { grupo: "Base", items: ["Bird dog"], soloTerapia: true },
-  { grupo: "Menú Gymnika", items: ["Ranas", "San José", "Aperturas en L", "El 4 (estiramiento de glúteo)", "Hinge de cadera", "Good morning", "Pivoteos de cadera"] },
-  { grupo: "Rotaciones de cadera", items: ["Patada de Ballet", "Caballero", "Cachetadas", "Señoritas", "Libro abierto y cerrado"] },
-  { grupo: "Tobillo", items: ["Pantorrilla en pared", "Rodilla a la pared"], soloTerapia: true }
-];
-/* Nombres antiguos guardados en fichas anteriores */
-const ESTIRAMIENTO_RENOMBRES = { "Señorita ballet": "Patada de Ballet" };
-const COMPENSACION_NOTA = "Al final de cada rutina: 2 del menú Gymnika + 1 rotación de cadera, 30-45 segundos o 6-8 repeticiones por lado.";
-
-const COMPENSACION_NOTA_ALUMNO = "Tu rutina de compensación, elegida por tu coach para ti. Hazla al final de cada entrenamiento: 30 a 45 segundos o 6 a 8 repeticiones por lado.";
-const ESTIRAMIENTO_DIARIO_NOTA = "Esta rutina debe ser ejecutada todos los días de forma constante. La finalidad es prepararnos para empezar bien el día: no debes luchar contra el dolor.";
+const ESTIRAMIENTO_DIARIO_NOTA = "Hazla todas las mañanas, de forma constante. La finalidad es prepararnos para empezar bien el día: no debes luchar contra el dolor.";
 function renderEstiramientos(profile, uid, isCoach){
   const box = document.getElementById("estiramientosCard");
-  const esTerapia = profile.categoria === "terapia";
-  const nota = esTerapia ? ESTIRAMIENTO_DIARIO_NOTA : COMPENSACION_NOTA;
-  const renombres = esTerapia ? ESTIRAMIENTO_DIARIO_RENOMBRES : ESTIRAMIENTO_RENOMBRES;
-  const actuales = [...new Set((profile.estiramientos || []).map(e => renombres[e] || e))];
+  const nota = ESTIRAMIENTO_DIARIO_NOTA;
+  const actuales = [...new Set((profile.estiramientos || []).map(e => ESTIRAMIENTO_DIARIO_RENOMBRES[e] || e))];
 
-  /* El alumno ve solo su rutina personalizada; el menú de opciones y la regla de armado son para el coach */
-  if(!isCoach){ pintarEstiramientosAlumno(box, actuales, uid, esTerapia, esTerapia ? ESTIRAMIENTO_DIARIO_NOTA : COMPENSACION_NOTA_ALUMNO); return; }
+  /* El alumno ve solo su rutina personalizada; el menú de opciones es para el coach */
+  if(!isCoach){ pintarEstiramientosAlumno(box, actuales, uid, nota); return; }
 
-  const grupos = esTerapia ? ESTIRAMIENTO_DIARIO_GRUPOS : COMPENSACION_GRUPOS.filter(g => !g.soloTerapia);
+  const grupos = ESTIRAMIENTO_DIARIO_GRUPOS;
   const predet = grupos.flatMap(g => g.items);
   let customList = actuales.filter(e => !predet.includes(e));
   let marcados = new Set(actuales.filter(e => predet.includes(e)));
 
   function paint(){
     box.innerHTML = `
-      <p class="${esTerapia ? "resena-rutina" : "muted"}" style="margin:0">${esc(nota)}</p>
+      <p class="resena-rutina" style="margin:0">${esc(nota)}</p>
       ${grupos.map(g => `
         <fieldset class="comp-group">
           <legend>${esc(g.grupo)}</legend>
@@ -1392,9 +1378,9 @@ function mostrarSeccionDe(el){
 
 /* Rutina de estiramiento del alumno: la lista que asignó el coach, con la dosis y casillas para ir marcando
    lo que ya hizo hoy (se guarda en este teléfono y se reinicia cada día). */
-function pintarEstiramientosAlumno(box, lista, uid, esTerapia, nota){
+function pintarEstiramientosAlumno(box, lista, uid, nota){
   if(!lista.length){
-    box.innerHTML = `<p class="muted">Tu coach todavía no asignó tu rutina${esTerapia ? " de estiramiento diaria" : " de compensación"}. Cuando lo haga, aparecerá aquí.</p>`;
+    box.innerHTML = `<p class="muted">Tu coach todavía no asignó tu rutina de estiramiento diaria. Cuando lo haga, aparecerá aquí.</p>`;
     return;
   }
   const clave = "gymnika_estiro_" + uid + "_" + todayStr();
@@ -1403,7 +1389,7 @@ function pintarEstiramientosAlumno(box, lista, uid, esTerapia, nota){
   const pintar = ()=>{
     const n = lista.filter(e => hechos.has(e)).length, total = lista.length;
     box.innerHTML = `
-      <p class="${esTerapia ? "resena-rutina" : "estiro-nota"}">${esc(nota)}</p>
+      <p class="resena-rutina">${esc(nota)}</p>
       <div class="estiro-avance" role="status">
         <span class="estiro-barra" aria-hidden="true"><i style="width:${Math.round(n / total * 100)}%"></i></span>
         <span>${n === total ? "<strong>Rutina de hoy completa.</strong> Buen trabajo." : `Hoy llevas <strong>${n} de ${total}</strong>`}</span>
