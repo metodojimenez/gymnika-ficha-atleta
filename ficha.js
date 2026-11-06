@@ -98,9 +98,12 @@ async function renderAthleteDetail(profile, isCoach, container){
     /* Inicio: próxima sesión con el botón del QR, estiramientos diarios y consejo del coach; abajo, su plan */
     const hoyAlumno = `<section class="panel span-12 hoy-alumno" id="inicioHoyCard" aria-label="${esHijo ? "Su próxima sesión" : "Tu próxima sesión"}"><div class="skel skel-block"></div></section>`;
     const consejoCoach = panelHTML("notasCard", "Consejo de tu coach", 12, { cls: "coach-voice", eyebrow: "Tu coach" });
+    /* Atajo a «Entrenamiento fuera de Gymnika» (vive en Progreso) */
+    const atajoExterno = `<div class="span-12 atajo-externo"><a class="btn-outline" href="#/progreso" data-ir-externos><span aria-hidden="true">⌚</span> Agregar entrenamiento externo</a></div>`;
     tabsAlumno = esTerapia ? {
       inicio: `
     ${hoyAlumno}
+    ${atajoExterno}
     ${estirar}
     ${consejoCoach}
     ${panelHTML("planCard", esHijo ? "Sus sesiones" : "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
@@ -118,6 +121,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     } : {
       inicio: `
     ${hoyAlumno}
+    ${atajoExterno}
     ${estirar}
     ${consejoCoach}
     ${panelHTML("planCard", cat === "transicion" ? (esHijo ? "Su plan" : "Mi plan") : (esHijo ? "Su acceso" : "Mi acceso"), 12, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}`,
@@ -219,6 +223,16 @@ async function renderAthleteDetail(profile, isCoach, container){
   if(hay("nutricionCard")) renderNutricion(profile, uid, isCoach, solicitudes || []);
   renderEstiramientos(profile, uid, isCoach);
   container.querySelectorAll("[data-volver-panel]").forEach(b => { b.onclick = volverAMiPanel; });
+  container.querySelectorAll("[data-ir-externos]").forEach(b => { b.onclick = (e)=>{
+    const card = document.getElementById("externosCard");
+    if(!card) return;
+    e.preventDefault();
+    history.pushState(null, "", "#/progreso");
+    activarSeccionAlumno("progreso", false);
+    const panel = card.closest("section") || card;
+    panel.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    panel.classList.remove("resaltar"); void panel.offsetWidth; panel.classList.add("resaltar");
+  }; });
   if(isCoach){
     await renderPlanCoach(profile);
     if(token === state.renderToken && hay("reservarCard")) await renderReservasAlumno(profile);
