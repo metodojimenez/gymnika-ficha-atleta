@@ -277,7 +277,7 @@ function abrirAgregarHijo(){
         <div class="full"><label for="h_nombre">Nombre completo<span class="req" aria-hidden="true">*</span></label><input id="h_nombre" autocomplete="off" required></div>
         <div><label for="h_fnac">Fecha de nacimiento<span class="req" aria-hidden="true">*</span></label><input type="date" id="h_fnac" max="${todayStr()}" required></div>
         <div><label for="h_sexo">Sexo <span class="muted">(opcional)</span></label><select id="h_sexo"><option value="">—</option><option value="F">Femenino</option><option value="M">Masculino</option></select></div>
-        <div class="full"><label for="h_les">Lesión o molestia <span class="muted">(obligatorio si viene a terapia)</span></label><input id="h_les" autocomplete="off"></div>
+        <div class="full"><label for="h_les">Lesión o molestia <span class="muted">(obligatorio si viene a terapia o en transición)</span></label><input id="h_les" autocomplete="off"></div>
       </div>
       <p class="muted">Su ficha queda a tu cargo: tú reservas sus horarios, pagas sus sesiones y recibes sus avisos. No necesita correo ni contraseña.</p>
       <button type="submit" class="btn-primary" id="btnGuardarHijo">Agregar</button>
@@ -293,10 +293,10 @@ function abrirAgregarHijo(){
       const nombre = d.el.querySelector("#h_nombre").value.trim();
       const fnac = d.el.querySelector("#h_fnac").value;
       const les = d.el.querySelector("#h_les").value.trim();
-      if(!cat){ showMsg(msg, "error", "Elige si viene a terapia o a fortalecimiento."); return; }
+      if(!cat){ showMsg(msg, "error", "Elige si viene a terapia, a fortalecimiento o en transición."); return; }
       if(!nombre){ showMsg(msg, "error", "Escribe su nombre completo."); return; }
       if(!fnac){ showMsg(msg, "error", "Escribe su fecha de nacimiento."); return; }
-      if(cat === "terapia" && !les){ showMsg(msg, "error", "Cuéntanos su lesión o molestia para preparar la terapia."); return; }
+      if(pideLesion(cat) && !les){ showMsg(msg, "error", "Cuéntanos su lesión o molestia para preparar la terapia."); return; }
       const { error } = await sb.rpc("agregar_hijo", { p_nombre: nombre, p_fecha_nacimiento: fnac, p_categoria: cat, p_lesiones: les || null, p_sexo: d.el.querySelector("#h_sexo").value || null });
       if(error){ showError(msg, error); return; }
       d.close();
@@ -406,7 +406,7 @@ function registroCamposHTML(profile, prefix){
   return `
     <div><label for="${prefix}fnac">Fecha de nacimiento${req}</label><input type="date" id="${prefix}fnac" required value="${v(profile.fecha_nacimiento)}" max="${todayStr()}"></div>
     <div><label for="${prefix}tel">Teléfono (WhatsApp)${req}</label><input type="tel" inputmode="tel" autocomplete="tel" id="${prefix}tel" required value="${v(profile.telefono)}" placeholder="Ej: 987 654 321"></div>
-    <div class="full"><label for="${prefix}les">Lesión o molestia <span class="muted">(obligatorio si vienes a terapia)</span></label>
+    <div class="full"><label for="${prefix}les">Lesión o molestia <span class="muted">(obligatorio si vienes a terapia o en transición)</span></label>
       <input id="${prefix}les" value="${v(profile.lesiones)}" placeholder="Ej: dolor de rodilla derecha al correr"></div>`;
 }
 function registroDatos(prefix, categoria){

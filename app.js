@@ -408,7 +408,7 @@ async function doSignup(){
     if(pass.length < 6){ showMsg(msg, "error", "La contraseña debe tener al menos 6 caracteres."); return; }
     if(pass !== pass2){ showMsg(msg, "error", "Las contraseñas no coinciden."); return; }
     const categoria = categoriaElegida("su_");
-    if(!categoria){ showMsg(msg, "error", "Elige si vienes a terapia o a fortalecimiento."); return; }
+    if(!categoria){ showMsg(msg, "error", "Elige si vienes a terapia, a fortalecimiento o en transición."); return; }
     const { payload: fichaPayload, falta } = registroDatos("su_", categoria);
     if(falta){ showMsg(msg, "error", falta); return; }
     if(!document.getElementById("su_terminos").checked){ showMsg(msg, "error", "Para crear tu cuenta debes aceptar los términos y condiciones."); return; }
@@ -789,7 +789,7 @@ function renderCompleteProfileGate(profile){
   btn.onclick = ()=> withBusy(btn, "Guardando…", async ()=>{
     const msg = document.getElementById("gateMsg");
     const cat = profile.categoria || categoriaElegida("g_");
-    if(!cat){ showMsg(msg, "error", "Elige si vienes a terapia o a fortalecimiento."); return; }
+    if(!cat){ showMsg(msg, "error", "Elige si vienes a terapia, a fortalecimiento o en transición."); return; }
     const { payload, falta } = registroDatos("g_", cat);
     payload.nombre = document.getElementById("g_nombre").value.trim();
     if(!payload.nombre){ showMsg(msg, "error", "Escribe tu nombre completo."); return; }

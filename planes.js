@@ -4,9 +4,9 @@
 
 const CATEGORIAS = {
   terapia: { nombre: "Terapia", desc: "Sesiones de terapia con reserva de horario. Compras sesiones y cada una vale 1 token." },
-  fortalecimiento: { nombre: "Fortalecimiento", desc: "Entrenamiento en los horarios de fortalecimiento con acceso mensual." },
-  /* Solo la asigna un master coach: paso de terapia a fortalecimiento, con sesiones de terapia y acceso de fortalecimiento */
-  transicion: { nombre: "Transición", desc: "Paso de terapia a fortalecimiento: reserva en los dos horarios, con sesiones de terapia y acceso de fortalecimiento.", soloMaster: true }
+  fortalecimiento: { nombre: "Fortalecimiento", desc: "Entrenamiento con reserva de horario y acceso mensual." },
+  /* Paso de la terapia de vuelta al deporte: hace las dos. El acceso de fortalecimiento lo habilita un master coach */
+  transicion: { nombre: "Transición", desc: "Estás pasando de la terapia a volver al deporte: haces las dos, con reserva de horario en terapia y en fortalecimiento. Tu acceso a fortalecimiento se coordina en el centro." }
 };
 /* Categorías de horario que puede usar un alumno */
 const catsDe = (cat)=> cat === "transicion" ? ["terapia", "fortalecimiento"] : cat ? [cat] : [];
