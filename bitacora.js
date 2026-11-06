@@ -632,10 +632,30 @@ async function pintarHistorial(id){
       ${dolor}
       ${filas.length ? `<dl class="bit-datos">${filas.join("")}</dl>` : (dolor || b._fotos.length ? "" : `<p class="muted">Sin notas.</p>`)}
       ${b._fotos.length ? `<div class="bit-fotos">${b._fotos.map(f => f.url ? `<button type="button" class="foto-mini" data-ver-foto="${esc(f.url)}" aria-label="Ver foto"><img src="${esc(f.url)}" alt="" loading="lazy"></button>` : "").join("")}</div>` : ""}
-      ${puede(b) ? `<div class="bit-acc"><button type="button" class="btn-link" data-bit-editar="${esc(b.id)}">Editar</button><button type="button" class="btn-link danger" data-bit-borrar="${esc(b.id)}">Borrar</button></div>` : ""}
+      <div class="bit-acc">
+        <label class="btn-outline sm foto-add bit-foto-add"><span aria-hidden="true">📷</span> Agregar fotos<input type="file" accept="image/*" multiple class="sr-only" data-bit-foto="${esc(b.id)}"></label>
+        ${puede(b) ? `<button type="button" class="btn-link" data-bit-editar="${esc(b.id)}">Editar</button><button type="button" class="btn-link danger" data-bit-borrar="${esc(b.id)}">Borrar</button>` : ""}
+      </div>
+      <div data-bit-foto-msg="${esc(b.id)}" aria-live="polite"></div>
     </li>`;
   }).join("")}</ol>`;
   box.querySelectorAll("[data-ver-foto]").forEach(b => { b.onclick = ()=> verFoto(b.dataset.verFoto); });
+  /* Fotos directo a una sesión del historial (el teléfono ofrece cámara o galería) */
+  box.querySelectorAll("[data-bit-foto]").forEach(inp => { inp.onchange = async ()=>{
+    const files = [...(inp.files || [])].filter(f => !f.type || f.type.startsWith("image/"));
+    const eid = inp.dataset.bitFoto;
+    const msg = box.querySelector(`[data-bit-foto-msg="${CSS.escape(eid)}"]`);
+    inp.value = "";
+    if(!files.length) return;
+    inp.disabled = true;
+    showMsg(msg, "ok", files.length === 1 ? "Subiendo la foto…" : `Subiendo ${files.length} fotos…`);
+    const fallas = await subirFotos(id, eid, files);
+    await pintarHistorial(id);
+    const nuevo = document.querySelector(`#bitLista [data-bit-foto-msg="${CSS.escape(eid)}"]`);
+    if(nuevo) showMsg(nuevo, fallas ? "error" : "ok", fallas
+      ? `${plural(fallas, "foto no se subió", "fotos no se subieron")}. Inténtalo de nuevo.`
+      : files.length === 1 ? "Foto agregada." : `${files.length} fotos agregadas.`);
+  }; });
   box.querySelectorAll("[data-bit-editar]").forEach(btn => { btn.onclick = ()=>{
     const b = lista.find(x => x.id === btn.dataset.bitEditar);
     abrirEntradaBitacora((state.athleteList || []).find(x => x.id === id), b);

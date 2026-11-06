@@ -99,6 +99,8 @@ async function renderPlanCoach(profile){
 
   const est = estadoMembresia(plan);
   const hoy = todayStr();
+  /* Con acceso activo, congelado o programado no se ofrece «Habilitar acceso»: queda «Extender acceso» plegado */
+  const conAcceso = !!(est.vigente || est.congelado || est.futura);
   /* Transición: además del acceso de fortalecimiento, las sesiones de terapia (y el color de riesgo para el horario de terapia) */
   const terHTML = cat !== "transicion" ? "" : `
     <div class="trans-ter-coach">
@@ -123,16 +125,18 @@ async function renderPlanCoach(profile){
     </div></div>
     ${alertaAccesoHTML(profile.id)}
     ${master ? `
+    ${conAcceso ? `<details class="acceso-ext"><summary>Extender acceso</summary>` : ""}
     <div class="acceso-adj">
-      <p class="acceso-adj-t">Habilitar acceso${cat === "transicion" ? " a fortalecimiento" : ""}</p>
+      ${conAcceso ? `<p class="muted" style="margin-top:0">Suma días a partir de cuando termina el acceso actual.</p>` : `<p class="acceso-adj-t">Habilitar acceso${cat === "transicion" ? " a fortalecimiento" : ""}</p>`}
       <div class="inline-add">
         <div><label for="accDesde" style="margin-top:0">Desde</label><input type="date" id="accDesde" value="${esc(est.finTotal && est.finTotal >= hoy ? fechaISO(sumarDias(parseFecha(est.finTotal), 1)) : hoy)}"></div>
         <div><label for="accDias" style="margin-top:0">Días</label><input type="number" id="accDias" inputmode="numeric" min="1" max="400" value="30"></div>
-        <button type="button" class="btn-outline" id="btnAsignarAcceso">Habilitar</button>
+        <button type="button" class="btn-outline" id="btnAsignarAcceso">${conAcceso ? "Extender" : "Habilitar"}</button>
       </div>
       <p class="muted">${cat === "transicion" ? "En transición el acceso se cobra y coordina en el centro. Al habilitarlo, se le avisa para que escoja su horario." : "Para pagos coordinados en el centro. Se le avisa para que escoja su horario."}</p>
       <div id="accMsg" aria-live="polite"></div>
-    </div>` : ""}
+    </div>${conAcceso ? `</details>` : ""}
+    <div id="accOk" aria-live="polite"></div>` : ""}
     ${master ? suscripcionHTML(plan, true) : ""}
     <p class="muted">Asistencias registradas: <strong>${plan.asistencias.length}</strong>${plan.asistencias[0] ? " · última: " + fmtFecha(plan.asistencias[0].fecha) : ""}</p>
     ${plan.congelamientos.length ? `<details class="records"><summary>Congelamientos (${plan.congelamientos.length})</summary>
@@ -150,7 +154,7 @@ async function renderPlanCoach(profile){
     if(error){ showError(msg, error); return; }
     await renderPlanCoach(profile);
     if(document.getElementById("reservarCard")){ state.plan = null; await renderReservasAlumno(profile); }
-    showMsg(document.getElementById("accMsg"), "ok", `Acceso habilitado hasta el ${fmtFecha(data, true)}. Ya puede escoger su horario.`);
+    showMsg(document.getElementById("accOk"), "ok", `Acceso habilitado hasta el ${fmtFecha(data, true)}. Ya puede escoger su horario.`);
   });
   if(cat === "transicion"){
     bindRiesgo(profile);
@@ -588,12 +592,24 @@ async function renderCoachAjustes(main){
         <textarea id="ajTerminos" rows="10">${esc(aj.terminos || TERMINOS_BORRADOR)}</textarea>
         <button type="button" class="btn-primary" id="btnGuardarTerminos">Guardar términos</button><div id="termMsg" aria-live="polite"></div>
       </section>
+      <section class="panel span-12" aria-labelledby="hAccesos"><div class="panel-head"><h2 id="hAccesos">Acceso de fortalecimiento</h2><span class="muted">Habilita o extiende el acceso de cada alumno</span></div>
+        <div class="acc-filtros">
+          <input type="search" id="accBuscar" placeholder="Buscar alumno" aria-label="Buscar alumno">
+          <select id="accFiltro" aria-label="Qué alumnos mostrar"><option value="">Todos</option><option value="sin">Sin acceso o vencido</option><option value="vence">Vence en 7 días o menos</option><option value="activo">Con acceso</option></select>
+        </div>
+        <div id="accAjMsg" aria-live="polite"></div>
+        <div id="accLista"><div class="skel skel-block"></div></div>
+      </section>
       <section class="panel span-12" aria-labelledby="hHistCons"><div class="panel-head"><h2 id="hHistCons">Historial de consejos</h2><span class="muted">Todos los consejos de los coaches, del más reciente al más antiguo</span></div>
-        <input type="search" id="histConsBuscar" placeholder="Buscar por alumno o por texto" aria-label="Buscar en el historial de consejos">
+        <div class="hist-cons-filtros">
+          <input type="search" id="histConsBuscar" placeholder="Buscar por alumno o por texto" aria-label="Buscar en el historial de consejos">
+          <select id="histConsCoach" aria-label="Filtrar por coach"><option value="">Todos los coaches</option></select>
+        </div>
         <div id="histConsBox" style="margin-top:12px"><div class="skel skel-block"></div></div>
       </section>
     </div></div>`;
   pintarHistorialConsejos();
+  pintarAccesosAjustes();
 
   const bAj = document.getElementById("btnGuardarAj");
   bAj.onclick = ()=> withBusy(bAj, "Guardando…", async ()=>{
@@ -987,18 +1003,102 @@ async function pintarHistorialConsejos(){
   if(error){ box.innerHTML = `<div class="error">${esc(errorES(error))}</div>`; return; }
   const filas = data || [];
   const nombre = (id)=> (state.athleteList.find(a => a.id === id) || {}).nombre || "Alumno";
-  const pintar = (q)=>{
-    const t = normalizar(q || "");
-    const vis = t ? filas.filter(r => normalizar(nombre(r.user_id) + " " + r.texto).includes(t)) : filas;
+  const autorDe = (r)=> r.autor_nombre || (r.autor ? nombreAutor(r.autor) : "Sin autor");
+  /* Filtro por coach: los que dejaron al menos un consejo, con cuántos */
+  const sel = document.getElementById("histConsCoach");
+  const coaches = {};
+  filas.forEach(r => { const k = r.autor || ""; coaches[k] = coaches[k] || { n: 0, nombre: autorDe(r) }; coaches[k].n++; });
+  if(sel) sel.innerHTML = `<option value="">Todos los coaches (${filas.length})</option>` + Object.entries(coaches)
+    .sort((a, b) => a[1].nombre.localeCompare(b[1].nombre, "es"))
+    .map(([k, c]) => `<option value="${esc(k || "_")}">${esc(c.nombre)} (${c.n})</option>`).join("");
+  const pintar = ()=>{
+    const t = normalizar((document.getElementById("histConsBuscar") || {}).value || "");
+    const coach = sel ? sel.value : "";
+    const vis = filas.filter(r => (!coach || (r.autor || "_") === coach) && (!t || normalizar(nombre(r.user_id) + " " + r.texto).includes(t)));
     box.innerHTML = vis.length ? `<ul class="hist-cons">${vis.map(r => `
       <li><div class="hist-cons-top"><strong>${esc(nombre(r.user_id))}</strong><span class="muted num">${esc(fmtFechaHora(r.created_at))}</span></div>
-        <p>${esc(r.texto)}</p>${r.autor ? `<span class="muted">Por ${esc(nombreAutor(r.autor))}</span>` : ""}</li>`).join("")}</ul>
+        <p>${esc(r.texto)}</p><span class="muted">Por ${esc(autorDe(r))}</span></li>`).join("")}</ul>
       ${vis.length === 500 ? `<p class="muted">Se muestran los 500 más recientes.</p>` : ""}`
-      : emptyHTML(t ? "Ningún consejo coincide con la búsqueda." : "Todavía no hay consejos guardados.");
+      : emptyHTML(t || coach ? "Ningún consejo coincide con el filtro." : "Todavía no hay consejos guardados.");
   };
-  pintar("");
+  pintar();
   const q = document.getElementById("histConsBuscar");
-  if(q) q.oninput = ()=> pintar(q.value);
+  if(q) q.oninput = pintar;
+  if(sel) sel.onchange = pintar;
+}
+
+/* Ajustes: acceso de fortalecimiento de todos los alumnos (y transición), con «Habilitar» o «Extender» */
+async function pintarAccesosAjustes(){
+  const box = document.getElementById("accLista");
+  if(!box) return;
+  let alumnos = (state.athleteList || []);
+  if(!alumnos.length){ const { data } = await sb.from("profiles").select("*").eq("role", "atleta").order("nombre"); alumnos = data || []; }
+  alumnos = alumnos.filter(a => ["fortalecimiento", "transicion"].includes(a.categoria));
+  const ids = alumnos.map(a => a.id);
+  const [{ data: mems, error }, { data: congs }] = ids.length ? await Promise.all([
+    sb.from("membresias").select("user_id, inicio, fin").in("user_id", ids),
+    sb.from("congelamientos").select("user_id, desde, hasta").in("user_id", ids)
+  ]) : [{ data: [] }, { data: [] }];
+  if(!document.getElementById("accLista")) return;
+  if(error){ box.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
+  const hoy = todayStr();
+  const filas = alumnos.map(a => {
+    const membresias = (mems || []).filter(m => m.user_id === a.id).sort((x, y) => y.fin.localeCompare(x.fin));
+    const est = estadoMembresia({ membresias, congelamientos: (congs || []).filter(c => c.user_id === a.id) });
+    const dias = est.finTotal && est.finTotal >= hoy ? diasEntre(hoy, est.finTotal) + 1 : 0;
+    const con = !!(est.vigente || est.congelado || est.futura);
+    const grupo = !con ? "sin" : (est.vigente && dias <= 7) ? "vence" : "activo";
+    const txt = est.congelado ? `Congelado hasta el ${fmtFecha(est.congelado.hasta, true)} · vence el ${fmtFecha(est.finTotal, true)}`
+      : est.vigente ? `Activo · vence el ${fmtFecha(est.finTotal, true)} (${plural(dias, "día", "días")})`
+      : est.futura ? `Programado desde el ${fmtFecha(est.futura.inicio, true)}`
+      : est.ultima ? `Vencido el ${fmtFecha(est.ultima.fin, true)}` : "Sin acceso";
+    return { a, est, con, grupo, txt, orden: { sin: 0, vence: 1, activo: 2 }[grupo] };
+  }).sort((x, y) => x.orden - y.orden || String(x.a.nombre || "").localeCompare(String(y.a.nombre || ""), "es"));
+  const pintar = ()=>{
+    const t = normalizar((document.getElementById("accBuscar") || {}).value || "");
+    const f = (document.getElementById("accFiltro") || {}).value || "";
+    const vis = filas.filter(r => (!f || r.grupo === f || (f === "activo" && r.grupo === "vence")) && (!t || normalizar(r.a.nombre || "").includes(t)));
+    box.innerHTML = vis.length ? `<ul class="acc-lista">${vis.map(r => `
+      <li class="acc-fila">
+        <span class="acc-nombre">${esc(r.a.nombre || "(sin nombre)")}${r.a.categoria === "transicion" ? ` <span class="badge soft">Transición</span>` : ""}</span>
+        <span class="acc-estado"><span class="chip acceso-chip acc-${r.grupo === "sin" ? "fin" : r.grupo === "vence" ? "poco" : "ok"}">${esc(r.txt)}</span></span>
+        <a class="btn-link" href="#/atleta/${encodeURIComponent(r.a.id)}">Ficha</a>
+        <button type="button" class="${r.con ? "btn-outline" : "btn-primary"} sm" data-acc-hab="${esc(r.a.id)}">${r.con ? "Extender" : "Habilitar"}</button>
+      </li>`).join("")}</ul>`
+      : emptyHTML(filas.length ? "Nadie coincide con el filtro." : "Todavía no hay alumnos de fortalecimiento.");
+    box.querySelectorAll("[data-acc-hab]").forEach(b => { b.onclick = ()=> abrirHabilitarAcceso(filas.find(r => r.a.id === b.dataset.accHab)); });
+  };
+  pintar();
+  const q = document.getElementById("accBuscar"), sf = document.getElementById("accFiltro");
+  if(q) q.oninput = pintar;
+  if(sf) sf.onchange = pintar;
+}
+function abrirHabilitarAcceso(r){
+  const hoy = todayStr();
+  const desde = r.est.finTotal && r.est.finTotal >= hoy ? fechaISO(sumarDias(parseFecha(r.est.finTotal), 1)) : hoy;
+  const nombre = primerNombre(r.a.nombre) || "el alumno";
+  const d = openDialog(`${r.con ? "Extender" : "Habilitar"} acceso · ${nombre}`, `
+    <p class="muted" style="margin-top:0">${esc(r.txt)}.${r.con ? " Los días se suman a partir de cuando termina su acceso actual." : ""}</p>
+    <div class="inline-add">
+      <div><label for="dlgAccDesde" style="margin-top:0">Desde</label><input type="date" id="dlgAccDesde" value="${esc(desde)}"></div>
+      <div><label for="dlgAccDias" style="margin-top:0">Días</label><input type="number" id="dlgAccDias" inputmode="numeric" min="1" max="400" value="30"></div>
+    </div>
+    <p class="muted">${r.a.categoria === "transicion" ? "En transición el acceso se cobra y coordina en el centro." : "Para pagos coordinados en el centro."} Se le avisa para que escoja su horario.</p>
+    <button type="button" class="btn-primary" id="btnDlgAcc">${r.con ? "Extender acceso" : "Habilitar acceso"}</button>
+    <div id="dlgAccMsg" aria-live="polite"></div>`);
+  const btn = d.el.querySelector("#btnDlgAcc");
+  btn.onclick = ()=> withBusy(btn, "…", async ()=>{
+    const desdeV = d.el.querySelector("#dlgAccDesde").value;
+    const dias = parseInt(d.el.querySelector("#dlgAccDias").value, 10);
+    const msg = d.el.querySelector("#dlgAccMsg");
+    if(!desdeV){ showMsg(msg, "error", "Elige desde qué día."); return; }
+    if(!dias || dias < 1){ showMsg(msg, "error", "Escribe cuántos días de acceso."); return; }
+    const { data, error } = await sb.rpc("asignar_acceso", { p_user: r.a.id, p_desde: desdeV, p_dias: dias });
+    if(error){ showError(msg, error); return; }
+    d.close();
+    await pintarAccesosAjustes();
+    showMsg(document.getElementById("accAjMsg"), "ok", `Acceso de ${r.a.nombre || "el alumno"} habilitado hasta el ${fmtFecha(data, true)}.`);
+  });
 }
 
 /* ====================== TAREAS EN "HOY" ======================

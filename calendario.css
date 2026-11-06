@@ -755,6 +755,25 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .bit-fila dd{ margin:1px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; }
 .bit-acc{ display:flex; gap:4px; justify-content:flex-end; margin-top:4px; }
 .bit-acc .btn-link{ min-height:34px; font-size:14px; padding:4px 8px; }
+.bit-acc{ align-items:center; flex-wrap:wrap; }
+.bit-foto-add{ margin-right:auto; min-height:34px; }
+.acceso-ext{ margin-top:12px; }
+.acceso-ext > summary{ display:inline-flex; align-items:center; min-height:40px; cursor:pointer; font-weight:700; color:var(--accent); }
+.acceso-ext[open] > summary{ margin-bottom:4px; }
+.acc-lista{ list-style:none; margin:12px 0 0; padding:0; display:grid; gap:8px; }
+.acc-fila{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+.acc-fila .acc-nombre{ flex:1 1 180px; min-width:0; font-weight:700; }
+.acc-fila .acc-estado{ flex:1 1 200px; }
+.acc-fila .acceso-chip{ white-space:normal; border-radius:10px; line-height:1.35; display:inline-block; }
+@media (max-width:600px){
+  .acc-fila .acc-nombre, .acc-fila .acc-estado{ flex-basis:100%; }
+  .acc-fila .btn-link{ margin-left:auto; }
+}
+.acc-filtros{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.acc-filtros input[type=search]{ flex:1 1 220px; margin:0; }
+.acc-filtros select, .hist-cons-filtros select{ flex:0 1 220px; margin:0; }
+.hist-cons-filtros{ display:flex; flex-wrap:wrap; gap:8px; }
+.hist-cons-filtros input[type=search]{ flex:1 1 220px; margin:0; }
 .mirador-activo .coach-main{ padding-bottom:84px; }
 
 /* Acceso a la bitácora desde la ficha + referencia en el Mirador */
