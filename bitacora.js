@@ -18,6 +18,7 @@ function routeBitacoraId(){
   return m ? decodeURIComponent(m[1]) : null;
 }
 const mayuscula = (t)=> String(t || "").charAt(0).toUpperCase() + String(t || "").slice(1);
+const hayValor = (v)=> v !== null && v !== undefined && v !== "";
 const nivelDolor = (n)=> n >= 7 ? "alto" : n >= 4 ? "medio" : "bajo";
 
 /* ---------- Campos (los mismos en el Mirador y en «Nueva entrada») ---------- */
@@ -29,13 +30,13 @@ const ZONAS_DOLOR = ["Cabeza", "Cuello", "Hombro derecho", "Hombro izquierdo", "
 /* Zonas de una entrada; las entradas de antes (sin zonas) se leen como una zona general */
 function zonasDe(d){
   if(d && Array.isArray(d.zonas) && d.zonas.length) return d.zonas;
-  if(d && (d.dolor_inicio || d.dolor_salida)) return [{ zona: null, inicio: d.dolor_inicio || null, salida: d.dolor_salida || null }];
+  if(d && (hayValor(d.dolor_inicio) || hayValor(d.dolor_salida))) return [{ zona: null, inicio: hayValor(d.dolor_inicio) ? d.dolor_inicio : null, salida: hayValor(d.dolor_salida) ? d.dolor_salida : null }];
   return [];
 }
 const nombreZona = (z)=> (z && z.zona) || "Zona general";
 function burbujasFila(name, valor, etiqueta){
-  return `<div class="burbujas" role="radiogroup" aria-label="${esc(etiqueta)}">${[1,2,3,4,5,6,7,8,9,10].map(n => `
-    <label class="burbuja b-${nivelDolor(n)}"><input type="radio" name="${name}" value="${n}"${Number(valor) === n ? " checked" : ""}><span>${n}</span></label>`).join("")}</div>`;
+  return `<div class="burbujas" role="radiogroup" aria-label="${esc(etiqueta)}">${[0,1,2,3,4,5,6,7,8,9,10].map(n => `
+    <label class="burbuja b-${nivelDolor(n)}"><input type="radio" name="${name}" value="${n}"${hayValor(valor) && Number(valor) === n ? " checked" : ""}><span>${n}</span></label>`).join("")}</div>`;
 }
 function zonaLlegadaHTML(pre, k, z = {}){
   const otra = z.zona && !ZONAS_DOLOR.includes(z.zona);
@@ -78,7 +79,10 @@ function camposBitacoraHTML(pre, d = {}){
     <div class="bit-fotos-campo"><p class="bit-fotos-tit">Fotos</p>
       <div class="fotos-previa">${(d._fotos || []).map(f => `<div class="foto-mini" data-foto-id="${esc(f.id)}">
         <img src="${esc(f.url || "")}" alt="Foto guardada"><button type="button" class="foto-quitar" data-foto-quitar aria-label="Quitar foto">✕</button></div>`).join("")}</div>
-      <label class="btn-outline sm foto-add"><span aria-hidden="true">📷</span> Agregar fotos<input type="file" accept="image/*" multiple data-fotos class="sr-only"></label>
+      <div class="foto-botones">
+        <label class="btn-outline sm foto-add"><span aria-hidden="true">📷</span> Tomar foto<input type="file" accept="image/*" capture="environment" data-fotos class="sr-only"></label>
+        <label class="btn-outline sm foto-add"><span aria-hidden="true">🖼️</span> Elegir de la galería<input type="file" accept="image/*" multiple data-fotos class="sr-only"></label>
+      </div>
     </div>
   </div>`;
 }
@@ -203,10 +207,10 @@ function leerCampos(box, pre){
     const zona = sel === "__otra" ? (row.querySelector("[data-zona-otra]").value.trim() || null) : (sel || null);
     const i = radio("zi" + k), s = radio("zs" + k);
     const z = { zona, inicio: i ? Number(i.value) : null, salida: s ? Number(s.value) : null };
-    if(z.zona || z.inicio || z.salida) zonas.push(z);
+    if(z.zona || hayValor(z.inicio) || hayValor(z.salida)) zonas.push(z);
   });
   d.zonas = zonas.length ? zonas : null;
-  const max = (c)=> zonas.reduce((m, z) => z[c] && z[c] > (m || 0) ? z[c] : m, null);
+  const max = (c)=> zonas.reduce((m, z) => hayValor(z[c]) && (m === null || z[c] > m) ? z[c] : m, null);
   d.dolor_inicio = max("inicio"); d.dolor_salida = max("salida");
   const e = radio("estiramientos");
   d.estiramientos = e ? e.value === "si" : null;
@@ -214,12 +218,12 @@ function leerCampos(box, pre){
 }
 /* Dolor por zona para el historial: «Rodilla derecha 7 → 3» */
 function dolorZonasHTML(b){
-  const zonas = zonasDe(b).filter(z => z.inicio || z.salida);
+  const zonas = zonasDe(b).filter(z => hayValor(z.inicio) || hayValor(z.salida));
   if(!zonas.length) return "";
   return `<div class="bit-dolores">${zonas.map(z => `<div class="dolor-zona"><span class="dz-nombre">${esc(nombreZona(z))}</span>
-    ${z.inicio ? `<span class="dolor-pill b-${nivelDolor(z.inicio)}">Llegó <strong>${z.inicio}</strong></span>` : ""}
-    ${z.inicio && z.salida ? `<span aria-hidden="true">→</span>` : ""}
-    ${z.salida ? `<span class="dolor-pill b-${nivelDolor(z.salida)}">Se fue <strong>${z.salida}</strong></span>` : ""}</div>`).join("")}</div>`;
+    ${hayValor(z.inicio) ? `<span class="dolor-pill b-${nivelDolor(z.inicio)}">Llegó <strong>${z.inicio}</strong></span>` : ""}
+    ${hayValor(z.inicio) && hayValor(z.salida) ? `<span aria-hidden="true">→</span>` : ""}
+    ${hayValor(z.salida) ? `<span class="dolor-pill b-${nivelDolor(z.salida)}">Se fue <strong>${z.salida}</strong></span>` : ""}</div>`).join("")}</div>`;
 }
 
 /* ---------- Turno ---------- */
@@ -338,8 +342,8 @@ function referenciasHTML(lista){
   if(!lista.length) return `<p class="mir-ref-vacio muted">Primera vez en la bitácora: todavía no hay sesiones anteriores.</p>`;
   const ant = lista[0];
   const quien = (b)=> `${esc(fmtFecha(b.fecha))}${b.autor_nombre ? " · " + esc(primerNombre(b.autor_nombre)) : ""}`;
-  const dolor = (b)=> zonasDe(b).filter(z => z.inicio || z.salida).map(z =>
-    `<span class="mir-ult-dolor">${esc(z.zona || "Dolor")} ${z.inicio || "–"} → ${z.salida || "–"}</span>`).join("");
+  const dolor = (b)=> zonasDe(b).filter(z => hayValor(z.inicio) || hayValor(z.salida)).map(z =>
+    `<span class="mir-ult-dolor">${esc(z.zona || "Dolor")} ${hayValor(z.inicio) ? z.inicio : "–"} → ${hayValor(z.salida) ? z.salida : "–"}</span>`).join("");
   const linea = (t, v)=> v ? `<p><strong>${t}</strong> ${esc(v)}</p>` : "";
   return `<div class="mir-pend${ant.pendiente ? "" : " vacio"}">
       <p class="mir-pend-tit">Pendiente de la sesión anterior <span class="muted">(${quien(ant)})</span></p>
@@ -542,11 +546,65 @@ async function renderBitacoraAtleta(main, id){
       ${tieneLesion(a.lesiones) ? `<p class="lede"><strong>Lesión:</strong> ${esc(a.lesiones)}</p>` : ""}
       <div class="bit-head-acc"><button type="button" class="btn-primary" id="btnNuevaBit">+ Nueva entrada</button>
         <a class="btn-outline" href="#/atleta/${encodeURIComponent(a.id)}">Ver ficha</a></div></header>
-    <section class="panel span-12" aria-labelledby="bitHist"><div class="panel-head"><h2 id="bitHist">Historial</h2><span class="muted" id="bitCuenta"></span></div>
-      <div id="bitLista"><div class="skel skel-block"></div></div></section></div>`;
+    <div class="seg bit-tabs" role="tablist" aria-label="Secciones de la bitácora">
+      <button type="button" role="tab" data-bit-tab="sesiones" aria-selected="true">Sesiones</button>
+      <button type="button" role="tab" data-bit-tab="consejos" aria-selected="false">Consejos al atleta</button>
+      <button type="button" role="tab" data-bit-tab="internos" aria-selected="false">Comentarios internos</button>
+    </div>
+    <section class="panel span-12" data-bit-panel="sesiones" aria-labelledby="bitHist"><div class="panel-head"><h2 id="bitHist">Historial de sesiones</h2><span class="muted" id="bitCuenta"></span></div>
+      <div id="bitLista"><div class="skel skel-block"></div></div></section>
+    <section class="panel span-12" data-bit-panel="consejos" hidden aria-labelledby="bitCons"><div class="panel-head"><h2 id="bitCons">Consejos al atleta</h2><span class="muted">El atleta ve el último en su inicio</span></div>
+      <div id="bitConsejos"><div class="skel skel-block"></div></div></section>
+    <section class="panel span-12" data-bit-panel="internos" hidden aria-labelledby="bitInt"><div class="panel-head"><h2 id="bitInt">Comentarios internos</h2><span class="muted">Solo los ve el equipo</span></div>
+      <div id="bitInternos"><div class="skel skel-block"></div></div></section></div>`;
   document.getElementById("btnNuevaBit").onclick = ()=> abrirEntradaBitacora(a);
-  await pintarHistorial(id);
+  main.querySelectorAll("[data-bit-tab]").forEach(b => { b.onclick = ()=>{
+    main.querySelectorAll("[data-bit-tab]").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+    main.querySelectorAll("[data-bit-panel]").forEach(p => { p.hidden = p.dataset.bitPanel !== b.dataset.bitTab; });
+  }; });
+  await Promise.all([pintarHistorial(id), pintarNotasHistorial(a, "consejos"), pintarNotasHistorial(a, "internos")]);
 }
+/* Consejos al atleta (profiles.consejos_coach) y comentarios internos (ficha_interna.comentarios):
+   cada vez que se guarda uno nuevo, la base lo deja en su historial con autor y fecha */
+const NOTAS_BIT = {
+  consejos: { caja: "bitConsejos", tabla: "consejos_historial", placeholder: "Ej: esta semana prioriza dormir bien y hacer tus estiramientos al despertar.",
+    etiqueta: "Nuevo consejo para el atleta", ayuda: "El atleta lo ve en su inicio como «Consejo de tu coach».", vacio: "Todavía no hay consejos." },
+  internos: { caja: "bitInternos", tabla: "comentarios_internos", placeholder: "Ej: refiere menos dolor al subir escaleras; evaluar carga la próxima semana.",
+    etiqueta: "Nuevo comentario interno", ayuda: "Solo lo ve el equipo.", vacio: "Todavía no hay comentarios internos." }
+};
+async function pintarNotasHistorial(a, tipo){
+  const cfg = NOTAS_BIT[tipo];
+  const box = document.getElementById(cfg.caja);
+  if(!box) return;
+  const { data, error } = await sb.from(cfg.tabla).select("id, texto, autor_nombre, created_at").eq("user_id", a.id).order("created_at", { ascending: false }).limit(200);
+  if(!document.getElementById(cfg.caja) || routeBitacoraId() !== a.id) return;
+  const lista = data || [];
+  box.innerHTML = `
+    <label for="nota_${tipo}" style="margin-top:0">${esc(cfg.etiqueta)}</label>
+    <textarea id="nota_${tipo}" rows="3" placeholder="${esc(cfg.placeholder)}"></textarea>
+    <p class="muted" style="margin:4px 0 0">${esc(cfg.ayuda)}</p>
+    <button type="button" class="btn-primary" id="btnNota_${tipo}">Guardar</button>
+    <div id="notaMsg_${tipo}" aria-live="polite"></div>
+    ${error ? `<div class="error" role="alert">${esc(errorES(error))}</div>`
+      : lista.length ? `<ol class="nota-hist">${lista.map((n, i) => `<li${i === 0 && tipo === "consejos" ? ` class="actual"` : ""}>
+          <p class="nota-meta"><strong>${esc(mayuscula(fechaLarga(fechaLima(n.created_at))))}</strong> <span class="muted">por ${esc(n.autor_nombre || "el equipo")} · ${esc(horaDe(n.created_at))}</span>${i === 0 && tipo === "consejos" ? ` <span class="badge soft">El que ve hoy</span>` : ""}</p>
+          <p class="nota-txt">${esc(n.texto)}</p></li>`).join("")}</ol>`
+      : `<p class="muted" style="margin-top:14px">${esc(cfg.vacio)}</p>`}`;
+  const btn = document.getElementById("btnNota_" + tipo);
+  btn.onclick = ()=> withBusy(btn, "Guardando…", async ()=>{
+    const texto = document.getElementById("nota_" + tipo).value.trim();
+    const msg = document.getElementById("notaMsg_" + tipo);
+    if(!texto){ showMsg(msg, "error", "Escribe el texto antes de guardar."); return; }
+    const { error: e } = tipo === "consejos"
+      ? await sb.from("profiles").update({ consejos_coach: texto }).eq("id", a.id)
+      : await sb.from("ficha_interna").upsert({ user_id: a.id, comentarios: texto });
+    if(e){ showError(msg, e); return; }
+    if(tipo === "consejos") a.consejos_coach = texto;
+    await pintarNotasHistorial(a, tipo);
+    showMsg(document.getElementById("notaMsg_" + tipo), "ok", "Guardado.");
+  });
+}
+const fechaLima = (iso)=> new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Lima" });
 async function pintarHistorial(id){
   const box = document.getElementById("bitLista");
   if(!box) return;

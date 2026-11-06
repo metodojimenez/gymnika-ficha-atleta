@@ -95,15 +95,17 @@ async function renderAthleteDetail(profile, isCoach, container){
   let panels, tabsAlumno = null;
   if(!isCoach){
     const estirar = panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 12, { eyebrow: esTerapia ? "Todos los días" : "Compensación diaria" });
-    const consejos = `
-    ${panelHTML("notasCard", "Consejos de tu coach", 6, { cls: "coach-voice", eyebrow: "Tu coach" })}
-    ${panelHTML("tipCard", esc(tip.titulo), 6, { cls: "coach-voice", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}`;
     const familia = !esHijo && !state.profile.tutor_id ? panelHTML("familiaCard", "Mi familia", 12, { eyebrow: "Hijos a tu cargo" }) : "";
+    /* Inicio: próxima sesión con el botón del QR, estiramientos diarios y consejo del coach; abajo, su plan */
+    const hoyAlumno = `<section class="panel span-12 hoy-alumno" id="inicioHoyCard" aria-label="${esHijo ? "Su próxima sesión" : "Tu próxima sesión"}"><div class="skel skel-block"></div></section>`;
+    const consejoCoach = panelHTML("notasCard", "Consejo de tu coach", 12, { cls: "coach-voice", eyebrow: "Tu coach" });
     tabsAlumno = esTerapia ? {
       inicio: `
+    ${hoyAlumno}
     ${estirar}
+    ${consejoCoach}
     ${panelHTML("planCard", esHijo ? "Sus sesiones" : "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
-    ${consejos}
+    ${panelHTML("tipCard", esc(tip.titulo), 12, { cls: "coach-voice", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
     ${familia}`,
       reservar: `
     ${panelHTML("reservarCard", "Reservar sesión", 8, { note: "Cada reserva usa 1 sesión" })}
@@ -115,13 +117,15 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("fichaCard", "Datos personales", 12)}`
     } : {
       inicio: `
-    ${panelHTML("planCard", cat === "transicion" ? (esHijo ? "Su plan" : "Mi plan") : (esHijo ? "Su acceso" : "Mi acceso"), 12, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}
-    ${estirar}`,
+    ${hoyAlumno}
+    ${estirar}
+    ${consejoCoach}
+    ${panelHTML("planCard", cat === "transicion" ? (esHijo ? "Su plan" : "Mi plan") : (esHijo ? "Su acceso" : "Mi acceso"), 12, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}`,
       reservar: `
     ${panelHTML("reservarCard", "Reservar horario", 8, { note: "Obligatorio para entrar" })}
     ${panelHTML("misReservasCard", esHijo ? "Sus horarios" : "Mis horarios", 4)}`,
       progreso: `
-    ${consejos}
+    ${panelHTML("tipCard", esc(tip.titulo), 12, { cls: "coach-voice", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
     ${panelHTML("constanciaCard", "Tu rueda de constancia", 12, { eyebrow: "Desde tu último entrenamiento" })}
     ${macroHTML}
     ${resumenHTML}

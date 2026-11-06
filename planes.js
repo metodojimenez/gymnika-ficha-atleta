@@ -269,6 +269,40 @@ const ICONO_QR = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" st
 function botonEscanerHTML(){
   return `<button type="button" class="btn-primary btn-scan" data-escanear>${ICONO_QR}<span>Escanear QR</span></button>`;
 }
+/* Inicio del alumno: su próxima sesión (o la que está en curso) en grande, con el botón para escanear el QR */
+function pintarInicioHoy(profile, plan){
+  const box = document.getElementById("inicioHoyCard");
+  if(!box) return;
+  const propio = !paraDe(profile);
+  const hs = planes.horarios || [];
+  const ahora = Date.now();
+  const r = (plan.reservas || []).filter(x => x.estado === "confirmada" && new Date(x.inicio).getTime() + 60 * 60000 > ahora)
+    .sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)))[0];
+  const cat = r ? ((hs.find(h => h.id === r.horario_id) || {}).categoria || (profile.categoria === "transicion" ? "" : profile.categoria)) : "";
+  let cuando = "", fecha = "";
+  if(r){
+    const dia = new Date(r.inicio).toLocaleDateString("en-CA", { timeZone: "America/Lima" });
+    const manana = fechaISO(sumarDias(parseFecha(todayStr()), 1));
+    const enCurso = new Date(r.inicio).getTime() <= ahora;
+    const larga = fechaLarga(dia);
+    cuando = enCurso ? "Ahora" : dia === todayStr() ? "Hoy" : dia === manana ? "Mañana" : larga;
+    cuando = cuando.charAt(0).toUpperCase() + cuando.slice(1);
+    if(cuando.toLowerCase() !== larga) fecha = larga;
+  }
+  box.innerHTML = `
+    <div class="hoy-prox">
+      <p class="eyebrow">${propio ? "Tu próxima sesión" : "Su próxima sesión"}</p>
+      ${r ? `<p class="hoy-cuando">${esc(cuando)}${fecha ? ` <span class="hoy-fecha">· ${esc(fecha)}</span>` : ""}</p>
+        <p class="hoy-hora"><span class="num">${esc(horaDe(r.inicio))}</span>${cat ? ` <span class="hoy-cat">${esc(CATEGORIAS[cat] ? CATEGORIAS[cat].nombre : "")}</span>` : ""}</p>`
+        : `<p class="hoy-cuando">Sin sesiones reservadas</p><p class="muted">${profile.categoria === "terapia" ? "Elige un día y una hora para tu próxima sesión." : "Reserva tu horario para poder entrar."}</p>`}
+    </div>
+    <div class="hoy-acc">
+      ${botonEscanerHTML()}
+      <a class="btn-outline" href="#/reservar">${r ? "Ver o cambiar reservas" : "Reservar"}</a>
+    </div>`;
+  box.querySelectorAll("[data-escanear]").forEach(b => { b.onclick = abrirEscanerQR; });
+}
+
 function proximaReserva(plan){
   return (plan.reservas || []).filter(r => r.estado === "confirmada" && new Date(r.inicio) > new Date())
     .sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)))[0] || null;
@@ -353,6 +387,8 @@ async function renderPlanAlumno(profile){
   const saldoPrevio = state.plan && state.plan._uid === profile.id && typeof state.plan.saldo === "number" ? state.plan.saldo : null;
   const propio = !paraDe(profile);
   state.plan = plan;
+  pintarInicioHoy(profile, plan);
+  const conHoy = !!document.getElementById("inicioHoyCard");
   const inicio = profile.fecha_inicio ? `<span>En Gymnika desde el <strong>${fmtFecha(profile.fecha_inicio, true)}</strong></span>` : "";
   const prox = proximaReserva(plan);
   const proxHTML = `<p class="perfil-prox">${prox
@@ -365,7 +401,7 @@ async function renderPlanAlumno(profile){
     box.innerHTML = `
       ${sesionesHTML(resumenSesiones(plan, cat), { baja: bajo, propio, idSaldo: "saldoTokens" })}
       <div class="perfil-acciones ses-acciones">
-        ${botonEscanerHTML()}
+        ${conHoy ? "" : botonEscanerHTML()}
         <button type="button" class="btn-outline" id="btnComprar">Comprar sesiones</button>
       </div>
       ${resumenSesiones(plan, cat).agendadas.length ? "" : proxHTML}
@@ -405,7 +441,7 @@ async function renderPlanAlumno(profile){
       <div class="perfil">
         <div class="plan-big">${estadoHTML}</div>
         <div class="perfil-acciones">
-          ${botonEscanerHTML()}
+          ${conHoy ? "" : botonEscanerHTML()}
           ${accionFort}
         </div>
       </div>

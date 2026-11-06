@@ -827,3 +827,32 @@ textarea + .autoria{ margin:-4px 0 4px; }
 .acceso-chip.acc-ok{ background:#EEF8F1; color:#1F7A43; border-color:#A9D9BA; }
 .acceso-chip.acc-poco{ background:#FDF3E7; color:#9A5512; border-color:#F0C48F; }
 .acceso-chip.acc-fin{ background:#FCEDEB; color:#B42318; border-color:#F1C7C2; }
+/* Dolor 0 a 10 (11 burbujas) */
+.burbujas{ grid-template-columns:repeat(11, minmax(0, 1fr)); gap:4px; }
+.burbuja span{ font-size:14px; }
+/* Fotos: cámara o galería */
+.foto-botones{ display:flex; gap:8px; flex-wrap:wrap; }
+/* Bitácora: pestañas y notas con historial */
+.bit-tabs{ display:flex; flex-wrap:wrap; margin:4px 0 14px; }
+.bit-tabs button{ flex:1 1 auto; min-height:42px; }
+.bit-tabs button[aria-selected="true"]{ background:var(--surface); color:var(--ink); box-shadow:0 1px 4px rgba(53,41,47,.14); font-weight:700; }
+.nota-hist{ list-style:none; margin:16px 0 0; padding:0; display:grid; gap:10px; }
+.nota-hist li{ padding:12px 14px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); }
+.nota-hist li.actual{ border-color:var(--coach-line); background:var(--coach-soft); }
+.nota-meta{ margin:0; display:flex; flex-wrap:wrap; gap:4px 8px; align-items:baseline; }
+.nota-meta .muted{ font-size:13.5px; }
+.nota-txt{ margin:6px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+/* Inicio del alumno: próxima sesión + QR */
+.hoy-alumno{ display:flex; align-items:center; justify-content:space-between; gap:16px 24px; flex-wrap:wrap;
+  background:linear-gradient(135deg, var(--accent-deep), var(--accent)); color:#fff; border:0; }
+.hoy-alumno .eyebrow{ color:rgba(255,255,255,.78); margin:0; }
+.hoy-prox{ min-width:0; flex:1 1 220px; }
+.hoy-cuando{ margin:4px 0 0; font-size:clamp(24px, 6vw, 32px); font-weight:800; line-height:1.1; font-family:var(--font-display, inherit); }
+.hoy-hora{ margin:4px 0 0; font-size:clamp(20px, 5vw, 26px); font-weight:700; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+.hoy-cat{ font-size:14px; font-weight:700; padding:3px 10px; border-radius:999px; background:rgba(255,255,255,.16); }
+.hoy-alumno .muted{ color:rgba(255,255,255,.8); margin:6px 0 0; }
+.hoy-acc{ display:flex; gap:10px; flex-wrap:wrap; flex:1 1 240px; justify-content:flex-end; }
+.hoy-acc .btn-scan{ background:#fff; color:var(--accent-deep); margin-top:0; width:auto; flex:1 1 180px; }
+.hoy-acc .btn-outline{ margin-top:0; border-color:rgba(255,255,255,.6); color:#fff; background:transparent; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; flex:1 1 160px; }
+@media (max-width: 560px){ .hoy-acc{ justify-content:stretch; } }
+.hoy-fecha{ font-size:.55em; font-weight:600; opacity:.85; white-space:nowrap; }
