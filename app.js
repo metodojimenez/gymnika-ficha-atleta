@@ -840,46 +840,76 @@ async function renderAthleteHome(){
   await renderAthleteDetail(state.profile, false, document.getElementById("athleteMain"));
 }
 
-/* La misma lista (y orden) está en private.enviar_consejo_del_dia(), que manda el consejo como notificación a las 7:00: si cambia una, cambiar la otra */
+/* 60 consejos [título, texto] de Gymnika (6 nov 2026). La misma lista y orden está en private.enviar_consejo_del_dia(),
+   que manda el consejo como notificación a las 7:00: si cambia una, cambiar la otra */
 const TIPS = [
-  "Entrena con constancia: La regularidad supera a la intensidad ocasional.",
-  "Prioriza la técnica: Ejecuta cada ejercicio con control y buena postura.",
-  "Aumenta progresivamente: Incrementa peso, repeticiones o dificultad poco a poco.",
-  "Duerme bien: Apunta a 7–9 horas de sueño cada noche.",
-  "Consume suficiente proteína: Incluye una fuente proteica en cada comida.",
-  "Hidrátate: Bebe agua regularmente durante todo el día.",
-  "Come alimentos variados: Prioriza frutas, verduras, proteínas y cereales integrales.",
-  "No entrenes siempre al máximo: Deja espacio para recuperarte.",
-  "Calienta antes de entrenar: Prepara músculos y articulaciones para el esfuerzo.",
-  "Estira después: Utiliza estiramientos suaves para relajarte y recuperar movilidad.",
-  "Muévete durante el día: Evita permanecer sentado durante muchas horas seguidas.",
-  "Camina más: Caminar diariamente mejora tu actividad física general.",
-  "Descansa entre series: Recupera lo suficiente para mantener una buena técnica.",
-  "Entrena todo el cuerpo: Busca equilibrio entre tren superior, inferior y core.",
-  "Fortalece el core: Un abdomen fuerte ayuda a estabilizar el cuerpo.",
-  "Escucha a tu cuerpo: Distingue entre esfuerzo normal y dolor preocupante.",
-  "Mantén horarios: Una rutina estable facilita crear hábitos saludables.",
-  "Planifica tus comidas: Reduce decisiones impulsivas y mejora tu alimentación.",
-  "Incluye grasas saludables: Consume alimentos como frutos secos, palta y pescado.",
-  "Prioriza alimentos reales: Basa tu dieta principalmente en alimentos poco procesados.",
-  "Controla el estrés: Dedica unos minutos al día a respirar, caminar o desconectar.",
-  "Respira correctamente: No contengas la respiración innecesariamente durante el ejercicio.",
-  "Registra tus progresos: Anota pesos, repeticiones y sensaciones.",
-  "Sé paciente: Los cambios físicos requieren tiempo y consistencia.",
-  "Reduce el alcohol: Puede afectar la recuperación, el sueño y el rendimiento.",
-  "Cuida tu movilidad: Trabaja regularmente las zonas que sientas rígidas.",
-  "Mantén una buena postura: Varía de posición y evita mantener posturas incómodas mucho tiempo.",
-  "Descansa cuando lo necesites: La recuperación también forma parte del entrenamiento.",
-  "Disfruta el proceso: El mejor entrenamiento es el que puedes mantener a largo plazo.",
-  "Busca equilibrio: Entrenamiento, alimentación, sueño y bienestar deben trabajar juntos."
+  ["Respeta tu cansancio", "Si amaneces pesado o arrastras varias noches cortas, baja un cambio: movilidad y respiración en vez de la sesión fuerte. Prueba simple: si a los 10 minutos de calentar el cuerpo no despierta, hoy toca suave. El cansancio es información, no flojera."],
+  ["Dormir también es parte del tratamiento", "Lo que trabajamos en sesión se repara mientras duermes. Ponle hora fija a tu cama igual que a tu terapia: acuéstate y levántate a la misma hora, apuntando a 7 horas o más."],
+  ["De costado: almohada entre las rodillas", "Si duermes de lado y amaneces con la zona lumbar cargada, pon una almohada entre las rodillas. Así la pierna de arriba no cae ni deja la pelvis girada toda la noche. Boca arriba, la almohada va debajo de las rodillas."],
+  ["Revisa la altura de tu almohada", "De costado, la almohada debe llenar el espacio entre el hombro y la oreja, con la nariz alineada con el esternón. Si amaneces con el cuello duro, revisa esa altura antes de culpar al colchón."],
+  ["Colchón: ni tabla ni hamaca", "Si tu colchón se hunde donde va la cadera, la columna pasa la noche en curva. Y «mientras más duro, mejor» es un mito: uno de firmeza media suele ir mejor para la espalda."],
+  ["El último scroll, sentado y no echado", "Echado con dos almohadas y el mentón al pecho, tu cuello pasa media hora doblado justo antes de ocho horas quieto. Si vas a ver el celular de noche, hazlo sentado y déjalo fuera de la cama."],
+  ["Café y pre-entreno: ponles hora de corte", "Si entrenas de noche y a las 12 sigues con los ojos abiertos, revisa el café o el pre-entreno de la tarde. Prueba dos semanas sin cafeína después de las 2 p. m. y compara cómo duermes."],
+  ["Lávate los dientes sin colgarte del lavatorio", "Son dos minutos inclinado justo cuando la espalda amanece más rígida. Apoya una mano en el lavatorio y suelta las rodillas, o inclínate desde la cadera con la espalda larga."],
+  ["Las medias: trae el pie hacia ti", "Para ponerte medias y zapatillas, siéntate y cruza el tobillo sobre la otra rodilla en vez de doblarte hasta el piso. Si no llegas a esa posición, tu cadera te está diciendo algo: cuéntanoslo en tu próxima sesión."],
+  ["La mejor postura es la siguiente", "Ninguna postura aguanta ocho horas, ni la «correcta». Cada 30 o 40 minutos sentado, párate y haz 5 extensiones suaves hacia atrás con las manos en la cintura. Si la extensión duele o te manda dolor a la pierna, no la fuerces y avísanos."],
+  ["En cada luz roja, nuca al apoyacabezas", "En el tráfico, la cabeza se va hacia adelante sin que te des cuenta. En cada luz roja lleva el mentón atrás y empuja suave la nuca contra el apoyacabezas: 5 segundos, 3 veces. Debes sentir que el cuello se alarga, no que se aprieta."],
+  ["Acomoda el asiento antes de arrancar", "Cadera al fondo del asiento y respaldo apenas inclinado hacia atrás. Si manejas más de 40 minutos, pon una toalla enrollada en la zona lumbar: con ese apoyo la espalda no se hunde y los discos cargan menos."],
+  ["Bolsas del mercado: repartidas y pegadas a ti", "Todo el peso en un lado obliga a la columna a inclinarse; lejos del cuerpo, hace palanca. Repártelo en las dos manos, llévalo cerca y camina erguido. Acabas de convertir el mercado en un ejercicio de core."],
+  ["Los tragos también cuentan como carga", "Con alcohol el sueño es más ligero y la recuperación del día siguiente se nota. Si mañana tienes sesión fuerte o surf temprano, que hoy sea una noche tranquila."],
+  ["Si viene un estornudo, no te dobles", "Con la espalda sensible, toser o estornudar doblado puede doler bastante. Apoya una mano en la mesa o en el muslo y mantén el tronco erguido. Si cada tos te manda dolor a la pierna, corresponde una evaluación en persona."],
+  ["Camina soltando los brazos", "En tu caminata de hoy, saca las manos de los bolsillos y guarda el celular. El braceo hace rotar suave la columna en cada paso: es su movilidad más natural. Diez minutos después del almuerzo bastan para empezar."],
+  ["Baja al piso una vez al día", "Juega con tus hijos o tu perro, o mira diez minutos de tele desde el suelo. Sentarte y levantarte del piso les pide a caderas, rodillas y columna rangos que la silla nunca usa. Es un movimiento básico que no conviene perder."],
+  ["Proteína en las tres comidas", "Músculos y tendones se reconstruyen con lo que comes, no solo con lo que entrenas. Revisa tu plato de hoy: que desayuno, almuerzo y cena tengan una porción de proteína del tamaño de tu palma (huevo, pescado, pollo, menestras)."],
+  ["No llegues a entrenar con el tanque vacío", "Si entrenas a las 7 p. m. y tu último bocado fue el almuerzo, llegas sin combustible y la técnica lo paga. Come algo ligero una hora o una hora y media antes: un plátano, un pan con palta o un yogurt."],
+  ["El día de descanso también se come bien", "El día que no entrenas es cuando tu cuerpo repara. No es día para saltarte comidas ni para «compensar»: mantén tu proteína y tus verduras igual que un día de sesión."],
+  ["Tu cuerpo se adapta y crece en el descanso", "El entrenamiento es el estímulo; la adaptación llega después, cuando descansas, comes y duermes. Por eso tu semana tiene días suaves: no son días perdidos, son los días en que el cuerpo construye lo que le pediste. Ubica hoy cuál es el tuyo."],
+  ["Base, Resiliencia, Rendimiento: en ese orden", "Primero recuperas control y movimiento sin dolor. Después haces que el cuerpo tolere carga. Recién entonces buscas rendir. Si hoy quieres saltar a la fase tres, pregúntate si la uno ya está firme."],
+  ["Antes de la sesión, respira hacia las costillas", "Echado boca arriba, manos en las costillas bajas: 5 respiraciones lentas, sintiendo que se abren hacia los lados al inhalar y bajan al exhalar. Por ahí empieza la fase Base, porque el diafragma también trabaja para tu tronco."],
+  ["Si llegas tarde, recorta el final", "El calentamiento es el ensayo de lo que viene: 5 a 8 minutos moviendo caderas, columna dorsal y hombros, y la primera serie con la mitad del peso. Si el tiempo no alcanza, quita un ejercicio del final, nunca el inicio."],
+  ["Sube una sola variable por semana", "O más peso, o más repeticiones, o más días. Nunca las tres a la vez. Así, si aparece una molestia, sabes exactamente qué cambio la provocó y cuánto retroceder."],
+  ["Para antes de que cambie la forma", "Si en las últimas repeticiones la espalda se redondea o la rodilla se mete, ya no entrenas el ejercicio: entrenas la compensación. Deja una o dos repeticiones guardadas en cada serie."],
+  ["La regla de las 24 horas", "Si después de entrenar una molestia vuelve a su nivel de siempre en menos de un día, la carga estuvo bien. Si mañana sigue más alta, en la próxima sesión baja un escalón."],
+  ["Molestia: sigue, ajusta o para", "Sigue si es leve y no cambia tu movimiento. Ajusta, con menos carga o menos rango, si empiezas a compensar. Para y evalúate en persona si es punzante, baja por la pierna, adormece o te quita fuerza."],
+  ["Aprende a leer tu dolor", "Muscular: difuso, como cansado, y mejora al moverte. Articular: puntual, aparece en un ángulo o posición específica. Nervioso: quema, corre, hormiguea o adormece. Este último no se entrena encima: se evalúa."],
+  ["Tu color de hoy decide tu versión", "Si hoy llegas en naranja o amarillo, te toca una versión más simple del ejercicio. No es retroceder: es entrenar el mismo patrón con la carga que tu espalda tolera hoy, para acercarte al verde."],
+  ["Fuerza dos veces por semana, como mínimo", "Caminar, correr o surfear no reemplazan la fuerza. Dos sesiones semanales de cuerpo completo son el piso para un adulto, y le dan a tu columna músculo que la sostenga."],
+  ["Cada tejido tiene su reloj", "El músculo responde en semanas; tendones, ligamentos y cartílago necesitan meses. Por eso tu plan sube más lento de lo que tu entusiasmo quisiera. Hoy cumple la carga que te toca, no la que se te antoja."],
+  ["Después de una pausa, vuelve a la mitad", "Tras dos semanas o más sin entrenar (viaje, gripe, trabajo), la primera semana va con la mitad del peso o del volumen. El aire y el músculo vuelven antes que tendones y articulaciones, y estos no avisan a tiempo."],
+  ["El surf no entrena todo", "En el agua pasas gran parte del tiempo remando: mucho hombro y espalda alta, poca fuerza de piernas y glúteos. Complementarlo con trabajo de cuerpo completo puede ayudar a que tu parada en la tabla siga siendo rápida, sobre todo pasados los 40."],
+  ["Del carro al mar, con escala", "Si manejaste 45 minutos hasta la playa, llegas con cadera y espalda dobladas. Antes de ponerte el wetsuit: camina dos o tres minutos, haz 5 extensiones de pie y 10 rotaciones de tronco. Entras al agua con el cuerpo despierto."],
+  ["Remaste arqueado: lleva la espalda al otro lado", "Una hora remando es una hora con la zona lumbar en extensión. Al salir, échate boca arriba y lleva las rodillas al pecho durante 5 respiraciones lentas. Debe sentirse como alivio, nunca como dolor que corre a la pierna."],
+  ["Centro de gravedad bajo: practica la cuclilla", "Quédate en cuclillas 30 segundos, 3 veces al día, agarrado del marco de una puerta si hace falta y sin dolor de rodilla. Caderas y tobillos que se doblan bien te dejan ir bajo en la tabla, en la cancha o al recoger algo del piso."],
+  ["Empieza por tu lado menos hábil", "Pádel, tenis, golf o surf siempre con la misma postura cargan un solo lado. En el gimnasio arranca cada ejercicio por el lado débil y deja que ese lado marque las repeticiones del otro."],
+  ["Cucaracheos y pivoteos no son relleno", "Cucaracheos, pivoteos de cadera, gatos: no son el trámite antes de «lo de verdad». Son el trabajo de control que hace posible todo lo demás. Hazlos lentos y con la misma atención que la serie pesada."],
+  ["Graba una repetición por semana", "Filma de costado tu sentadilla o tu peso muerto y compárala con la del mes pasado. Lo que sientes y lo que haces no siempre coinciden. Si te deja dudas, trae el video a tu sesión."],
+  ["Tu columna no es frágil", "Está hecha para moverse y cargar, y se adapta a lo que le pides con progresión. Cuidarla no es dejar de usarla: es usarla un poco más cada semana."],
+  ["Una resonancia no es un destino", "Muchas hernias de disco pueden reducirse con el tiempo y manejo conservador; lo hemos visto en resonancias de control. La imagen importa menos que cómo te mueves hoy y cómo vas progresando."],
+  ["El miedo a moverte también se rehabilita", "Después de un episodio de dolor es normal cuidarte de más, y proteger de más también rigidiza. Elige hoy un movimiento que vienes evitando (agacharte, girar) y hazlo lento, en rango cómodo, 5 veces. Si el dolor es fuerte o corre a la pierna, para y avísanos."],
+  ["Semana pesada, espalda más sensible", "Si tu espalda se queja más cuando duermes poco y andas estresado, no siempre es que «algo se movió»: un sistema nervioso cansado le sube el volumen al dolor. Esa semana prioriza dormir y moverte suave."],
+  ["El cambio se mide en meses", "Tres sesiones medianas por semana durante tres meses cambian más que dos semanas heroicas. Tu proceso es de 3 a 12 meses, no de días. Hoy solo te toca cumplir la de hoy."],
+  ["Compárate con tu evaluación inicial", "Tu punto de comparación no es el de al lado ni tú hace diez años: es el día que te evaluamos. ¿Qué haces hoy que ese día no podías? Dilo en voz alta."],
+  ["Una semana mala no borra lo avanzado", "La rehabilitación sube en zigzag. Lo que importa es que cada bajón sea más corto y menos intenso que el anterior. Si no es así, avísanos y ajustamos el plan."],
+  ["Comprométete solo con los primeros 5 minutos", "Si hoy no hay ganas, haz solo la respiración y el primer ejercicio de tu rutina. Casi siempre el cuerpo pide seguir. Y si no, igual cumpliste lo más importante: no cortar la cadena."],
+  ["Una buena sesión es la que puedes repetir", "No midas el entrenamiento por el sudor ni por lo molido que quedaste. La sesión que sirve es la que te deja volver pasado mañana un poco mejor."],
+  ["Control de situación: primero suelta el aire", "En el susto (una ola que te revuelca, un tirón en la espalda), lo primero no es reaccionar: exhala largo y ubícate. ¿Qué pasó? ¿Qué puedo hacer ahora? Se practica en frío para que salga en caliente."],
+  ["Mañana y noche: 8 repeticiones", "Tu secuencia de movilización funciona por repetición, no por intensidad. Ocho al despertar y ocho antes de dormir valen más que cuarenta el domingo. Pégalas a algo fijo: apagar la alarma y lavarte los dientes de noche."],
+  ["Dinos cómo llegas y cómo te vas", "Al empezar y al terminar la sesión, dinos qué sientes y en qué zona, aunque sea poco. Comparar cómo llegas con cómo te vas nos dice si la carga de hoy fue la correcta."],
+  ["Párate de la silla sin usar las manos", "Pies debajo de las rodillas, pecho adelante y empuja el piso, sin impulso. Si lo haces cada vez que te levantas, son decenas de sentadillas al día sin ir al gimnasio. Si la rodilla duele, ayúdate con las manos y cuéntanos."],
+  ["Vaso chico en el escritorio", "En vez de la botella de un litro, usa un vaso. Cada vez que se acaba, te paras a llenarlo: te hidratas y cortas el tiempo sentado sin poner ninguna alarma."],
+  ["Si te suenas el cuello a cada rato", "No suele ser grave, pero si el alivio dura minutos y lo repites cada hora, ese crujido no está resolviendo nada. Esa rigidez pide movimiento o fuerza: cámbialo por 5 retracciones lentas, mentón atrás, como haciendo papada."],
+  ["No sueltes la rutina cuando deje de doler", "El dolor suele irse antes de que el tejido esté listo. Dejar los ejercicios apenas te sientes bien es la receta para volver al mismo punto. Completa la fase aunque ya no duela."],
+  ["El fin de semana no compensa la semana", "Cinco días de silla y el sábado pichanga, pádel y surf: ese salto de cero a cien es el que el cuerpo resiente. Quince minutos de movimiento tres días de la semana te preparan para el fin de semana."],
+  ["La pastilla para entrenar es una señal", "Tomar un antiinflamatorio para aguantar la sesión apaga la alarma, no el problema, y sin alarma es fácil pasarte de carga. Si la necesitas para entrenar, ese día baja la carga y cuéntanoslo."],
+  ["Saca la billetera del bolsillo de atrás", "Sentarte sobre ella inclina la pelvis y deja un lado de la zona lumbar torcido todo el trayecto. Antes de manejar o de sentarte a trabajar, pásala al bolsillo de adelante."],
+  ["Avisa la molestia en la primera semana", "Una molestia que nos cuentas a tiempo suele resolverse con un ajuste de carga o de posición. La que aguantas callado dos meses ya es otra conversación. Escríbenos o dilo al empezar tu sesión."]
 ];
 /* Consejo del día: cambia una vez al día (antes era una ventana emergente en cada entrada) */
 function tipDelDia(){
   const d = new Date();
   const dia = Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 86400000);
-  const tip = TIPS[dia % TIPS.length];
-  const i = tip.indexOf(":");
-  return i > 0 ? { titulo: tip.slice(0, i), texto: tip.slice(i + 1).trim() } : { titulo: "Consejo del día", texto: tip };
+  const [titulo, texto] = TIPS[dia % TIPS.length];
+  return { titulo, texto };
 }
 
 /* ====================== INBOX DE NOTIFICACIONES ====================== */
