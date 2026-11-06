@@ -530,7 +530,7 @@ function mostrarConsejoDelDia(){
 function movimientoTexto(m){
   if(m.motivo === "compra") return "Compra" + (m.nota ? ": " + m.nota : "");
   if(m.motivo === "reserva") return m.nota === "Lista de espera" ? "Reserva (desde lista de espera)" : "Reserva de sesión";
-  if(m.motivo === "devolucion") return "Devolución por cancelación";
+  if(m.motivo === "devolucion") return m.nota === "Cambio de horario" ? "Cambio de horario (la sesión pasó al nuevo)" : "Devolución por cancelación";
   return "Ajuste del coach" + (m.nota ? ": " + m.nota : "");
 }
 
@@ -795,11 +795,17 @@ async function renderReservasAlumno(profile){
     const misDelDia = mias.filter(r => r.fecha === iso).map(r => r.horario_id);
     const slots = delDia(iso).filter(h => inicioLocal(iso, h.hora) > ahora || misDelDia.includes(h.id));
     const sinAcceso = !esTer && !cubreAcceso(plan, iso);
-    /* Un solo horario por día: si ya tiene uno, los demás de ese día no se pueden reservar */
+    /* Un solo horario por día: si ya tiene uno que aún no empieza, puede cambiarlo por otro del mismo día (se reemplaza) */
     const yaTieneDia = mias.some(r => r.fecha === iso && ["confirmada", "espera", "asistio"].includes(r.estado));
+    const actualDia = mias.find(r => r.fecha === iso && ["confirmada", "espera"].includes(r.estado));
+    const aReemplazar = actualDia && new Date(actualDia.inicio) > ahora && !mias.some(r => r.fecha === iso && r.estado === "asistio") ? actualDia : null;
+    const horaDe = (r)=> horaCorta((horarios.find(x => x.id === r.horario_id) || {}).hora) || fmtFechaHora(r.inicio).split(" ").pop();
+    const hayOtros = slots.some(h => !mias.some(r => r.horario_id === h.id && r.fecha === iso));
     diaBox.innerHTML = `
       <h3 class="cal-dia-t">${fechaLarga(iso)}${iso === hoyISO ? " · hoy" : ""}</h3>
-      ${yaTieneDia && slots.some(h => !mias.some(r => r.horario_id === h.id && r.fecha === iso)) ? `<p class="plan-alert" role="status">${paraDe(profile) ? "Ya tiene un horario este día. Solo se puede reservar uno por día; para cambiarlo, cancela el que tiene." : "Ya tienes un horario este día. Solo se puede reservar uno por día; si quieres cambiarlo, cancela el que tienes."}</p>` : ""}
+      ${yaTieneDia && hayOtros ? `<p class="plan-alert" role="status">${aReemplazar
+        ? (paraDe(profile) ? `Ya tiene un horario este día (${horaDe(aReemplazar)}). Si elige otro, se reemplaza.` : `Ya tienes un horario este día (${horaDe(aReemplazar)}). Si eliges otro, se reemplaza.`)
+        : (paraDe(profile) ? "Ya tiene un horario este día. Solo se puede reservar uno por día." : "Ya tienes un horario este día. Solo se puede reservar uno por día.")}</p>` : ""}
       ${!slots.length ? emptyHTML(iso < hoyISO ? "Este día ya pasó." : "No hay horarios disponibles este día. Elige otro.") : ""}
       ${slots.length && sinAcceso ? `<p class="plan-alert warn">${avisoSinAccesoHTML(profile)}</p>` : ""}
       <ul class="slot-list">
@@ -814,6 +820,8 @@ async function renderReservasAlumno(profile){
           if(mia) accion = `<span class="slot-tag ${mia.estado === "espera" ? "wait" : "ok"}">${mia.estado === "espera" ? "En lista de espera" : mia.estado === "asistio" ? (paraDe(profile) ? "Asistió ✓" : "Asististe ✓") : "Reservado ✓"}</span>`;
           else if(pasado) accion = `<span class="slot-tag off">Ya pasó</span>`;
           else if(sinAcceso) accion = `<span class="slot-tag off">Sin acceso</span>`;
+          else if(aReemplazar && lleno && aReemplazar.estado === "confirmada") accion = `<span class="slot-tag off">Lleno</span>`;
+          else if(aReemplazar) accion = `<button type="button" class="btn-outline slot-btn" data-reservar="${esc(h.id)}">Cambiar a esta hora</button>`;
           else if(yaTieneDia) accion = `<span class="slot-tag off">${paraDe(profile) ? "Ya tiene otro" : "Ya tienes otro"}</span>`;
           else if(lleno && !esTer) accion = `<span class="slot-tag off">Lleno</span>`;
           else accion = `<button type="button" class="${lleno ? "btn-outline" : "btn-primary"} slot-btn" data-reservar="${esc(h.id)}">${lleno ? "Lista de espera" : "Reservar"}</button>`;
@@ -835,7 +843,7 @@ async function renderReservasAlumno(profile){
       b.onclick = ()=>{
         const h = slots.find(x => x.id === b.dataset.reservar);
         const o = (ocup || []).find(x => x.horario_id === h.id && x.fecha === iso) || { confirmadas: 0, lugares: [] };
-        confirmarReserva(profile, h, iso, o, aj, saldo);
+        confirmarReserva(profile, h, iso, o, aj, saldo, aReemplazar ? { ...aReemplazar, hora: horaDe(aReemplazar), cat: (horarios.find(x => x.id === aReemplazar.horario_id) || {}).categoria } : null);
       };
     });
   };
@@ -935,14 +943,16 @@ function limiteCancelacion(inicio, aj){
   return new Date(new Date(inicio).getTime() - (aj.horas_cancelacion || 24) * 3600000);
 }
 
-function confirmarReserva(profile, h, fecha, o, aj, saldo){
+function confirmarReserva(profile, h, fecha, o, aj, saldo, reemplaza){
   const esTer = profile.categoria === "terapia";
   const propio = !paraDe(profile);
   const master = esEquipo();
   const ini = inicioLocal(fecha, h.hora);
   const lleno = o.confirmadas >= h.aforo;
   const limite = limiteCancelacion(ini, aj);
-  if(esTer && saldo < 1){
+  /* Al cambiar una sesión de terapia confirmada, la sesión pasa al horario nuevo: no hace falta saldo */
+  const pasaSesion = reemplaza && reemplaza.estado === "confirmada" && reemplaza.cat === "terapia";
+  if(esTer && saldo < 1 && !pasaSesion){
     if(master){ openDialog("Sin sesiones disponibles", `<p style="margin-top:0">${avisoSinSesionesHTML(profile)}</p>`); return; }
     const d = openDialog("Necesitas sesiones", `<p>Para reservar ${propio ? "necesitas" : "necesita"} al menos 1 sesión disponible.</p><button type="button" class="btn-primary" id="dlgComprar">Comprar sesiones</button>`);
     d.el.querySelector("#dlgComprar").onclick = ()=>{ d.close(); abrirCompra(profile); };
@@ -957,6 +967,7 @@ function confirmarReserva(profile, h, fecha, o, aj, saldo){
   const reglas = esTer
     ? `${lleno
         ? `<p>Este horario está lleno. Si se libera un cupo, la reserva se confirma sola y se usa 1 sesión ${propio ? "de tu saldo. Te avisaremos en el inbox." : "de su saldo."}</p>`
+        : pasaSesion ? `<p>No se usa otra sesión: la de las ${reemplaza.hora} pasa a este horario.</p>`
         : `<p>Se usará <strong>1 sesión</strong> de ${propio ? "tu" : "su"} saldo (${propio ? "te" : "le"} quedarán ${saldo - 1}).</p>`}
        <p class="muted">${master ? "Si el centro la cancela, la sesión se le devuelve." : `Puedes cancelar sin costo hasta el <strong>${fmtFechaHora(limite.toISOString())}</strong>. Después de eso, o si no asiste, la sesión se pierde.`}</p>`
     : `<p>El cupo queda guardado. Al llegar, ${propio ? "escanea" : "se escanea"} el QR de recepción desde la app.</p>
@@ -964,11 +975,14 @@ function confirmarReserva(profile, h, fecha, o, aj, saldo){
   /* El master puede agendar la misma hora varias semanas seguidas (para que nadie pierda su horario de siempre) */
   const limISO = limiteReserva();
   const maxSemanas = Math.min(8, Math.floor(diasEntre(fecha, limISO) / 7) + 1);
-  const repetirHTML = master && !lleno && maxSemanas > 1 ? `
+  const repetirHTML = master && !lleno && !reemplaza && maxSemanas > 1 ? `
     <label for="repSemanas">Repetir</label>
     <select id="repSemanas">${Array.from({ length: maxSemanas }, (_, i) => i + 1).map(n => `<option value="${n}">${n === 1 ? "Solo esta fecha" : `${n} semanas seguidas (mismo día y hora)`}</option>`).join("")}</select>
     <p class="muted" style="margin-top:6px">${esTer ? "Cada fecha usa 1 sesión de su saldo." : "Se agenda mientras su acceso cubra esas fechas."}</p>` : "";
-  const d = openDialog(lleno ? "Unirse a la lista de espera" : master ? `Agendar a ${primerNombre(profile.nombre) || "el alumno"}` : esTer ? "Confirmar reserva" : "Confirmar horario", `
+  const deDia = fecha === todayStr() ? "de hoy" : `del ${fechaLarga(fecha).toLowerCase()}`;
+  const avisoCambio = reemplaza ? `<p class="plan-alert warn" role="alert">${propio ? "Estás reemplazando tu" : "Estás reemplazando su"} horario ${deDia} (${reemplaza.hora}${reemplaza.cat && reemplaza.cat !== h.categoria ? ", " + CATEGORIAS[reemplaza.cat].nombre.toLowerCase() : ""}) por esta nueva opción (${horaCorta(h.hora)}). ¿Confirmas el cambio?</p>` : "";
+  const d = openDialog(reemplaza ? "Cambiar horario" : lleno ? "Unirse a la lista de espera" : master ? `Agendar a ${primerNombre(profile.nombre) || "el alumno"}` : esTer ? "Confirmar reserva" : "Confirmar horario", `
+    ${avisoCambio}
     <div class="confirm-slot">
       <span class="cs-day">${DIAS_SEMANA[h.dia_semana]} ${ini.getDate()} de ${MESES_LARGOS[ini.getMonth()]}</span>
       <span class="cs-time num">${horaCorta(h.hora)}</span>
@@ -977,8 +991,11 @@ function confirmarReserva(profile, h, fecha, o, aj, saldo){
     ${reglas}
     ${lugaresHTML}
     ${repetirHTML}
-    <button type="button" class="btn-primary" id="btnConfirmarReserva">${lleno ? "Unirse a la lista de espera" : master ? "Agendar" : "Confirmar reserva"}</button>
+    <button type="button" class="btn-primary" id="btnConfirmarReserva">${reemplaza ? "Sí, cambiar horario" : lleno ? "Unirse a la lista de espera" : master ? "Agendar" : "Confirmar reserva"}</button>
+    ${reemplaza ? `<button type="button" class="btn-link" id="btnNoCambiar" style="margin-top:6px">Volver, mantener ${reemplaza.hora}</button>` : ""}
     <div id="confirmMsg" aria-live="polite"></div>`);
+  const noCambiar = d.el.querySelector("#btnNoCambiar");
+  if(noCambiar) noCambiar.onclick = ()=> d.close();
   const btn = d.el.querySelector("#btnConfirmarReserva");
   btn.onclick = ()=> withBusy(btn, "Reservando…", async ()=>{
     const lugarSel = d.el.querySelector('input[name="lugar"]:checked');
@@ -998,11 +1015,20 @@ function confirmarReserva(profile, h, fecha, o, aj, saldo){
         `${hechas.length ? `Agendadas ${plural(hechas.length, "fecha", "fechas")} a las ${horaCorta(h.hora)}.` : "No se pudo agendar."}${fallas.length ? " No se agendó: " + fallas.join(" · ") : ""}`);
       return;
     }
-    const { data, error } = await sb.rpc("reservar", conPara({ p_horario: h.id, p_fecha: fecha, p_lugar: lugarSel ? Number(lugarSel.value) : null }, profile));
+    const args = { p_horario: h.id, p_fecha: fecha, p_lugar: lugarSel ? Number(lugarSel.value) : null };
+    const { data, error } = reemplaza
+      ? await sb.rpc("cambiar_reserva", conPara({ p_reserva: reemplaza.id, ...args }, profile))
+      : await sb.rpc("reservar", conPara(args, profile));
     if(error){ showError(d.el.querySelector("#confirmMsg"), error); return; }
     d.close();
     await refrescarReservas(profile);
     const res = typeof data === "string" ? JSON.parse(data) : data;
+    if(reemplaza){
+      showMsg(document.getElementById("reservarMsg"), "ok", res && res.estado === "espera"
+        ? `Cambio hecho: ${propio ? "estás" : "está"} en lista de espera a las ${horaCorta(h.hora)} (puesto ${res.posicion}).`
+        : `Horario cambiado: ${fmtFechaHora(ini.toISOString())}${res && res.lugar ? " · lugar " + res.lugar : ""}. Se liberó el de las ${reemplaza.hora}.`);
+      return;
+    }
     showMsg(document.getElementById("reservarMsg"), "ok", res && res.estado === "espera"
       ? `En lista de espera (puesto ${res.posicion}).${propio ? " Te avisaremos si se libera un cupo." : ""}`
       : `${master ? "Agendado" : "Reserva confirmada"}: ${fmtFechaHora(ini.toISOString())}${res && res.lugar ? " · lugar " + res.lugar : ""}.`);
