@@ -60,7 +60,7 @@ const APROXIMACION = [
   ["Tren superior", "Tríceps · Pecho · Hombros · Bíceps · Cuello · Escapulares · Dorsales · Trapecios"],
   ["Bisagras", "Bisagra · Bisagras unipodales: lunges, búlgaras"],
   ["Estabilidad", "Isometría en bosu · Catch pos · Catch pos a 1 pie · Bosu a 1 pie · Bosu a 2 pies"],
-  ["Carries", "Farmer · Suitcase · Clean y press"]
+  ["Carries", "Farmer · Suitcase · Clean · Press"]
 ];
 
 /* Banco Gymnika: ejercicios propios del centro, elegibles en Aproximación (bloque 2) y Principales (bloque 3) de R1-R3 */
