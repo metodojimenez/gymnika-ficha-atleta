@@ -572,10 +572,11 @@ function renderCoachRutinas(main){
       </div>
       <div class="rt-panel" role="tabpanel">
         <h3 class="rt-titulo">${tab} · ${esc(RUTINAS[tab].titulo)}</h3>
-        ${w.antes ? "" : `<div class="rt-armar"><p><strong>Toca los ejercicios para elegirlos.</strong> Lo elegido arma la ${tab} del ${esc(fechaLarga(dia))} y se ve en Hoy. El número de ejercicios por bloque es una sugerencia.</p>
+        ${w.antes ? "" : `<div class="rt-armar"><p><strong>Toca los ejercicios para elegirlos.</strong> Abajo se arma la fichita de la ${tab} del ${esc(fechaLarga(dia))}; cuando esté lista, toca <strong>«Seleccionar rutina»</strong>. El número de ejercicios por bloque es una sugerencia.</p>
           <p class="rt-armar-estado" id="rtSelEstado" aria-live="polite"></p>
           <button type="button" class="btn-link" id="rtLimpiar" hidden>Quitar todo lo elegido</button></div>`}
         ${contenidoRutina(tab, w.semana, w.semana === 6 && (tab === "R1" || tab === "R2"))}
+        ${w.antes ? "" : `<aside class="rt-ficha" id="rtFicha" aria-live="polite" hidden></aside>`}
       </div>
       <p class="rt-pie muted">★ principal · Reg. = regresión para no aptos en ese patrón. R1, R2 y R3 son el 1.º, 2.º y 3.º día de entrenamiento de cada persona en la semana; R4 y R5 se reparten según la tabla.</p>
     </section></div>`;
@@ -651,9 +652,58 @@ function pintarSeleccion(main, dia, tab){
   }
   const limpiar = main.querySelector("#rtLimpiar");
   if(limpiar) limpiar.hidden = !set.size || heredada;
+  pintarFicha(main, dia, tab, fila, heredada);
+}
+/* Fichita: la rutina tal como va quedando, con «Seleccionar rutina» para cerrarla */
+function pintarFicha(main, dia, tab, fila, heredada){
+  const box = main.querySelector("#rtFicha");
+  if(!box) return;
+  const ejercicios = (fila || {}).ejercicios || [];
+  box.hidden = !ejercicios.length;
+  if(!ejercicios.length){ box.innerHTML = ""; return; }
+  const k = dia + "|" + tab;
+  const lista = rutinaSel.seleccionadas || (rutinaSel.seleccionadas = new Set());
+  const listaOk = !heredada && lista.has(k) && !fila.guardando;
+  const grupos = elegidosPorBloque(tab, ejercicios);
+  const abierta = box.dataset.cerrada !== "1";
+  box.innerHTML = `
+    <div class="rt-ficha-h">
+      <span class="rt-cod ${tab}">${tab}</span>
+      <div class="rt-ficha-t"><strong>${esc(RUTINAS[tab].titulo)}</strong>
+        <span class="muted">${esc(fechaLarga(dia))} · ${ejercicios.length === 1 ? "1 ejercicio" : ejercicios.length + " ejercicios"}${heredada ? ` · armada el ${esc(diaCorto(fila.fecha))}` : ""}</span></div>
+      <button type="button" class="icon-btn rt-ficha-plegar" data-ficha-plegar aria-expanded="${abierta}" aria-label="${abierta ? "Ocultar" : "Ver"} la rutina armada">${abierta ? "▾" : "▴"}</button>
+    </div>
+    ${abierta ? `<dl class="rt-hoy-sel rt-ficha-sel">${grupos.map(([t, ns]) => `<div><dt>${esc(t)}</dt><dd>${ns.map(esc).join(" · ")}</dd></div>`).join("")}</dl>` : ""}
+    <div class="rt-ficha-acc">
+      ${listaOk ? `<p class="rt-ficha-ok" role="status">✓ Rutina seleccionada para ${dia === todayStr() ? "hoy" : esc(diaCorto(dia))}</p>`
+        : `<button type="button" class="btn-primary" data-ficha-sel${fila.guardando ? " disabled" : ""}>${fila.guardando ? "Guardando…" : "Seleccionar rutina"}</button>`}
+    </div>`;
+  box.querySelector("[data-ficha-plegar]").onclick = ()=>{ box.dataset.cerrada = abierta ? "1" : ""; pintarFicha(main, dia, tab, fila, heredada); };
+  const sel = box.querySelector("[data-ficha-sel]");
+  if(sel) sel.onclick = ()=> seleccionarRutina(main, dia, tab, sel);
+}
+/* Cierra el armado: guarda ya (sin esperar) la rutina para ese día; si era la de otro día, la copia a este */
+async function seleccionarRutina(main, dia, tab, btn){
+  const k = dia + "|" + tab;
+  const { fila } = seleccionEfectiva(dia, tab);
+  if(!fila || !(fila.ejercicios || []).length) return;
+  clearTimeout((rutinaSel.timers || {})[k]);
+  btn.disabled = true; btn.textContent = "Guardando…";
+  const { data, error } = await sb.from("rutina_dia").upsert({ fecha: dia, rutina: tab, ejercicios: fila.ejercicios }, { onConflict: "fecha,rutina" }).select().maybeSingle();
+  if(error){
+    btn.disabled = false; btn.textContent = "Seleccionar rutina";
+    const estado = main.querySelector("#rtSelEstado");
+    if(estado) estado.innerHTML = `<span class="error">No se pudo guardar: ${esc(errorES(error))}</span>`;
+    return;
+  }
+  rutinaSel.filas[k] = data || { ...fila, fecha: dia, rutina: tab, guardando: false };
+  (rutinaSel.seleccionadas || (rutinaSel.seleccionadas = new Set())).add(k);
+  if(dia === todayStr()){ location.hash = "#/hoy"; return; }
+  if(main.querySelector(".rt-panel")) pintarSeleccion(main, dia, tab);
 }
 function guardarSeleccion(main, dia, tab, ejercicios){
   const k = dia + "|" + tab;
+  if(rutinaSel.seleccionadas) rutinaSel.seleccionadas.delete(k);
   rutinaSel.filas[k] = { ...(rutinaSel.filas[k] || {}), fecha: dia, rutina: tab, ejercicios, editado_por: state.profile.id, guardando: true };
   pintarSeleccion(main, dia, tab);
   rutinaSel.timers = rutinaSel.timers || {};
