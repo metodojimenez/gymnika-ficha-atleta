@@ -729,7 +729,7 @@ async function renderCoachHoy(main){
     <p class="lede hoy-fecha">${esc(fechaLarga(todayStr()))}${area ? " · " + CATEGORIAS[area].nombre : ""}</p></header>
     <div class="grid">
       ${turnoBarHTML()}
-      ${area === "terapia" ? "" : `<section class="panel span-12 rt-hoy" aria-labelledby="hRt"><div class="panel-head"><h2 id="hRt">Rutina de hoy</h2><span class="muted">Fortalecimiento · según los días que viene cada uno</span></div>
+      ${area === "terapia" ? "" : `<section class="panel span-12 rt-hoy" aria-labelledby="hRt"><div class="panel-head"><h2 id="hRt">Esta semana toca</h2><span class="muted">Fortalecimiento · toca una rutina para leerla entera</span></div>
         <div id="hoyRutinas"><div class="skel skel-line" style="width:70%"></div></div></section>`}
       <section class="panel span-12 hoy-alertas" aria-labelledby="hAl"><div class="panel-head"><h2 id="hAl">Alertas</h2><span class="muted">${nota}</span></div>
         <div id="hoyAlertas"><div class="skel skel-block"></div></div></section>
@@ -774,7 +774,7 @@ async function pintarHoy(){
   if(!document.getElementById("hoyBody")) return;
   document.getElementById("hoyAlertas").innerHTML = alertasListaHTML(alertas);
   const rtBox = document.getElementById("hoyRutinas");
-  if(rtBox){ rtBox.innerHTML = rutinasHoyHTML(rh); enlazarRutinasHoy(rtBox, false); }
+  if(rtBox){ rutinaSel.rh = rh; if(rh) repintarSemana(rtBox, false); else rtBox.innerHTML = rutinasHoyHTML(null); }
   if(error){ body.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
   const dow = isoDow(parseFecha(iso));
   const horarios = todos.filter(h => h.dia_semana === dow && (!area || h.categoria === area) && (h.activo || (res || []).some(r => r.horario_id === h.id)))

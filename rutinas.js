@@ -497,35 +497,60 @@ function diaCorto(iso){
 function rutinaChipHTML(cod){
   return cod ? `<span class="rt-cod ${cod.slice(0, 2)}" title="${esc(RUTINAS[cod.slice(0, 2)].titulo)}${cod.endsWith("r") ? " (reducida)" : ""}">${cod.slice(0, 2)}${cod.endsWith("r") ? "<small>red.</small>" : ""}</span>` : "";
 }
-/* Bloque "Rutina de hoy": qué rutinas tocan hoy, a quién y con qué ejercicios (lo que se armó en Rutinas) */
-function rutinaHoyCardHTML(c, rh, personas){
-  const rt = c.slice(0, 2);
-  const { fila, heredada } = seleccionEfectiva(rh.hoy, rt);
-  const grupos = fila ? elegidosPorBloque(rt, fila.ejercicios) : [];
+/* "Esta semana toca": las 5 rutinas de la semana como fichas pequeñas que se despliegan para leerlas enteras.
+   Muestran lo que eligió el equipo (es la misma para todos los coaches): lo armado para hoy o antes en la semana;
+   si todavía no hay nada hasta hoy, lo primero que se armó para los próximos días. */
+function seleccionSemana(rt, hoy){
+  const ef = seleccionEfectiva(hoy, rt);
+  if(ef.fila && (ef.fila.ejercicios || []).length) return ef;
+  const prox = Object.values(rutinaSel.filas).filter(r => r.rutina === rt && r.fecha > hoy && (r.ejercicios || []).length)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))[0];
+  return prox ? { fila: prox, heredada: false, futura: true } : { fila: null };
+}
+function rutinaSemanaCardHTML(rt, rh, personas, reducida, abierta){
+  const { fila, futura } = seleccionSemana(rt, rh.hoy);
+  const ejercicios = (fila || {}).ejercicios || [];
+  const grupos = ejercicios.length ? elegidosPorBloque(rt, ejercicios) : [];
+  const cuando = !fila ? "" : fila.fecha === rh.hoy ? "armada para hoy" : futura ? `armada para el ${diaCorto(fila.fecha)}` : `armada el ${diaCorto(fila.fecha)}`;
+  const resumen = ejercicios.length ? `${ejercicios.length === 1 ? "1 ejercicio" : ejercicios.length + " ejercicios"} · ${cuando}${fila.editado_por ? " por " + nombreAutor(fila.editado_por) : ""}` : "Todavía sin armar";
+  const cod = rt + (reducida ? "r" : "");
   return `
-    <article class="rt-hoy-card">
-      <header class="rt-hoy-card-h">${rutinaChipHTML(c)}
-        <span class="rt-hoy-txt"><strong>${esc(RUTINAS[rt].titulo)}${c.endsWith("r") ? " · reducida" : ""}</strong>
-          ${personas ? `<span class="muted">${personas}</span>` : ""}</span></header>
-      ${grupos.length ? `<dl class="rt-hoy-sel">${grupos.map(([t, ns]) => `<div><dt>${esc(t)}</dt><dd>${ns.map(esc).join(" · ")}</dd></div>`).join("")}</dl>
-        <p class="rt-hoy-autor muted">${heredada ? `Armada el ${esc(diaCorto(fila.fecha))}` : "Armada para hoy"}${fila.editado_por ? " por " + esc(nombreAutor(fila.editado_por)) : ""}</p>`
-        : `<p class="muted rt-hoy-vacia">Todavía no se eligieron los ejercicios de esta rutina.</p>`}
-      <div class="rt-hoy-acc">
-        <button type="button" class="btn-outline sm" data-cambiar-rt="${rt}">${grupos.length ? "Cambiar rutina" : "Armar rutina"}</button>
-        <button type="button" class="btn-link" data-ver-rt="${rt}">Ver completa</button>
-      </div>
+    <article class="rt-hoy-card rt-sem-card${ejercicios.length ? "" : " vacia"}" data-rt-card="${rt}">
+      <details${abierta ? " open" : ""}>
+        <summary class="rt-hoy-card-h">${rutinaChipHTML(cod)}
+          <span class="rt-hoy-txt"><strong>${esc(RUTINAS[rt].titulo)}${reducida ? " · reducida" : ""}</strong>
+            <span class="muted">${esc(resumen)}</span>
+            ${personas ? `<span class="muted rt-sem-hoy">Hoy: ${personas}</span>` : ""}</span>
+          <span class="rt-sem-flecha" aria-hidden="true">▾</span></summary>
+        ${grupos.length ? `<dl class="rt-hoy-sel">${grupos.map(([t, ns]) => `<div><dt>${esc(t)}</dt><dd>${ns.map(esc).join(" · ")}</dd></div>`).join("")}</dl>`
+          : `<p class="muted rt-hoy-vacia">Todavía no se eligieron los ejercicios de esta rutina.</p>`}
+        <div class="rt-hoy-acc">
+          <button type="button" class="btn-outline sm" data-cambiar-rt="${rt}">${grupos.length ? "Cambiar rutina" : "Armar rutina"}</button>
+          <button type="button" class="btn-link" data-ver-rt="${rt}">Ver completa</button>
+        </div>
+      </details>
     </article>`;
 }
-function rutinasHoyHTML(rh){
+function rutinasHoyHTML(rh, abiertas){
   if(!rh) return `<p class="muted" style="margin:0">El macrociclo aún no comienza.</p>`;
   const nombre = (id)=> nombreCorto((state.athleteList.find(a => a.id === id) || {}).nombre);
-  const cods = Object.keys(rh.grupos).sort();
   const cab = `<p class="rt-hoy-fase">Semana <strong>${rh.semana}</strong> de 20 · ${esc(FASE_NOMBRE[rh.fase])}${rh.semana === 6 || rh.semana === 20 ? " · Descarga" : ""}</p>`;
   if(rutinaSel.error) return cab + `<p class="error">No se pudo cargar la rutina armada: ${esc(errorES(rutinaSel.error))}</p>`;
-  if(!cods.length) return cab + `<p class="muted" style="margin:6px 0 10px">Hoy nadie de fortalecimiento tiene reserva.</p>
-    <div class="rt-hoy-grid">${Object.keys(RUTINAS).map(k => rutinaHoyCardHTML(k, rh, "")).join("")}</div>`;
-  return cab + `<div class="rt-hoy-grid">${cods.map(c => rutinaHoyCardHTML(c, rh,
-    `${plural(rh.grupos[c].length, "persona", "personas")}: ${rh.grupos[c].map(id => esc(nombre(id))).join(", ")}`)).join("")}</div>`;
+  const abiertasSet = abiertas || new Set();
+  return cab + `<div class="rt-hoy-grid rt-sem-grid">${Object.keys(RUTINAS).map(rt => {
+    const cods = Object.keys(rh.grupos).filter(c => c.slice(0, 2) === rt);
+    const ids = cods.flatMap(c => rh.grupos[c]);
+    const personas = ids.length ? `${plural(ids.length, "persona", "personas")} (${ids.map(id => esc(nombre(id))).join(", ")})` : "";
+    const reducida = cods.length > 0 && cods.every(c => c.endsWith("r"));
+    return rutinaSemanaCardHTML(rt, rh, personas, reducida, abiertasSet.has(rt));
+  }).join("")}</div>`;
+}
+/* Repinta las fichas conservando las que estaban abiertas (se usa al elegir ejercicios) */
+function repintarSemana(box, enRutinas, main){
+  if(!box || !rutinaSel.rh) return;
+  const abiertas = new Set([...box.querySelectorAll("[data-rt-card] details[open]")].map(d => d.closest("[data-rt-card]").dataset.rtCard));
+  box.innerHTML = rutinasHoyHTML(rutinaSel.rh, abiertas);
+  enlazarRutinasHoy(box, enRutinas, main);
 }
 function abrirRutina(cod, armar){
   rutinaUI.tab = cod.slice(0, 2); rutinaUI.desfase = 0; rutinaUI.elegida = true; rutinaUI.irATabs = true;
@@ -572,7 +597,7 @@ function renderCoachRutinas(main){
     </div>
     ${w.antes ? "" : `<div class="rt-dias" role="group" aria-label="Día que estás armando"><span class="rt-dias-t">Armar la rutina del</span>
       ${dias.map(f => { const d = parseFecha(f); return `<button type="button" data-dia="${f}" aria-pressed="${f === dia}"${f === todayStr() ? ' class="es-hoy"' : ""}><span>${DIAS_SEMANA[isoDow(d)].slice(0, 3)}</span><strong class="num">${d.getDate()}</strong></button>`; }).join("")}</div>`}
-    ${w.esActual ? `<section class="panel rt-hoy" aria-labelledby="rtHoyT"><div class="panel-head"><h2 id="rtHoyT">Hoy toca</h2><span class="muted">${esc(fechaLarga(todayStr()))}</span></div>
+    ${w.esActual ? `<section class="panel rt-hoy" aria-labelledby="rtHoyT"><div class="panel-head"><h2 id="rtHoyT">Esta semana toca</h2><span class="muted">Toca una rutina para leerla entera</span></div>
       <div id="rtHoyBox"><div class="skel skel-line" style="width:70%"></div></div></section>` : ""}
     <section class="panel rutina">
       <div class="panel-head"><div><p class="eyebrow">${esc(FASE_NOMBRE[fase])}${descarga ? " · Descarga" : ""}${w.ciclo > 1 ? " · Ciclo " + w.ciclo : ""}</p>
@@ -614,6 +639,7 @@ function renderCoachRutinas(main){
     /* La primera vez se abre la rutina que más personas hacen hoy */
     const masComun = rh && Object.keys(rh.grupos).sort((a, b) => rh.grupos[b].length - rh.grupos[a].length)[0];
     if(masComun && !rutinaUI.elegida && masComun.slice(0, 2) !== rutinaUI.tab){ rutinaUI.tab = masComun.slice(0, 2); rutinaUI.elegida = true; renderCoachRutinas(main); return; }
+    rutinaSel.rh = rh;
     box.innerHTML = rutinasHoyHTML(rh);
     enlazarRutinasHoy(box, true, main);
   });
@@ -669,6 +695,9 @@ function pintarSeleccion(main, dia, tab){
   const limpiar = main.querySelector("#rtLimpiar");
   if(limpiar) limpiar.hidden = !set.size || heredada;
   pintarFicha(main, dia, tab, fila, heredada);
+  /* Las fichas de «Esta semana toca» se actualizan con lo que se va eligiendo */
+  const semanaBox = main.querySelector("#rtHoyBox");
+  if(semanaBox && rutinaSel.rh && rutinaSel.semana === fechaISO(lunesDe(parseFecha(rutinaSel.rh.hoy)))) repintarSemana(semanaBox, true, main);
 }
 /* Fichita: la rutina tal como va quedando, con «Seleccionar rutina» para cerrarla */
 function pintarFicha(main, dia, tab, fila, heredada){

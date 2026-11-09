@@ -998,3 +998,22 @@ body.mirador-activo .rt-ficha{ bottom:76px; }
 .mir-hora-ok{ margin:0; color:var(--ok); font-weight:700; font-size:14px; }
 .mir-hora-pend{ display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:14px; font-weight:600; color:var(--ink-soft); }
 .mir-hora .mir-ult{ margin:0; }
+
+/* Esta semana toca: 5 fichas pequeñas que se despliegan */
+.rt-sem-grid{ grid-template-columns:1fr; align-items:start; }
+@media (min-width:760px){ .rt-sem-grid{ grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); } }
+.rt-sem-card{ padding:0; gap:0; }
+.rt-sem-card details{ display:flex; flex-direction:column; }
+.rt-sem-card summary{ list-style:none; cursor:pointer; padding:10px 12px; align-items:center; border-radius:12px; }
+.rt-sem-card summary::-webkit-details-marker{ display:none; }
+.rt-sem-card summary:hover{ background:var(--accent-tint); }
+.rt-sem-card .rt-cod{ min-width:40px; min-height:32px; font-size:15px; }
+.rt-sem-card .rt-hoy-txt strong{ font-size:14px; }
+.rt-sem-card .rt-hoy-txt .muted{ font-size:12.5px; }
+.rt-sem-flecha{ flex:none; color:var(--ink-soft); transition:transform .2s ease; }
+.rt-sem-card details[open] .rt-sem-flecha{ transform:rotate(180deg); }
+.rt-sem-card details[open] summary{ border-bottom:1px solid var(--line); border-radius:12px 12px 0 0; }
+.rt-sem-card .rt-hoy-sel, .rt-sem-card .rt-hoy-vacia{ padding:10px 14px 0; }
+.rt-sem-card .rt-hoy-acc{ padding:10px 14px 12px; }
+.rt-sem-card.vacia .rt-hoy-txt .muted:first-of-type{ font-style:italic; }
+@media (prefers-reduced-motion: reduce){ .rt-sem-flecha{ transition:none; } }
