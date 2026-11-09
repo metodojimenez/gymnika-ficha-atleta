@@ -64,6 +64,15 @@ const APROXIMACION = [
   ["Carries", "Farmer · Suitcase"]
 ];
 
+/* Banco Gymnika: ejercicios propios del centro, elegibles en Aproximación (bloque 2) y Principales (bloque 3) de R1-R3 */
+const BANCO_GYMNIKA = [
+  ["Piernas", ["Deep squat", "Pistol squat", "Sumo squat", "Switch lunge", "Lunges cortos", "Lunges normales", "Lunges isométricos", "Lunges con salto", "Halo + deep squat"]],
+  ["Potencia", ["Clean", "Snatch", "Box jump", "Drop box"]],
+  ["Hombro y tren superior", ["Letras W-T-Y", "Rotadores de hombro con mancuerna", "Rotadores de hombro con elástico", "Rutina madre de hombros con loop", "Tiger push-up", "Paralelas", "Remo con rotación (liga)"]],
+  ["Core y rotación", ["TGU", "Renegade", "Windmill", "Windmill en zancada", "Patada lateral"]],
+  ["Palo asimétrico", ["Palo asimétrico: empuje", "Palo asimétrico: jalón", "Palo asimétrico: golpe de costado", "Palo asimétrico: golpe de arriba"]]
+];
+
 /* Bloque 4 · Complementarios del crusher: baja la carga y sube la energía para terminar de fatigar */
 const COMPLEMENTARIOS_CRUSHER = ["Sprints con resistencia", "Parado a echado boca arriba", "Parado a echado boca abajo", "Parado a sentado", "Echado a sentado", "Sprawls"];
 
@@ -292,6 +301,13 @@ function rotacionHTML(fBase){
       <p class="muted">${fBase === "F1" || fBase === "F2" ? "Los lanzamientos a velocidad entran desde la Fase 3; antes solo van las versiones lentas. " : ""}Windmill con carga y extensión lateral en silla romana: solo aptos.</p>
     </details>`;
 }
+function bancoGymnikaHTML(b){
+  const n = BANCO_GYMNIKA.reduce((a, g) => a + g[1].length, 0);
+  return `<details class="rt-rot-det rt-banco">
+      <summary><strong>Banco Gymnika</strong> <span class="muted">(${n} ejercicios)</span></summary>
+      ${BANCO_GYMNIKA.map(([g, xs]) => `<p class="rt-grupo">${esc(g)}</p>${chipsSel(b, xs)}`).join("")}
+    </details>`;
+}
 function tablaCalHTML(titulo, filas){
   return `<p class="rt-sub">${titulo} <span class="muted">· elige 2</span></p>
     <ul class="rt-cal">${filas.map(c => `<li${selAttr(1, c[0])}><strong>${esc(c[0])}</strong><span class="rt-cal-dosis num">${esc(c[1])}</span>${c[2] ? `<span class="rt-cal-reg"><span>Reg.</span> ${esc(c[2])}</span>` : ""}</li>`).join("")}</ul>`;
@@ -363,6 +379,7 @@ function contenidoRutina(base, semana, reducida){
     ${sugeridos.length ? sub("Sugeridos para esta rutina") + lista(sugeridos, 2) : ""}
     ${sub("Banco de aproximación")}
     ${APROXIMACION.map(a => `<p class="rt-grupo">${esc(a[0])}</p>${chipsSel(2, a[1].split(" · "))}`).join("")}
+    ${bancoGymnikaHTML(2)}
     ${rotacionHTML(fBase)}`;
   const cr = CRUSHER[fBase];
   const crusher = semana === 20 ? `<p>Carries ligeros o ninguno.</p>`
@@ -378,7 +395,7 @@ function contenidoRutina(base, semana, reducida){
     ${notas.length ? `<p class="rt-nota">${notas.map(esc).join(" ")}</p>` : ""}
     ${seccionHTML(1, "Calentamiento", "13'", calentamiento)}
     ${seccionHTML(2, "Aproximación", "13'", aproximacion)}
-    ${seccionHTML(3, "Principales ★", "24'", principales)}
+    ${seccionHTML(3, "Principales ★", "24'", principales + bancoGymnikaHTML(3))}
     ${seccionHTML(4, "Crusher y complementarios", "5'", crusher)}
     ${seccionHTML(5, "Compensación", "5'", comp)}`;
 }
