@@ -1234,6 +1234,13 @@ async function cargarAlertas(){
   state.alertas = error ? [] : (data || []);
   return state.alertas;
 }
+/* Acceso vigente sin alerta: «Acceso noviembre» (mes en que termina; con año si no es este año) */
+function accesoOkTexto(uid){
+  const est = (state.accesos || {})[uid];
+  if(!est || !est.vigente || !est.finTotal) return "";
+  const f = parseFecha(est.finTotal);
+  return `Acceso ${MESES_LARGOS[f.getMonth()]}${f.getFullYear() !== parseFecha(todayStr()).getFullYear() ? " " + f.getFullYear() : ""}`;
+}
 function alertaTexto(a){
   /* Terapia: ya no tiene sesiones por agendar; valor = sesiones agendadas que le quedan por hacer */
   if(a.tipo === "sesiones") return a.valor <= 0 ? "Sin sesiones" : a.valor === 1 ? "Le queda 1 agendada" : `Le quedan ${a.valor} agendadas`;
@@ -1264,13 +1271,21 @@ async function renderCoachHome(){
 async function refreshCoachAside(){
   const aside = document.getElementById("coachAside");
   if(!aside) return;
-  const [{ data: athletes, error }, { data: solicitudesPend }, { data: equipo }, { data: interna }] = await Promise.all([
+  const [{ data: athletes, error }, { data: solicitudesPend }, { data: equipo }, { data: interna }, , { data: mems }, { data: congs }] = await Promise.all([
     sb.from("profiles").select("*").eq("role","atleta").order("nombre"),
     sb.from("solicitudes_nutricion").select("*").eq("atendida", false).order("fecha"),
     sb.from("profiles").select("id,nombre,role").neq("role", "atleta"),
     sb.from("ficha_interna").select("user_id,color_riesgo"),
-    cargarAlertas()
+    cargarAlertas(),
+    sb.from("membresias").select("user_id, inicio, fin").gte("fin", todayStr()),
+    sb.from("congelamientos").select("user_id, desde, hasta").gte("hasta", todayStr())
   ]);
+  /* Acceso de fortalecimiento por alumno, para el aviso verde «Acceso <mes>» de la lista */
+  state.accesos = {};
+  (athletes || []).filter(a => ["fortalecimiento", "transicion"].includes(a.categoria)).forEach(a => {
+    const membresias = (mems || []).filter(m => m.user_id === a.id).sort((x, y) => y.fin.localeCompare(x.fin));
+    if(membresias.length) state.accesos[a.id] = estadoMembresia({ membresias, congelamientos: (congs || []).filter(c => c.user_id === a.id) });
+  });
   state.athleteList = athletes || [];
   state.equipo = equipo || [];
   state.riesgo = {};
@@ -1366,6 +1381,7 @@ function renderAthleteListInto(list){
     const flags = [];
     const alerta = (state.alertas || []).find(x => x.user_id === a.id);
     if(alerta) flags.push(`<span class="flag alerta">${esc(alertaTexto(alerta))}</span>`);
+    else if(accesoOkTexto(a.id)) flags.push(`<span class="flag ok">${esc(accesoOkTexto(a.id))}</span>`);
     if(a.categoria && (!areaCoach() || a.categoria === "transicion")) flags.push(`<span class="flag cat-${a.categoria}">${CATEGORIAS[a.categoria].nombre}</span>`);
     if(tieneLesion(a.lesiones)) flags.push(`<span class="flag warn">Lesión</span>`);
     if(a.autorizacion_medica === false) flags.push(`<span class="flag warn">Sin autorización médica</span>`);
