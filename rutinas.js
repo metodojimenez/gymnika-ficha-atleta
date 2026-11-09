@@ -57,11 +57,10 @@ const CAL_ACTIVACION = [
 /* Bloque 2 · Aproximación: ejercicios que complementan el patrón del día; se eligen 3 que activen todo el cuerpo.
    La rotación es un patrón de movimiento más dentro de este banco. */
 const APROXIMACION = [
-  ["Tren superior", "Tríceps · Pecho · Hombros"],
+  ["Tren superior", "Tríceps · Pecho · Hombros · Bíceps · Cuello · Escapulares · Dorsales · Trapecios"],
   ["Bisagras", "Bisagra · Bisagras unipodales: lunges, búlgaras"],
-  ["Estabilidad", "Isometría en bosu"],
-  ["Con implemento", "Landmine · Med ball ligero · KB complex básicos"],
-  ["Carries", "Farmer · Suitcase"]
+  ["Estabilidad", "Isometría en bosu · Catch pos · Catch pos a 1 pie · Bosu a 1 pie · Bosu a 2 pies"],
+  ["Carries", "Farmer · Suitcase · Clean y press"]
 ];
 
 /* Banco Gymnika: ejercicios propios del centro, elegibles en Aproximación (bloque 2) y Principales (bloque 3) de R1-R3 */
