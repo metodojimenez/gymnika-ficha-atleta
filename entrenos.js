@@ -537,3 +537,114 @@ function abrirAyudaReloj(){
   dlg.el.querySelectorAll("[data-marca]").forEach(b => { b.onclick = ()=> pintar(b.dataset.marca); });
   pintar(marcas[0]);
 }
+
+/* ---------- Tu reloj (Inicio del alumno): pasos y sueño que anota cada día + resumen de 7 días ---------- */
+function horasSueno(r){
+  if(!r || !r.durmio || !r.desperto) return null;
+  const min = (t)=>{ const [h, m] = String(t).split(":").map(Number); return h * 60 + m; };
+  let d = min(r.desperto) - min(r.durmio);
+  if(d <= 0) d += 24 * 60;
+  return d / 60;
+}
+function fmtHoras(h){
+  if(h == null) return "–";
+  const t = Math.round(h * 60);
+  return `${Math.floor(t / 60)} h${t % 60 ? " " + String(t % 60).padStart(2, "0") : ""}`;
+}
+const horaCortaR = (t)=> t ? String(t).slice(0, 5) : "";
+async function renderReloj(box, uid){
+  if(!box) return;
+  const hoy = todayStr();
+  const desde = fechaISO(sumarDias(parseFecha(hoy), -6));
+  const [{ data: dias, error }, { data: entrenos }] = await Promise.all([
+    sb.from("bienestar_diario").select("*").eq("user_id", uid).gte("fecha", desde).order("fecha"),
+    sb.from("entrenamientos_externos").select("fecha, duracion_seg, distancia_m, deporte").eq("user_id", uid).gte("fecha", desde)
+  ]);
+  if(!document.body.contains(box)) return;
+  if(error){ box.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }
+  const porFecha = {};
+  (dias || []).forEach(r => { porFecha[r.fecha] = r; });
+  const semana = Array.from({ length: 7 }, (_, i) => fechaISO(sumarDias(parseFecha(desde), i)));
+  const conPasos = semana.map(f => porFecha[f]).filter(r => r && r.pasos != null);
+  const conSueno = semana.map(f => horasSueno(porFecha[f])).filter(h => h != null);
+  const promPasos = conPasos.length ? Math.round(conPasos.reduce((a, r) => a + r.pasos, 0) / conPasos.length) : null;
+  const promSueno = conSueno.length ? conSueno.reduce((a, h) => a + h, 0) / conSueno.length : null;
+  const maxPasos = Math.max(10000, ...conPasos.map(r => r.pasos));
+  const ent = entrenos || [];
+  const seg = ent.reduce((a, e) => a + (e.duracion_seg || 0), 0);
+  const km = ent.reduce((a, e) => a + (e.deporte === "nadar" ? 0 : (e.distancia_m || 0)), 0) / 1000;
+  const hoyR = porFecha[hoy];
+  let dia = box.dataset.dia === "ayer" ? "ayer" : "hoy";
+  const pintar = ()=>{
+    const f = dia === "hoy" ? hoy : fechaISO(sumarDias(parseFecha(hoy), -1));
+    const r = porFecha[f] || {};
+    box.innerHTML = `
+      <div class="reloj-stats">
+        <div class="reloj-stat"><span class="reloj-ico" aria-hidden="true">👣</span>
+          <span class="reloj-k">Pasos hoy</span><strong class="num">${hoyR && hoyR.pasos != null ? numExt(hoyR.pasos, 0) : "–"}</strong>
+          <span class="muted">${promPasos != null ? `Promedio 7 días: ${numExt(promPasos, 0)}` : "Anota tus pasos para ver tu promedio"}</span></div>
+        <div class="reloj-stat"><span class="reloj-ico" aria-hidden="true">🌙</span>
+          <span class="reloj-k">Sueño de anoche</span><strong class="num">${fmtHoras(horasSueno(hoyR))}</strong>
+          <span class="muted">${hoyR && hoyR.durmio ? `${horaCortaR(hoyR.durmio)} → ${horaCortaR(hoyR.desperto)}` : ""}${promSueno != null ? `${hoyR && hoyR.durmio ? " · " : ""}Promedio: ${fmtHoras(promSueno)}` : (hoyR && hoyR.durmio ? "" : "Anota a qué hora dormiste y despertaste")}</span></div>
+      </div>
+      <ol class="reloj-semana" aria-label="Últimos 7 días">${semana.map(fe => {
+        const x = porFecha[fe], h = horasSueno(x), d = parseFecha(fe);
+        return `<li${fe === hoy ? ' class="hoy"' : ""}><span class="reloj-dia">${DIAS_SEMANA[isoDow(d)].slice(0, 2)} <span class="num">${d.getDate()}</span></span>
+          <span class="reloj-barra" title="${x && x.pasos != null ? numExt(x.pasos, 0) + " pasos" : "Sin pasos"}"><i style="height:${x && x.pasos ? Math.max(4, Math.round(x.pasos / maxPasos * 100)) : 0}%"></i></span>
+          <span class="reloj-num num">${x && x.pasos != null ? (x.pasos >= 1000 ? numExt(x.pasos / 1000, 1) + "k" : x.pasos) : "–"}</span>
+          <span class="reloj-sueno num">${h != null ? fmtHoras(h).replace(" ", "") : "–"}</span></li>`;
+      }).join("")}</ol>
+      <details class="reloj-anotar"${box.dataset.abierto === "1" ? " open" : ""}><summary>Anotar pasos y sueño</summary>
+        <div class="seg reloj-cuando" role="group" aria-label="¿De qué día?">
+          <button type="button" data-cuando="hoy" aria-pressed="${dia === "hoy"}">Hoy</button>
+          <button type="button" data-cuando="ayer" aria-pressed="${dia === "ayer"}">Ayer</button></div>
+        <div class="reloj-campos">
+          <label>Pasos<input type="number" inputmode="numeric" min="0" max="150000" id="relPasos" value="${r.pasos ?? ""}" placeholder="Ej: 8500"></label>
+          <label>Me dormí<input type="time" id="relDurmio" value="${horaCortaR(r.durmio)}"></label>
+          <label>Desperté<input type="time" id="relDesperto" value="${horaCortaR(r.desperto)}"></label>
+        </div>
+        <p class="muted reloj-ayuda">Copia los pasos y el sueño de tu reloj o del celular. El sueño es la noche anterior al día que elijas.</p>
+        <button type="button" class="btn-primary" id="btnRelGuardar">Guardar</button>
+        <div id="relMsg" aria-live="polite"></div>
+      </details>
+      <div class="reloj-entrenos">
+        <p><strong>Entrenamientos de tu reloj · 7 días:</strong> ${ent.length ? `${plural(ent.length, "entrenamiento", "entrenamientos")} · ${fmtHoras(seg / 3600)}${km ? ` · ${numExt(km, 1)} km` : ""}` : "todavía ninguno"}</p>
+        <a class="btn-outline" href="#/progreso" data-ir-externos><span aria-hidden="true">⌚</span> Agregar entrenamiento externo</a>
+      </div>`;
+    const det = box.querySelector(".reloj-anotar");
+    det.addEventListener("toggle", ()=>{ box.dataset.abierto = det.open ? "1" : ""; });
+    box.querySelectorAll("[data-cuando]").forEach(b => { b.onclick = ()=>{ dia = b.dataset.cuando; box.dataset.dia = dia; pintar(); }; });
+    const btn = box.querySelector("#btnRelGuardar");
+    btn.onclick = ()=> withBusy(btn, "Guardando…", async ()=>{
+      const msg = box.querySelector("#relMsg");
+      const pv = box.querySelector("#relPasos").value.trim();
+      const pasos = pv === "" ? null : parseInt(pv, 10);
+      const durmio = box.querySelector("#relDurmio").value || null;
+      const desperto = box.querySelector("#relDesperto").value || null;
+      if(pasos != null && (isNaN(pasos) || pasos < 0 || pasos > 150000)){ showMsg(msg, "error", "Revisa los pasos (entre 0 y 150 000)."); return; }
+      if(!!durmio !== !!desperto){ showMsg(msg, "error", "Para el sueño, anota a qué hora te dormiste y a qué hora despertaste."); return; }
+      if(pasos == null && !durmio){ showMsg(msg, "error", "Anota tus pasos o tu sueño."); return; }
+      const { error: e2 } = await sb.from("bienestar_diario").upsert({ user_id: uid, fecha: f, pasos, durmio, desperto }, { onConflict: "user_id,fecha" });
+      if(e2){ showError(msg, e2); return; }
+      box.dataset.abierto = "";
+      await renderReloj(box, uid);
+      const ok = box.querySelector(".reloj-entrenos");
+      if(ok) ok.insertAdjacentHTML("beforebegin", `<div class="success" role="status">Guardado.</div>`);
+    });
+    enlazarIrExternos(box);
+  };
+  pintar();
+}
+/* «Agregar entrenamiento externo»: lleva a Progreso → Entrenamiento fuera de Gymnika y lo resalta */
+function enlazarIrExternos(root){
+  root.querySelectorAll("[data-ir-externos]").forEach(b => { b.onclick = (e)=>{
+    const card = document.getElementById("externosCard");
+    if(!card) return;
+    e.preventDefault();
+    history.pushState(null, "", "#/progreso");
+    activarSeccionAlumno("progreso", false);
+    const panel = card.closest("section") || card;
+    panel.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    panel.classList.remove("resaltar"); void panel.offsetWidth; panel.classList.add("resaltar");
+  }; });
+}

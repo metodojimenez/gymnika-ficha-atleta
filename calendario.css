@@ -942,3 +942,58 @@ body.mirador-activo .rt-ficha{ bottom:76px; }
 @keyframes resaltarPanel{ 0%,30%{ box-shadow:0 0 0 3px var(--accent); } 100%{ box-shadow:var(--shadow); } }
 @media (prefers-reduced-motion: reduce){ .panel.resaltar{ animation:none; } }
 .tab-alumno .panel{ scroll-margin-top:76px; }
+
+/* Rutina diaria: repeticiones */
+.est-item{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.est-item .checkline{ flex:1 1 auto; margin-top:10px; }
+.est-reps{ display:inline-flex; align-items:center; gap:6px; margin:10px 0 0; font-size:13.5px; color:var(--ink-soft); font-weight:600; }
+.est-reps[hidden]{ display:none; }
+.est-reps input{ width:64px; min-height:38px; margin:0; padding:6px 8px; text-align:center; }
+.estiro-reps{ display:inline-block; margin-left:8px; padding:1px 8px; border-radius:999px; background:var(--accent-tint); color:var(--accent); font-size:13px; font-weight:700; white-space:nowrap; }
+
+/* Consejo del día: borde verde medio oscuro */
+.panel.coach-voice.consejo-dia{ border:2px solid #2E7D4F; }
+
+/* Tu reloj */
+.reloj-stats{ display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px; }
+.reloj-stat{ display:grid; grid-template-columns:auto 1fr; column-gap:10px; row-gap:2px; align-items:center; padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+.reloj-ico{ grid-row:span 3; font-size:24px; }
+.reloj-k{ font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+.reloj-stat strong{ font-size:26px; line-height:1.1; }
+.reloj-stat .muted{ font-size:13px; }
+.reloj-semana{ list-style:none; margin:14px 0 0; padding:0; display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; text-align:center; }
+.reloj-semana li{ display:grid; gap:4px; justify-items:center; font-size:12.5px; }
+.reloj-dia{ color:var(--ink-soft); font-weight:600; text-transform:capitalize; }
+.reloj-semana li.hoy .reloj-dia{ color:var(--accent); font-weight:800; }
+.reloj-barra{ position:relative; width:22px; height:56px; border-radius:6px; background:var(--accent-tint); overflow:hidden; }
+.reloj-barra i{ position:absolute; left:0; right:0; bottom:0; background:var(--accent); border-radius:6px 6px 0 0; }
+.reloj-num{ font-weight:700; }
+.reloj-sueno{ color:#3F4F8C; font-weight:600; }
+.reloj-anotar{ margin-top:14px; border-top:1px solid var(--line); padding-top:10px; }
+.reloj-anotar > summary{ cursor:pointer; font-weight:700; color:var(--accent); min-height:40px; display:flex; align-items:center; }
+.reloj-cuando{ margin:6px 0 4px; }
+.reloj-campos{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
+.reloj-campos label{ margin-top:6px; font-size:14px; }
+.reloj-campos input{ margin-top:4px; }
+.reloj-ayuda{ font-size:13px; margin:8px 0; }
+.reloj-entrenos{ margin-top:14px; display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; }
+.reloj-entrenos p{ margin:0; flex:1 1 240px; font-size:14.5px; }
+@media (max-width:520px){ .reloj-campos{ grid-template-columns:1fr 1fr; } .reloj-campos label:first-child{ grid-column:1 / -1; } .reloj-entrenos .btn-outline{ width:100%; } }
+
+/* Mirador por horas */
+.mir-horas{ display:flex; gap:6px; overflow-x:auto; padding:8px 18px 6px; scrollbar-width:none; flex:none; }
+.mir-horas::-webkit-scrollbar{ display:none; }
+.mir-horas[hidden]{ display:none; }
+.mir-horas button{ flex:none; min-height:36px; padding:4px 12px; border-radius:999px; border:1px solid var(--line); background:var(--surface); font-weight:700; font-size:14px; color:var(--ink-soft); }
+.mir-horas button[aria-pressed="true"]{ background:var(--accent); border-color:var(--accent); color:#fff; }
+.mir-hora{ overflow-y:auto; padding:6px 18px 10px; flex:1 1 auto; min-height:0; }
+.mir-hora[hidden], .mir-track[hidden], .mir-puntos[hidden]{ display:none !important; }
+.mir-hora-res{ margin:0 0 8px; font-size:14px; }
+.mir-hora-lista{ list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.mir-hora-fila{ padding:10px 12px; border:1px solid var(--line); border-left:4px solid var(--warn, #C77D2E); border-radius:12px; background:var(--surface); display:grid; gap:6px; }
+.mir-hora-fila.hecha{ border-left-color:var(--ok); }
+.mir-hora-cab{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; }
+.mir-hora-cab .muted{ font-size:13px; }
+.mir-hora-ok{ margin:0; color:var(--ok); font-weight:700; font-size:14px; }
+.mir-hora-pend{ display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:14px; font-weight:600; color:var(--ink-soft); }
+.mir-hora .mir-ult{ margin:0; }

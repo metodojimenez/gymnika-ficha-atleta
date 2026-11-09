@@ -98,16 +98,16 @@ async function renderAthleteDetail(profile, isCoach, container){
     /* Inicio: próxima sesión con el botón del QR, estiramientos diarios y consejo del coach; abajo, su plan */
     const hoyAlumno = `<section class="panel span-12 hoy-alumno" id="inicioHoyCard" aria-label="${esHijo ? "Su próxima sesión" : "Tu próxima sesión"}"><div class="skel skel-block"></div></section>`;
     const consejoCoach = panelHTML("notasCard", "Consejo de tu coach", 12, { cls: "coach-voice", eyebrow: "Tu coach" });
-    /* Atajo a «Entrenamiento fuera de Gymnika» (vive en Progreso) */
-    const atajoExterno = `<div class="span-12 atajo-externo"><a class="btn-outline" href="#/progreso" data-ir-externos><span aria-hidden="true">⌚</span> Agregar entrenamiento externo</a></div>`;
+    /* Tu reloj: pasos y sueño + atajo a «Entrenamiento fuera de Gymnika» (vive en Progreso) */
+    const reloj = panelHTML("relojCard", "Tu reloj", 12, { eyebrow: "Pasos, sueño y entrenamientos" });
     tabsAlumno = esTerapia ? {
       inicio: `
     ${hoyAlumno}
-    ${atajoExterno}
+    ${panelHTML("planCard", esHijo ? "Sus sesiones" : "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
+    ${reloj}
     ${estirar}
     ${consejoCoach}
-    ${panelHTML("planCard", esHijo ? "Sus sesiones" : "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
-    ${panelHTML("tipCard", esc(tip.titulo), 12, { cls: "coach-voice", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
+    ${panelHTML("tipCard", esc(tip.titulo), 12, { cls: "coach-voice consejo-dia", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
     ${familia}`,
       reservar: `
     ${panelHTML("reservarCard", "Reservar sesión", 8, { note: "Cada reserva usa 1 sesión" })}
@@ -121,16 +121,16 @@ async function renderAthleteDetail(profile, isCoach, container){
     } : {
       inicio: `
     ${hoyAlumno}
-    ${atajoExterno}
+    ${panelHTML("planCard", cat === "transicion" ? (esHijo ? "Su plan" : "Mi plan") : (esHijo ? "Su acceso" : "Mi acceso"), 8, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}
+    ${panelHTML("constanciaCard", "Tu rueda de constancia", 4, { eyebrow: "Desde tu último entrenamiento" })}
+    ${reloj}
     ${estirar}
-    ${consejoCoach}
-    ${panelHTML("planCard", cat === "transicion" ? (esHijo ? "Su plan" : "Mi plan") : (esHijo ? "Su acceso" : "Mi acceso"), 12, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}`,
+    ${consejoCoach}`,
       reservar: `
     ${panelHTML("reservarCard", "Reservar horario", 8, { note: "Obligatorio para entrar" })}
     ${panelHTML("misReservasCard", esHijo ? "Sus horarios" : "Mis horarios", 4)}`,
       progreso: `
-    ${panelHTML("tipCard", esc(tip.titulo), 12, { cls: "coach-voice", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
-    ${panelHTML("constanciaCard", "Tu rueda de constancia", 12, { eyebrow: "Desde tu último entrenamiento" })}
+    ${panelHTML("tipCard", esc(tip.titulo), 12, { cls: "coach-voice consejo-dia", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
     ${macroHTML}
     ${resumenHTML}
     ${panelHTML("fuerzaCard", "Progresión de fuerza", 8, { note: "Carga el coach" })}
@@ -220,19 +220,11 @@ async function renderAthleteDetail(profile, isCoach, container){
   renderMedidas(medidas || [], uid, isCoach);
   if(hay("fuerzaCard")) renderFuerza(fuerza || [], ejercicios || [], uid, isCoach);
   if(hay("externosCard")) renderExternos(document.getElementById("externosCard"), uid, { esCoach: isCoach });
+  if(hay("relojCard")) renderReloj(document.getElementById("relojCard"), uid);
   if(hay("nutricionCard")) renderNutricion(profile, uid, isCoach, solicitudes || []);
   renderEstiramientos(profile, uid, isCoach);
   container.querySelectorAll("[data-volver-panel]").forEach(b => { b.onclick = volverAMiPanel; });
-  container.querySelectorAll("[data-ir-externos]").forEach(b => { b.onclick = (e)=>{
-    const card = document.getElementById("externosCard");
-    if(!card) return;
-    e.preventDefault();
-    history.pushState(null, "", "#/progreso");
-    activarSeccionAlumno("progreso", false);
-    const panel = card.closest("section") || card;
-    panel.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
-    panel.classList.remove("resaltar"); void panel.offsetWidth; panel.classList.add("resaltar");
-  }; });
+  enlazarIrExternos(container);
   if(isCoach){
     await renderPlanCoach(profile);
     if(token === state.renderToken && hay("reservarCard")) await renderReservasAlumno(profile);
@@ -1039,9 +1031,12 @@ function renderEstiramientos(profile, uid, isCoach){
   const box = document.getElementById("estiramientosCard");
   const nota = ESTIRAMIENTO_DIARIO_NOTA;
   const actuales = [...new Set((profile.estiramientos || []).map(e => ESTIRAMIENTO_DIARIO_RENOMBRES[e] || e))];
+  /* Repeticiones por ejercicio ({"Cachetadas": 5}); se respetan los nombres antiguos */
+  const reps = {};
+  Object.entries(profile.estiramientos_reps || {}).forEach(([k, v]) => { const n = parseInt(v, 10); if(n > 0) reps[ESTIRAMIENTO_DIARIO_RENOMBRES[k] || k] = n; });
 
   /* El alumno ve solo su rutina personalizada; el menú de opciones es para el coach */
-  if(!isCoach){ pintarEstiramientosAlumno(box, actuales, uid, nota); return; }
+  if(!isCoach){ pintarEstiramientosAlumno(box, actuales, uid, nota, reps); return; }
 
   const grupos = ESTIRAMIENTO_DIARIO_GRUPOS;
   const predet = grupos.flatMap(g => g.items);
@@ -1058,10 +1053,13 @@ function renderEstiramientos(profile, uid, isCoach){
             ${g.items.map(ej => {
               const i = predet.indexOf(ej);
               return `
-              <label class="checkline" for="est_${i}">
-                <input type="checkbox" id="est_${i}" data-preset-idx="${i}" ${marcados.has(ej)?"checked":""}>
-                <span>${esc(ej)}</span>
-              </label>`;
+              <div class="est-item">
+                <label class="checkline" for="est_${i}">
+                  <input type="checkbox" id="est_${i}" data-preset-idx="${i}" ${marcados.has(ej)?"checked":""}>
+                  <span>${esc(ej)}</span>
+                </label>
+                <label class="est-reps"${marcados.has(ej) ? "" : " hidden"}><input type="number" inputmode="numeric" min="1" max="99" data-reps-idx="${i}" value="${reps[ej] || ""}" placeholder="–" aria-label="Repeticiones de ${esc(ej)}"><span>reps</span></label>
+              </div>`;
             }).join("")}
           </div>
         </fieldset>`).join("")}
@@ -1080,6 +1078,15 @@ function renderEstiramientos(profile, uid, isCoach){
       cb.onchange = ()=>{
         const ej = predet[parseInt(cb.dataset.presetIdx,10)];
         if(cb.checked) marcados.add(ej); else marcados.delete(ej);
+        const r = box.querySelector(`[data-reps-idx="${cb.dataset.presetIdx}"]`);
+        if(r){ r.closest(".est-reps").hidden = !cb.checked; if(cb.checked && !r.value) r.focus(); }
+      };
+    });
+    box.querySelectorAll("[data-reps-idx]").forEach(r => {
+      r.oninput = ()=>{
+        const ej = predet[parseInt(r.dataset.repsIdx, 10)];
+        const n = parseInt(r.value, 10);
+        if(n > 0 && n < 100) reps[ej] = n; else delete reps[ej];
       };
     });
     box.querySelectorAll("[data-rmchip]").forEach(x=>{
@@ -1097,11 +1104,13 @@ function renderEstiramientos(profile, uid, isCoach){
     saveBtn.onclick = ()=> withBusy(saveBtn, "Guardando…", async ()=>{
       const seleccionados = predet.filter(ej => marcados.has(ej));
       const final = [...seleccionados, ...customList];
-      const { error } = await sb.from("profiles").update({ estiramientos: final }).eq("id", uid);
+      const repsFinal = {};
+      seleccionados.forEach(ej => { if(reps[ej]) repsFinal[ej] = reps[ej]; });
+      const { error } = await sb.from("profiles").update({ estiramientos: final, estiramientos_reps: repsFinal }).eq("id", uid);
       const msg = document.getElementById("estMsg");
       if(error){ showError(msg, error); return; }
       showMsg(msg, "ok", "Rutina guardada.");
-      profile.estiramientos = final;
+      profile.estiramientos = final; profile.estiramientos_reps = repsFinal;
     });
   }
   paint();
@@ -1286,7 +1295,8 @@ function mostrarSeccionDe(el){
 
 /* Rutina de estiramiento del alumno: la lista que asignó el coach, con la dosis y casillas para ir marcando
    lo que ya hizo hoy (se guarda en este teléfono y se reinicia cada día). */
-function pintarEstiramientosAlumno(box, lista, uid, nota){
+function pintarEstiramientosAlumno(box, lista, uid, nota, reps){
+  reps = reps || {};
   if(!lista.length){
     box.innerHTML = `<p class="muted">Tu coach todavía no asignó tu rutina de estiramiento diaria. Cuando lo haga, aparecerá aquí.</p>`;
     return;
@@ -1306,7 +1316,7 @@ function pintarEstiramientosAlumno(box, lista, uid, nota){
         <li><label class="${hechos.has(e) ? "hecho" : ""}">
           <input type="checkbox" data-estiro="${i}" ${hechos.has(e) ? "checked" : ""}>
           <span class="estiro-num num" aria-hidden="true">${i + 1}</span>
-          <span class="estiro-txt"><strong>${esc(e)}</strong></span>
+          <span class="estiro-txt"><strong>${esc(e)}</strong>${reps[e] ? `<span class="estiro-reps">${reps[e]} reps</span>` : ""}</span>
         </label></li>`).join("")}</ol>`;
     box.querySelectorAll("[data-estiro]").forEach(c => c.onchange = ()=>{
       const ej = lista[Number(c.dataset.estiro)];

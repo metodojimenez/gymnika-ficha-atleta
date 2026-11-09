@@ -377,6 +377,8 @@ function abrirMirador(irA){
     dlg.innerHTML = `
       <div class="mir-top"><div><p class="eyebrow">Mirador · en turno</p><h2 id="mirTitulo"></h2></div>
         <button type="button" class="icon-btn" data-mir-cerrar aria-label="Cerrar el Mirador">✕</button></div>
+      <div class="mir-horas" role="group" aria-label="Ver el turno por horas"></div>
+      <div class="mir-hora" hidden aria-live="polite"></div>
       <div class="mir-nav"><button type="button" class="icon-btn" data-mir-prev aria-label="Anterior">‹</button>
         <span class="mir-pos num" aria-live="polite"></span>
         <button type="button" class="icon-btn" data-mir-next aria-label="Siguiente">›</button></div>
@@ -396,13 +398,22 @@ function abrirMirador(irA){
       if(e.target.closest("[data-mir-next]")){ moverMirador(dlg, 1); return; }
       const p = e.target.closest(".mir-puntos button");
       if(p){ irATarjeta(dlg, Number(p.dataset.i)); return; }
+      const hb = e.target.closest("[data-mir-vista]");
+      if(hb){ verHoraMirador(dlg, hb.dataset.mirVista === "pend" ? "pend" : Number(hb.dataset.mirVista)); return; }
+      const comp = e.target.closest("[data-mir-completar]");
+      if(comp){ completarDesdeHora(dlg, comp.dataset.mirCompletar); return; }
       const g = e.target.closest("[data-guardar-mir]");
       if(g) guardarTarjeta(dlg, g.closest(".mir-card"), g);
     });
     let t = null;
     track.addEventListener("scroll", ()=>{ clearTimeout(t); t = setTimeout(()=> marcarPosicion(dlg), 60); }, { passive: true });
   }
+  if(!dlg.open){
+    miradorUI.vista = "pend";
+    dlg.querySelector(".mir-track").hidden = false; dlg.querySelector(".mir-puntos").hidden = false; dlg.querySelector(".mir-hora").hidden = true;
+  }
   sincronizarTarjetas(dlg);
+  pintarHorasMirador(dlg);
   if(!dlg.open){ try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); } }
   pintarTurno();
   if(irA){
@@ -449,6 +460,9 @@ function irATarjeta(dlg, i, comportamiento){
 function moverMirador(dlg, d){ irATarjeta(dlg, indiceActual(dlg) + d); }
 function marcarPosicion(dlg){
   const cards = tarjetas(dlg), n = cards.length, i = indiceActual(dlg);
+  const btnPend = dlg.querySelector('[data-mir-vista="pend"]');
+  if(btnPend) btnPend.innerHTML = `Pendientes${miradorUI.pend.length ? ` <span class="num">(${miradorUI.pend.length})</span>` : ""}`;
+  if((miradorUI.vista || "pend") !== "pend") return;
   dlg.querySelector("#mirTitulo").textContent = n === 0 ? "Sin pendientes" : n === 1 ? "1 persona presente" : `${n} personas presentes`;
   dlg.querySelector(".mir-pos").textContent = n ? `${i + 1} de ${n}` : "";
   dlg.querySelector(".mir-nav").hidden = n < 2;
@@ -699,4 +713,95 @@ function abrirEntradaBitacora(a, previa){
     dlg.close();
     pintarHistorial(a.id);
   });
+}
+
+/* ---------- Mirador por horas: volver a las horas anteriores del turno ---------- */
+async function cargarHorasTurno(){
+  const t = miradorUI.turno;
+  if(!t) return [];
+  const [horarios, { data, error }] = await Promise.all([
+    cargarHorarios(),
+    sb.from("reservas").select("id, user_id, inicio, checkin_at, horario_id").eq("fecha", todayStr()).eq("estado", "asistio").order("inicio")
+  ]);
+  if(error) throw error;
+  const h = (id)=> horarios.find(x => x.id === id) || {};
+  const desde = new Date(t.inicio).getTime();
+  const rs = (data || []).filter(r => r.checkin_at && new Date(r.inicio).getTime() + (h(r.horario_id).duracion_min || 60) * 60000 >= desde);
+  const ids = rs.map(r => r.id);
+  const { data: bits, error: e2 } = ids.length
+    ? await sb.from("bitacora").select("id, reserva_id, atleta_id, autor_nombre, dolor_inicio, dolor_salida, zonas, como_llego, que_hizo, que_ocurrio, estiramientos, pendiente, fecha").in("reserva_id", ids)
+    : { data: [], error: null };
+  if(e2) throw e2;
+  return rs.map(r => ({ ...r, categoria: h(r.horario_id).categoria, bit: (bits || []).find(b => b.reserva_id === r.id) || null }));
+}
+/* Horas del turno: desde la hora en que empezó (o la primera sesión que alcanzó) hasta ahora */
+function horasDelTurno(){
+  const t = miradorUI.turno;
+  if(!t) return [];
+  const ahora = new Date().getHours();
+  const desde = Math.min(new Date(t.inicio).getHours(), ...((miradorUI.horas || []).map(r => new Date(r.inicio).getHours())));
+  const hs = [];
+  for(let x = Math.max(0, desde); x <= ahora; x++) hs.push(x);
+  return hs;
+}
+function pintarHorasMirador(dlg){
+  const box = dlg.querySelector(".mir-horas");
+  if(!box) return;
+  const vista = miradorUI.vista || "pend";
+  const hs = horasDelTurno();
+  box.innerHTML = `<button type="button" data-mir-vista="pend" aria-pressed="${vista === "pend"}">Pendientes${miradorUI.pend.length ? ` <span class="num">(${miradorUI.pend.length})</span>` : ""}</button>
+    ${hs.map(x => `<button type="button" data-mir-vista="${x}" aria-pressed="${vista === x}" class="num">${x}:00</button>`).join("")}`;
+  box.hidden = !hs.length;
+  const sel = box.querySelector('[aria-pressed="true"]');
+  if(sel && vista !== "pend") sel.scrollIntoView({ block: "nearest", inline: "center" });
+}
+async function verHoraMirador(dlg, vista){
+  guardarBorradores(dlg);
+  miradorUI.vista = vista;
+  const enPend = vista === "pend";
+  dlg.querySelector(".mir-track").hidden = !enPend;
+  dlg.querySelector(".mir-puntos").hidden = !enPend;
+  dlg.querySelector(".mir-nav").hidden = !enPend || tarjetas(dlg).length < 2;
+  const caja = dlg.querySelector(".mir-hora");
+  caja.hidden = enPend;
+  pintarHorasMirador(dlg);
+  if(enPend){ marcarPosicion(dlg); return; }
+  dlg.querySelector("#mirTitulo").textContent = `${vista}:00 a ${vista + 1}:00`;
+  caja.innerHTML = `<div class="skel skel-block"></div>`;
+  try{ miradorUI.horas = await cargarHorasTurno(); }
+  catch(err){ caja.innerHTML = `<div class="error" role="alert">${esc(errorES(err))}</div>`; return; }
+  if(miradorUI.vista !== vista) return;
+  pintarHorasMirador(dlg);
+  const lista = miradorUI.horas.filter(r => new Date(r.inicio).getHours() === vista);
+  const hechas = lista.filter(r => r.bit).length;
+  dlg.querySelector("#mirTitulo").textContent = `${vista}:00 · ${lista.length ? plural(lista.length, "persona", "personas") : "nadie"}`;
+  caja.innerHTML = lista.length ? `
+    <p class="mir-hora-res muted">${hechas === lista.length ? "Todas con bitácora." : `${hechas} de ${lista.length} con bitácora.`}</p>
+    <ul class="mir-hora-lista">${lista.map(filaHoraHTML).join("")}</ul>`
+    : `<div class="mir-vacio"><p class="empty-title">Nadie en esta hora</p><p class="muted">No hubo sesiones con QR a las ${vista}:00 en tu turno.</p></div>`;
+}
+function filaHoraHTML(r){
+  const a = (state.athleteList || []).find(x => x.id === r.user_id) || {};
+  const b = r.bit;
+  const linea = (t, v)=> v ? `<p><strong>${t}</strong> ${esc(v)}</p>` : "";
+  const dolor = b ? zonasDe(b).filter(z => hayValor(z.inicio) || hayValor(z.salida)).map(z =>
+    `<span class="mir-ult-dolor">${esc(z.zona || "Dolor")} ${hayValor(z.inicio) ? z.inicio : "–"} → ${hayValor(z.salida) ? z.salida : "–"}</span>`).join("") : "";
+  return `<li class="mir-hora-fila${b ? " hecha" : ""}">
+    <div class="mir-hora-cab"><strong>${esc(a.nombre || "Alumno")}</strong>
+      ${r.categoria && CATEGORIAS[r.categoria] ? `<span class="badge soft">${esc(CATEGORIAS[r.categoria].nombre)}</span>` : ""}
+      <span class="muted">Llegó ${esc(horaDe(r.checkin_at))}</span></div>
+    ${b ? `<p class="mir-hora-ok">✓ Bitácora${b.autor_nombre ? " de " + esc(primerNombre(b.autor_nombre)) : ""}</p>
+      <details class="mir-ult"><summary>Ver lo que se escribió</summary>
+        ${dolor ? `<p class="mir-ult-meta">${dolor}</p>` : ""}
+        ${linea("Llegó:", b.como_llego)}${linea("Hizo:", b.que_hizo)}${linea("Ocurrió:", b.que_ocurrio)}${linea("Pendiente:", b.pendiente)}
+        <a class="btn-link" href="#/bitacora/${encodeURIComponent(r.user_id)}" data-ir-bitacora>Abrir su bitácora</a></details>`
+      : `<div class="mir-hora-pend"><span>Sin bitácora</span><button type="button" class="btn-primary sm" data-mir-completar="${esc(r.id)}">Completar ahora</button></div>`}
+  </li>`;
+}
+async function completarDesdeHora(dlg, reservaId){
+  if(!miradorUI.pend.some(p => p.reserva_id === reservaId)) await actualizarMirador();
+  await verHoraMirador(dlg, "pend");
+  sincronizarTarjetas(dlg);
+  const i = tarjetas(dlg).findIndex(c => c.dataset.reserva === reservaId);
+  if(i >= 0) requestAnimationFrame(()=> irATarjeta(dlg, i, "instant"));
 }
