@@ -49,6 +49,8 @@ function zonaLlegadaHTML(pre, k, z = {}){
     </div>
     <input type="text" class="zona-otra" data-zona-otra maxlength="60" placeholder="Escribe la zona" aria-label="Otra zona" value="${otra ? esc(z.zona) : ""}"${otra ? "" : " hidden"}>
     ${burbujasFila(`${pre}zi${k}`, z.inicio, "Dolor al llegar")}
+    <label class="sr-only" for="${pre}znota${k}">Comentario del dolor</label>
+    <textarea class="zona-nota" id="${pre}znota${k}" data-zona-nota rows="1" maxlength="300" placeholder="Comentario del dolor (opcional)">${esc(z.nota || "")}</textarea>
   </div>`;
 }
 function zonaSalidaHTML(pre, k, z = {}){
@@ -187,18 +189,24 @@ function aplicarZonasSilueta(campos, zs){
   const marcar = (row, n)=>{
     row.querySelectorAll(`input[name="${pre}zi${row.dataset.z}"]`).forEach(i => { i.checked = Number(i.value) === n; });
   };
-  const porNombre = new Map(filas().map(r => [nombreFila(r), r]));
+  const porId = new Map(filas().map(r => [silIdDeNombre(nombreFila(r)) || nombreFila(r), r]));
   /* Las de la silueta que ya no están marcadas: se quitan (si no tienen dolor de salida) */
-  const nuevos = new Set(zs.map(z => z.zona));
+  const nuevos = new Set(zs.map(z => silIdDeNombre(z.zona)));
   filas().forEach(r => {
     const nom = nombreFila(r);
-    if(!nom || !silIdDeNombre(nom) || nuevos.has(nom)) return;
+    if(!nom || !silIdDeNombre(nom) || nuevos.has(silIdDeNombre(nom))) return;
     const k = r.dataset.z, tieneSalida = campos.querySelector(`input[name="${pre}zs${k}"]:checked`);
     if(tieneSalida) marcar(r, -1);
     else campos.querySelectorAll(`.zona-row[data-z="${k}"]`).forEach(f => f.remove());
   });
   zs.forEach(z => {
-    let row = porNombre.get(z.zona);
+    let row = porId.get(silIdDeNombre(z.zona));
+    if(row && row.isConnected && nombreFila(row) !== z.zona){
+      /* Nombre de antes (p. ej. «Zona lumbar»): pasa al de la silueta */
+      const sel = row.querySelector("[data-zona-sel]"), otra = row.querySelector("[data-zona-otra]");
+      sel.value = z.zona; otra.value = ""; otra.hidden = true;
+      const n = sal.querySelector(`.zona-row[data-z="${row.dataset.z}"] .zona-nombre`); if(n) n.textContent = z.zona;
+    }
     if(!row || !row.isConnected){
       /* Reusar la fila vacía del inicio si no tiene nada */
       const vacia = filas().find(r => !nombreFila(r) && !r.querySelector(`input[name="${pre}zi${r.dataset.z}"]:checked`) && !campos.querySelector(`input[name="${pre}zs${r.dataset.z}"]:checked`));
@@ -213,6 +221,7 @@ function aplicarZonasSilueta(campos, zs){
       const n = sal.querySelector(`.zona-row[data-z="${row.dataset.z}"] .zona-nombre`); if(n) n.textContent = z.zona;
     }
     marcar(row, z.inicio);
+    const nt = row.querySelector("[data-zona-nota]"); if(nt) nt.value = z.nota || "";
   });
   if(!filas().length){
     const k = Number(campos.dataset.zn || 0); campos.dataset.zn = k + 1;
@@ -277,7 +286,9 @@ function leerCampos(box, pre){
     const zona = sel === "__otra" ? (row.querySelector("[data-zona-otra]").value.trim() || null) : (sel || null);
     const i = radio("zi" + k), s = radio("zs" + k);
     const z = { zona, inicio: i ? Number(i.value) : null, salida: s ? Number(s.value) : null };
-    if(z.zona || hayValor(z.inicio) || hayValor(z.salida)) zonas.push(z);
+    const nota = (row.querySelector("[data-zona-nota]")?.value || "").trim();
+    if(nota) z.nota = nota;
+    if(z.zona || hayValor(z.inicio) || hayValor(z.salida) || nota) zonas.push(z);
   });
   d.zonas = zonas.length ? zonas : null;
   const max = (c)=> zonas.reduce((m, z) => hayValor(z[c]) && (m === null || z[c] > m) ? z[c] : m, null);
@@ -288,12 +299,13 @@ function leerCampos(box, pre){
 }
 /* Dolor por zona para el historial: «Rodilla derecha 7 → 3» */
 function dolorZonasHTML(b){
-  const zonas = zonasDe(b).filter(z => hayValor(z.inicio) || hayValor(z.salida));
+  const zonas = zonasDe(b).filter(z => hayValor(z.inicio) || hayValor(z.salida) || z.nota);
   if(!zonas.length) return "";
   return `<div class="bit-dolores">${zonas.map(z => `<div class="dolor-zona"><span class="dz-nombre">${esc(nombreZona(z))}</span>
     ${hayValor(z.inicio) ? `<span class="dolor-pill b-${nivelDolor(z.inicio)}">Llegó <strong>${z.inicio}</strong></span>` : ""}
     ${hayValor(z.inicio) && hayValor(z.salida) ? `<span aria-hidden="true">→</span>` : ""}
-    ${hayValor(z.salida) ? `<span class="dolor-pill b-${nivelDolor(z.salida)}">Se fue <strong>${z.salida}</strong></span>` : ""}</div>`).join("")}</div>`;
+    ${hayValor(z.salida) ? `<span class="dolor-pill b-${nivelDolor(z.salida)}">Se fue <strong>${z.salida}</strong></span>` : ""}
+    ${z.nota ? `<span class="dz-nota">«${esc(z.nota)}»</span>` : ""}</div>`).join("")}</div>`;
 }
 
 /* ---------- Turno ---------- */
@@ -421,7 +433,7 @@ function referenciasHTML(lista){
   const ant = lista[0];
   const quien = (b)=> `${esc(fmtFecha(b.fecha))}${b.autor_nombre ? " · " + esc(primerNombre(b.autor_nombre)) : ""}`;
   const dolor = (b)=> zonasDe(b).filter(z => hayValor(z.inicio) || hayValor(z.salida)).map(z =>
-    `<span class="mir-ult-dolor">${esc(z.zona || "Dolor")} ${hayValor(z.inicio) ? z.inicio : "–"} → ${hayValor(z.salida) ? z.salida : "–"}</span>`).join("");
+    `<span class="mir-ult-dolor">${esc(z.zona || "Dolor")} ${hayValor(z.inicio) ? z.inicio : "–"} → ${hayValor(z.salida) ? z.salida : "–"}${z.nota ? ` · «${esc(z.nota)}»` : ""}</span>`).join("");
   const linea = (t, v)=> v ? `<p><strong>${t}</strong> ${esc(v)}</p>` : "";
   return `<div class="mir-pend${ant.pendiente ? "" : " vacio"}">
       <p class="mir-pend-tit">Pendiente de la sesión anterior <span class="muted">(${quien(ant)})</span></p>

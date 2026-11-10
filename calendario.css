@@ -1191,3 +1191,9 @@ button.wk-cap:focus-visible{ outline:2px solid var(--accent); outline-offset:1px
 .gi-instalar{ margin-top:0; min-height:52px; font-size:17px; }
 .gi-o{ margin:-4px 0 0; text-align:center; color:var(--ink-soft); font-size:14px; }
 .gi-listo{ margin-top:2px; }
+/* Comentario del dolor por zona */
+.zona-nota, .sil-nota{ width:100%; margin-top:6px; min-height:40px; padding:8px 10px; font:inherit; font-size:15px; line-height:1.35; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--ink); resize:vertical; }
+.zona-nota:focus, .sil-nota:focus{ outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent); }
+.sil-lista li{ display:grid; gap:0; }
+.sil-nota{ margin-top:4px; font-size:14.5px; }
+.dz-nota{ flex-basis:100%; font-size:14px; color:var(--ink-soft); font-style:italic; }

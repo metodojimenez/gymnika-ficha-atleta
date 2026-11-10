@@ -17,7 +17,7 @@ const SIL_NOMBRES = (()=>{
     abdomen: "Abdomen",
     lumbar_der: "Lumbar derecha", lumbar_central: "Lumbar central", lumbar_izq: "Lumbar izquierda",
     sacro: "Sacro / coxis",
-    ingle_der: "Cadera / ingle derecha", ingle_izq: "Cadera / ingle izquierda",
+    cadera_der: "Cadera derecha", cadera_izq: "Cadera izquierda", ingle_der: "Ingle derecha", ingle_izq: "Ingle izquierda",
     gluteo_der: "Glúteo derecho", gluteo_izq: "Glúteo izquierdo"
   };
   [["der", "derecho", "derecha"], ["izq", "izquierdo", "izquierda"]].forEach(([s, m, f]) => Object.assign(n, {
@@ -39,9 +39,17 @@ const SIL_ZONAS_LISTA = (()=>{
   return l;
 })();
 const silGrupoDe = (id)=> Object.keys(SIL_GRUPOS).find(g => SIL_GRUPOS[g].ids.includes(id)) || null;
+/* Nombres de zonas de antes (y variantes) → zona de la silueta */
+const SIL_ALIAS = {
+  "Cuello": "cuello", "Espalda alta": "grupo:dorsal", "Espalda media": "grupo:dorsal", "Zona lumbar": "grupo:lumbar",
+  "Sacro o coxis": "sacro", "Muñeca o mano derecha": "muneca_der", "Muñeca o mano izquierda": "muneca_izq",
+  "Muslo derecho": "muslo_der", "Muslo izquierdo": "muslo_izq",
+  "Cadera / ingle derecha": "ingle_der", "Cadera / ingle izquierda": "ingle_izq"
+};
 /* Nombre → zona (o grupo) de la silueta */
 function silIdDeNombre(nombre){
   if(!nombre) return null;
+  if(SIL_ALIAS[nombre]) return SIL_ALIAS[nombre];
   for(const g in SIL_GRUPOS) if(SIL_GRUPOS[g].nombre === nombre) return "grupo:" + g;
   return Object.keys(SIL_NOMBRES).find(id => SIL_NOMBRES[id] === nombre) || null;
 }
@@ -170,13 +178,14 @@ function silConstruir(){
     if(part === "pelvis" || part === "gluteo"){
       if(y > 2.16) return frente ? "abdomen" : ax < .11 ? "lumbar_central" : "lumbar_" + s;
       if(z <= -.02 && ax < .09 && y > 1.8) return "sacro";
+      if(ax > .27 && z > -.14) return "cadera_" + s;
       return z > -.02 ? "ingle_" + s : "gluteo_" + s;
     }
     if(part === "hombro") return "hombro_" + s;
     if(part === "brazo") return cerca(x, y, z, sx * .63, 2.47, 0, .14) ? "codo_" + s : y > 2.96 ? "hombro_" + s : "brazo_" + s;
     if(part === "antebrazo") return cerca(x, y, z, sx * .63, 2.47, 0, .14) ? "codo_" + s : cerca(x, y, z, sx * .69, 2.04, .02, .11) ? "muneca_" + s : "antebrazo_" + s;
     if(part === "mano") return cerca(x, y, z, sx * .69, 2.04, .02, .09) ? "muneca_" + s : "mano_" + s;
-    if(part === "muslo") return cerca(x, y, z, sx * .21, 1.05, .01, .19) ? "rodilla_" + s : y > 1.86 ? (z > -.02 ? "ingle_" + s : "gluteo_" + s) : (frente ? "muslo_" + s : "isquio_" + s);
+    if(part === "muslo") return cerca(x, y, z, sx * .21, 1.05, .01, .19) ? "rodilla_" + s : y > 1.86 ? (ax > .27 && z > -.14 ? "cadera_" + s : z > -.02 ? "ingle_" + s : "gluteo_" + s) : (frente ? "muslo_" + s : "isquio_" + s);
     if(part === "pierna") return cerca(x, y, z, sx * .21, 1.05, .01, .19) ? "rodilla_" + s : y < .3 ? "tobillo_" + s : (z >= -.03 ? "tibia_" + s : "pantorrilla_" + s);
     if(part === "pie") return y > .2 && z < .05 ? "tobillo_" + s : "pie_" + s;
     return "cabeza";
@@ -303,9 +312,11 @@ async function abrirSilueta(opts = {}){
   IDS.forEach((id, i) => { zonas[id] = { id, i, dolor: 0 }; });
   const grupoActivo = {};   // grupo → true si se marcó «las 3»
   let maldita = silIdDeNombre(opts.maldita);
+  const notas = {};          // clave → comentario del dolor en esa zona
   (opts.zonas || []).forEach(z => {
     const id = silIdDeNombre(z.zona), n = Number(z.inicio);
     if(!id || !(n > 0)) return;
+    if(z.nota) notas[id] = z.nota;
     if(id.startsWith("grupo:")){ const g = id.slice(6); grupoActivo[g] = true; SIL_GRUPOS[g].ids.forEach(s => { zonas[s].dolor = n; }); }
     else zonas[id].dolor = n;
   });
@@ -377,9 +388,9 @@ async function abrirSilueta(opts = {}){
     const out = [], usados = new Set();
     Object.keys(SIL_GRUPOS).forEach(g => {
       const ids = SIL_GRUPOS[g].ids, d = zonas[ids[0]].dolor;
-      if(grupoActivo[g] && d > 0 && ids.every(id => zonas[id].dolor === d)){ out.push({ zona: SIL_GRUPOS[g].nombre, inicio: d, clave: "grupo:" + g }); ids.forEach(id => usados.add(id)); }
+      if(grupoActivo[g] && d > 0 && ids.every(id => zonas[id].dolor === d)){ out.push({ zona: SIL_GRUPOS[g].nombre, inicio: d, clave: "grupo:" + g, nota: notas["grupo:" + g] || null }); ids.forEach(id => usados.add(id)); }
     });
-    IDS.forEach(id => { if(!usados.has(id) && zonas[id].dolor > 0) out.push({ zona: SIL_NOMBRES[id], inicio: zonas[id].dolor, clave: id }); });
+    IDS.forEach(id => { if(!usados.has(id) && zonas[id].dolor > 0) out.push({ zona: SIL_NOMBRES[id], inicio: zonas[id].dolor, clave: id, nota: notas[id] || null }); });
     return out;
   }
   function lista(){
@@ -388,8 +399,11 @@ async function abrirSilueta(opts = {}){
     const todas = [...r, ...m].sort((a, b) => (b.clave === maldita) - (a.clave === maldita) || (b.inicio || 0) - (a.inicio || 0));
     listaEl.innerHTML = todas.length ? todas.map(z => `<li><button type="button" data-z="${esc(z.clave)}">
       <span class="sil-n${z.inicio >= 7 ? " osc" : ""}" style="background:${z.inicio ? SIL_COLORES[z.inicio] : "var(--paper-2)"}">${z.inicio || "–"}</span>
-      <span class="sil-nom">${esc(z.zona)}</span>${z.clave === maldita ? `<span class="sil-tag">Zona maldita</span>` : ""}</button></li>`).join("")
+      <span class="sil-nom">${esc(z.zona)}</span>${z.clave === maldita ? `<span class="sil-tag">Zona maldita</span>` : ""}</button>
+      ${z.inicio && opts.onListo ? `<label class="sr-only" for="silNota_${esc(z.clave.replace(/\W/g, "_"))}">Comentario sobre el dolor en ${esc(z.zona)}</label>
+      <textarea class="sil-nota" id="silNota_${esc(z.clave.replace(/\W/g, "_"))}" data-nota="${esc(z.clave)}" rows="1" maxlength="300" placeholder="Comentario: cómo es el dolor, cuándo aparece…">${esc(notas[z.clave] || "")}</textarea>` : ""}</li>`).join("")
       : `<li class="muted">Todavía no hay zonas marcadas.</li>`;
+    listaEl.querySelectorAll("[data-nota]").forEach(t => { t.oninput = ()=>{ notas[t.dataset.nota] = t.value.trim(); }; });
     listaEl.querySelectorAll("[data-z]").forEach(b => b.onclick = ()=>{
       const k = b.dataset.z;
       if(k.startsWith("grupo:")){ sel = SIL_GRUPOS[k.slice(6)].ids[1]; modo = "grupo"; pintarPanel(); destello = 1; }
@@ -398,7 +412,7 @@ async function abrirSilueta(opts = {}){
     });
   }
   const listo = dlg.querySelector("[data-sil-listo]");
-  if(listo) listo.onclick = ()=>{ opts.onListo(resultado().map(({ zona, inicio }) => ({ zona, inicio }))); cerrar(); };
+  if(listo) listo.onclick = ()=>{ opts.onListo(resultado().map(({ zona, inicio, nota }) => ({ zona, inicio, nota }))); cerrar(); };
 
   /* ---------- Girar y tocar ---------- */
   let rotY = .5, rotX = 0, objetivo = null, abajo = null;
