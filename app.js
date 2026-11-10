@@ -430,6 +430,8 @@ async function doSignup(){
     if(error){ showError(msg, error); return; }
     prepararTraspasoIOS(email, pass);
     await bootAfterAuth();
+    /* Recién registrado en el teléfono: los pasos para dejar Gymnika en su pantalla de inicio */
+    if(esTelefono() && !appInstalada()) setTimeout(abrirGuiaInstalar, 700);
   });
 }
 
@@ -1539,35 +1541,80 @@ function ocultarInstalar(posponer){
   instalar.el?.remove(); instalar.el = null;
   if(pushUI.pendiente) mostrarActivarPush();
 }
+function esTelefono(){ return esIOS() || /Android/i.test(navigator.userAgent); }
 function mostrarInstalar(modo){
   if(instalar.el || appInstalada() || instalarPospuesto()) return;
   const el = document.createElement("aside");
   el.className = "instalar"; el.setAttribute("aria-label", "Instalar Gymnika");
-  const compartir = `<svg class="instalar-ico-compartir" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Compartir" role="img"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>`;
   el.innerHTML = `
-    <img class="instalar-icono" src="/icono-192.png" alt="" width="44" height="44">
+    <img class="instalar-icono" src="/icono-192.png" alt="" width="56" height="56">
     <div class="instalar-txt">
-      <strong>Instala Gymnika en tu teléfono</strong>
-      ${modo === "ios"
-        ? `<span>Toca ${compartir} <b>Compartir</b> y luego <b>Agregar a pantalla de inicio</b>.</span>`
-        : `<span>Ábrela desde tu pantalla de inicio, como cualquier app.</span>`}
+      <strong>Ten Gymnika en tu pantalla de inicio</strong>
+      <span>Ábrela con un toque, como cualquier app, y recibe tus avisos.</span>
     </div>
     <div class="instalar-acc">
-      ${modo === "ios" ? "" : `<button type="button" class="btn-primary" data-instalar>Instalar</button>`}
       <button type="button" class="btn-link" data-instalar-cerrar>Ahora no</button>
+      ${modo === "ios" ? `<button type="button" class="btn-primary" data-instalar-guia>Ver cómo</button>` : `<button type="button" class="btn-outline" data-instalar-guia>Ver cómo</button><button type="button" class="btn-primary" data-instalar>Instalar</button>`}
     </div>`;
   el.querySelector("[data-instalar-cerrar]").onclick = ()=> ocultarInstalar(true);
+  el.querySelector("[data-instalar-guia]").onclick = ()=> abrirGuiaInstalar();
   const btn = el.querySelector("[data-instalar]");
-  if(btn) btn.onclick = async ()=>{
-    const ev = instalar.evento;
-    if(!ev){ ocultarInstalar(false); return; }
-    instalar.evento = null;
-    ev.prompt();
-    const { outcome } = await ev.userChoice;
-    ocultarInstalar(outcome !== "accepted");
-  };
+  if(btn) btn.onclick = instalarAhora;
   document.body.appendChild(el);
   instalar.el = el;
+}
+async function instalarAhora(){
+  const ev = instalar.evento;
+  if(!ev){ abrirGuiaInstalar(); return; }
+  instalar.evento = null;
+  ev.prompt();
+  const { outcome } = await ev.userChoice;
+  ocultarInstalar(outcome !== "accepted");
+}
+/* Guía grande con los pasos para iPhone y Android */
+function abrirGuiaInstalar(){
+  const ICO = {
+    compartir: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>`,
+    agregar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>`,
+    menu: `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>`,
+    telefono: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg>`
+  };
+  const paso = (n, ico, txt)=> `<li><span class="gi-num" aria-hidden="true">${n}</span><span class="gi-ico gi-${ico}">${ICO[ico]}</span><span class="gi-txt">${txt}</span></li>`;
+  const ios = `
+    <ol class="gi-pasos">
+      ${paso(1, "compartir", "Abre <b>app.gymnika.pe</b> en <b>Safari</b> y toca <b>Compartir</b> (el cuadrado con la flecha hacia arriba).")}
+      ${paso(2, "agregar", "Baja en el menú y toca <b>Agregar a pantalla de inicio</b>.")}
+      ${paso(3, "telefono", "Toca <b>Agregar</b> arriba a la derecha. Listo: el ícono de Gymnika queda en tu pantalla.")}
+    </ol>
+    <p class="gi-nota">Si no ves la opción, revisa que estés en Safari y no dentro de WhatsApp o Instagram.</p>`;
+  const android = `
+    ${instalar.evento ? `<button type="button" class="btn-primary gi-instalar" data-gi-instalar>Instalar ahora</button><p class="gi-o">o hazlo a mano:</p>` : ""}
+    <ol class="gi-pasos">
+      ${paso(1, "menu", "Abre <b>app.gymnika.pe</b> en <b>Chrome</b> y toca el menú <b>⋮</b> arriba a la derecha.")}
+      ${paso(2, "agregar", "Toca <b>Instalar app</b> o <b>Agregar a la pantalla principal</b>.")}
+      ${paso(3, "telefono", "Confirma con <b>Instalar</b>. El ícono de Gymnika aparece en tu pantalla de inicio.")}
+    </ol>
+    <p class="gi-nota">Si la abriste desde WhatsApp, toca ⋮ y elige <b>Abrir en Chrome</b> primero.</p>`;
+  const d = openDialog("Agrega Gymnika a tu pantalla de inicio", `
+    <div class="guia-instalar">
+      <div class="gi-hero"><img src="/icono-192.png" alt="" width="64" height="64"><p>Así entras a Gymnika con un toque, como cualquier app, y te llegan los avisos de tus reservas.</p></div>
+      <div class="seg gi-tabs" role="group" aria-label="Tu teléfono">
+        <button type="button" data-gi="ios" aria-pressed="${esIOS()}">iPhone</button>
+        <button type="button" data-gi="android" aria-pressed="${!esIOS()}">Android</button>
+      </div>
+      <div class="gi-cuerpo"></div>
+      <button type="button" class="btn-outline gi-listo" data-gi-listo>Listo</button>
+    </div>`);
+  const cuerpo = d.el.querySelector(".gi-cuerpo");
+  const ver = (k)=>{
+    cuerpo.innerHTML = k === "ios" ? ios : android;
+    d.el.querySelectorAll("[data-gi]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.gi === k)));
+    const bi = cuerpo.querySelector("[data-gi-instalar]");
+    if(bi) bi.onclick = ()=>{ d.close(); instalarAhora(); };
+  };
+  ver(esIOS() ? "ios" : "android");
+  d.el.querySelectorAll("[data-gi]").forEach(b => { b.onclick = ()=> ver(b.dataset.gi); });
+  d.el.querySelector("[data-gi-listo]").onclick = ()=> d.close();
 }
 window.addEventListener("beforeinstallprompt", (e)=>{
   e.preventDefault();
