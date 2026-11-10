@@ -1038,3 +1038,28 @@ body.mirador-activo .rt-ficha{ bottom:76px; }
 .eq-turno .btn-outline.sm{ min-height:32px; }
 .inbox-item{ transition:background-color .6s ease; }
 @media (prefers-reduced-motion: reduce){ .inbox-item{ transition:none; } }
+
+/* Evolución: color de riesgo y dolor en el tiempo */
+.evo-kpis{ display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:10px; }
+.evo-kpi{ display:grid; gap:2px; padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+.evo-k{ font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); }
+.evo-kpi strong{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; font-size:20px; line-height:1.2; }
+.evo-kpi .muted{ font-size:13px; }
+.evo-sw{ display:inline-block; width:14px; height:14px; border-radius:50%; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); }
+.evo-flecha{ color:var(--ink-soft); font-weight:600; }
+.evo-franja-wrap{ position:relative; margin:22px 12px 36px; }
+.evo-franja{ display:flex; height:16px; border-radius:999px; overflow:hidden; box-shadow:inset 0 0 0 1px rgba(0,0,0,.06); }
+.evo-tramo{ min-width:4px; transform-origin:left center; animation:evoCrece .9s cubic-bezier(.2,.7,.2,1) both; }
+.evo-tramo:nth-child(2){ animation-delay:.12s; } .evo-tramo:nth-child(3){ animation-delay:.24s; } .evo-tramo:nth-child(4){ animation-delay:.36s; } .evo-tramo:nth-child(n+5){ animation-delay:.48s; }
+.evo-tramo.sin{ background-image:repeating-linear-gradient(45deg, transparent 0 5px, rgba(0,0,0,.06) 5px 10px); }
+@keyframes evoCrece{ from{ transform:scaleX(0); opacity:.3; } to{ transform:scaleX(1); opacity:1; } }
+.evo-hitos{ list-style:none; margin:0; padding:0; position:absolute; left:0; right:0; top:22px; height:30px; }
+.evo-hitos li{ position:absolute; top:0; transform:translateX(-2px); display:grid; font-size:12px; line-height:1.25; white-space:nowrap; padding-left:6px; border-left:2px solid var(--line); }
+.evo-hitos li strong{ font-size:12.5px; }
+.evo-hitos li span{ color:var(--ink-soft); }
+.evo-hitos li.evo-hoy{ transform:translateX(-100%); padding:0 6px 0 0; border-left:0; border-right:2px solid var(--ink); text-align:right; }
+.evo-chart{ height:240px; margin-top:6px; }
+.evo-leyenda{ margin-top:8px; display:flex; flex-wrap:wrap; gap:6px 16px; align-items:center; font-size:13.5px; }
+.evo-dot-salida{ background:transparent !important; border:2px dashed var(--c4, #3F5E7A); box-sizing:border-box; }
+@media (prefers-reduced-motion: reduce){ .evo-tramo{ animation:none; } }
+@media (max-width:520px){ .evo-hitos li span{ display:none; } .evo-hitos li.cerca{ display:none; } .evo-franja-wrap{ margin-bottom:28px; } }

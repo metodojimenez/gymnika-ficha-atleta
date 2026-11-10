@@ -147,6 +147,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     panels = `
     ${panelHTML("planCard", esMaster() ? "Plan y pagos" : "Sesiones", 12, { eyebrow: "Terapia" })}
     ${agendaMasterHTML(profile)}
+    ${panelHTML("evolucionCard", "Evolución", 12, { eyebrow: "Color de riesgo y dolor en el tiempo" })}
     ${panelHTML("notasCard", "Notas del coach", 6)}
     ${panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 6)}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
@@ -159,6 +160,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${agendaMasterHTML(profile)}
     ${macroHTML}
     ${resumenHTML}
+    ${panelHTML("evolucionCard", "Evolución", 12, { eyebrow: "Color de riesgo y dolor en el tiempo" })}
     ${panelHTML("notasCard", "Notas del coach", 6)}
     ${panelHTML("agendaCard", "Agenda: viajes y competencias", 6)}
     ${panelHTML("fuerzaCard", "Progresión de fuerza", 8)}
@@ -221,6 +223,7 @@ async function renderAthleteDetail(profile, isCoach, container){
   if(hay("fuerzaCard")) renderFuerza(fuerza || [], ejercicios || [], uid, isCoach);
   if(hay("externosCard")) renderExternos(document.getElementById("externosCard"), uid, { esCoach: isCoach });
   if(hay("relojCard")) renderReloj(document.getElementById("relojCard"), uid);
+  if(hay("evolucionCard") && isCoach) renderEvolucion(document.getElementById("evolucionCard"), uid);
   if(hay("nutricionCard")) renderNutricion(profile, uid, isCoach, solicitudes || []);
   renderEstiramientos(profile, uid, isCoach);
   container.querySelectorAll("[data-volver-panel]").forEach(b => { b.onclick = volverAMiPanel; });
@@ -1327,4 +1330,112 @@ function pintarEstiramientosAlumno(box, lista, uid, nota, reps){
     });
   };
   pintar();
+}
+
+/* ---------- Evolución (solo el equipo): el color de riesgo en el tiempo y el dolor de cada sesión de la bitácora ----------
+   La franja muestra cuánto tiempo estuvo en cada color; el gráfico pinta el dolor al llegar y al salir sobre esos mismos
+   colores de fondo, así se ve de un vistazo cómo bajó el dolor mientras el color mejoraba. */
+let evolucionChart = null;
+const RIESGO_NOMBRE = { rojo: "Rojo", anaranjado: "Anaranjado", amarillo: "Amarillo", verde: "Verde", azul: "Azul" };
+function colorRiesgoCSS(c){
+  const v = getComputedStyle(document.documentElement).getPropertyValue("--r-" + (c || "sin")).trim();
+  return v || "#E4DDD3";
+}
+function conAlfa(hex, a){
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+  if(!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+async function renderEvolucion(box, uid){
+  const panel = box.closest("section") || box;
+  const [{ data: hist }, { data: bits }] = await Promise.all([
+    sb.from("riesgo_historial").select("color, desde, autor_nombre").eq("user_id", uid).order("desde"),
+    sb.from("bitacora").select("fecha, dolor_inicio, dolor_salida, created_at").eq("atleta_id", uid).order("fecha").order("created_at")
+  ]);
+  if(!document.body.contains(box)) return;
+  const hoy = todayStr();
+  const diaDe = (iso)=> new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Lima" });
+  /* Un tramo por día: si el color cambió varias veces el mismo día, vale el último */
+  const cambios = [];
+  (hist || []).forEach(h => { const f = diaDe(h.desde); if(cambios.length && cambios[cambios.length - 1].f === f) cambios.pop(); cambios.push({ f, color: h.color }); });
+  const ses = (bits || []).filter(b => b.dolor_inicio != null || b.dolor_salida != null);
+  if(!cambios.some(c => c.color) && ses.length < 2){ panel.hidden = true; return; }
+  panel.hidden = false;
+  const ini = [cambios[0] && cambios[0].f, ses[0] && ses[0].fecha].filter(Boolean).sort()[0] || hoy;
+  const total = Math.max(1, diasEntre(ini, hoy) + 1);
+  const tramos = [];
+  if(cambios.length && cambios[0].f > ini) tramos.push({ f: ini, color: null });
+  cambios.forEach(c => tramos.push(c));
+  tramos.forEach((t, i) => { t.d0 = diasEntre(ini, t.f); t.d1 = i < tramos.length - 1 ? diasEntre(ini, tramos[i + 1].f) : total; });
+  const conColor = tramos.filter(t => t.color);
+  const primero = conColor[0], actual = tramos[tramos.length - 1];
+
+  /* Indicadores: color al inicio y hoy, dolor al llegar (primeras vs últimas 4 sesiones) y tiempo en Gymnika */
+  const llegadas = ses.map(b => b.dolor_inicio).filter(v => v != null);
+  const prom = (xs)=> xs.length ? xs.reduce((a, x) => a + x, 0) / xs.length : null;
+  const n = Math.min(4, Math.floor(llegadas.length / 2));
+  const dAntes = n ? prom(llegadas.slice(0, n)) : null, dHoy = n ? prom(llegadas.slice(-n)) : null;
+  const meses = Math.round(total / 30.4);
+  const sw = (c)=> `<span class="evo-sw" style="background:${colorRiesgoCSS(c)}" aria-hidden="true"></span>`;
+  const kpis = [];
+  if(primero) kpis.push(`<div class="evo-kpi"><span class="evo-k">Color</span>
+    <strong>${sw(primero.color)}${esc(RIESGO_NOMBRE[primero.color])}${actual.color && actual.color !== primero.color ? ` <span class="evo-flecha" aria-hidden="true">→</span> ${sw(actual.color)}${esc(RIESGO_NOMBRE[actual.color])}` : ""}</strong>
+    <span class="muted">${actual.color && actual.color !== primero.color ? `<span class="sr-only">de ${esc(RIESGO_NOMBRE[primero.color])} a ${esc(RIESGO_NOMBRE[actual.color])}. </span>Hoy desde el ${fmtFecha(actual.f)}` : `Desde el ${fmtFecha(primero.f)}`}</span></div>`);
+  if(dAntes != null) kpis.push(`<div class="evo-kpi"><span class="evo-k">Dolor al llegar</span>
+    <strong class="num">${fmtNum(dAntes)} <span class="evo-flecha" aria-hidden="true">→</span><span class="sr-only"> a </span> ${fmtNum(dHoy)}</strong>
+    <span class="muted">${dHoy < dAntes ? `Bajó ${Math.round((1 - dHoy / dAntes) * 100)} %` : dHoy > dAntes ? "Subió" : "Igual"} · primeras vs. últimas ${n} sesiones</span></div>`);
+  kpis.push(`<div class="evo-kpi"><span class="evo-k">En Gymnika</span>
+    <strong class="num">${meses >= 1 ? plural(meses, "mes", "meses") : plural(total, "día", "días")}</strong>
+    <span class="muted">${ses.length ? plural(ses.length, "sesión con bitácora", "sesiones con bitácora") : "Sin sesiones en la bitácora"}</span></div>`);
+
+  box.innerHTML = `
+    <div class="evo-kpis">${kpis.join("")}</div>
+    ${conColor.length ? `<div class="evo-franja-wrap">
+      <div class="evo-franja" role="img" aria-label="Color de riesgo en el tiempo: ${esc(conColor.map(t => RIESGO_NOMBRE[t.color] + " desde el " + fmtFecha(t.f)).join(", "))}">
+        ${tramos.map(t => `<span class="evo-tramo${t.color ? "" : " sin"}" style="flex-grow:${Math.max(1, t.d1 - t.d0)};background:${colorRiesgoCSS(t.color)}"></span>`).join("")}
+      </div>
+      <ol class="evo-hitos" aria-hidden="true">${(()=>{
+        /* En pantallas chicas se ocultan las etiquetas que quedarían encima de la anterior */
+        const pos = conColor.map(t => t.d0 / total * 100);
+        return conColor.map((t, i) => `<li class="${i && pos[i] - pos[i - 1] < 22 ? "cerca" : ""}" style="left:${pos[i].toFixed(2)}%"><strong>${esc(RIESGO_NOMBRE[t.color])}</strong><span>${fmtFecha(t.f)}</span></li>`).join("")
+          + `<li class="evo-hoy${pos.length && 100 - pos[pos.length - 1] < 30 ? " cerca" : ""}" style="left:100%"><strong>Hoy</strong></li>`;
+      })()}</ol>
+    </div>` : ""}
+    ${ses.length >= 2 ? `<div class="chart-box evo-chart"><canvas id="evolucionChart" role="img" aria-label="Dolor al llegar y al salir de cada sesión, de 0 a 10"></canvas></div>
+      <div class="legend evo-leyenda"><span><span class="dot" style="background:${CHART_COLORS[0]}"></span>Dolor al llegar</span><span><span class="dot evo-dot-salida"></span>Dolor al salir</span>${conColor.length ? `<span class="muted">El fondo es el color de riesgo de cada momento</span>` : ""}</div>` : ""}`;
+
+  if(evolucionChart){ evolucionChart.destroy(); evolucionChart = null; }
+  const canvas = box.querySelector("#evolucionChart");
+  if(!canvas || !window.Chart) return;
+  const punto = (b, k)=> b[k] == null ? null : { x: diasEntre(ini, b.fecha), y: b[k] };
+  const bandas = { id: "bandasRiesgo", beforeDatasetsDraw(chart){
+    const { ctx, chartArea: a, scales: { x } } = chart;
+    tramos.forEach(t => {
+      if(!t.color) return;
+      const x0 = Math.max(a.left, x.getPixelForValue(t.d0)), x1 = Math.min(a.right, x.getPixelForValue(t.d1));
+      if(x1 <= x0) return;
+      ctx.save(); ctx.fillStyle = conAlfa(colorRiesgoCSS(t.color), 0.16); ctx.fillRect(x0, a.top, x1 - x0, a.bottom - a.top); ctx.restore();
+    });
+  } };
+  evolucionChart = new Chart(canvas, {
+    type: "line",
+    data: { datasets: [
+      lineDataset("Dolor al llegar", ses.map(b => punto(b, "dolor_inicio")).filter(Boolean), CHART_COLORS[0], { pointRadius: 2.5, cubicInterpolationMode: "monotone" }),
+      lineDataset("Dolor al salir", ses.map(b => punto(b, "dolor_salida")).filter(Boolean), CHART_COLORS[3], { pointRadius: 2, cubicInterpolationMode: "monotone", borderDash: [5, 4], borderWidth: 2 })
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false, parsing: true,
+      interaction: { mode: "nearest", axis: "x", intersect: false },
+      plugins: { legend: { display: false }, tooltip: { callbacks: {
+        title: (it)=> it.length ? fmtFecha(fechaISO(sumarDias(parseFecha(ini), it[0].parsed.x)), true) : "",
+        label: (c)=> `${c.dataset.label}: ${c.parsed.y}` } } },
+      scales: {
+        x: { type: "linear", min: 0, max: total, grid: { display: false },
+             ticks: { stepSize: total > 120 ? 30 : 14, maxRotation: 0, callback: (v)=> fmtFecha(fechaISO(sumarDias(parseFecha(ini), v))) } },
+        y: { min: 0, max: 10, ticks: { stepSize: 2 }, title: { display: true, text: "Dolor (0 a 10)" } }
+      }
+    },
+    plugins: [bandas]
+  });
 }
