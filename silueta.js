@@ -224,7 +224,8 @@ async function abrirSilueta(opts = {}){
   dlg.className = "sil-dialog";
   dlg.setAttribute("aria-labelledby", "silTit");
   dlg.innerHTML = `
-    <div class="sil-top"><div><p class="eyebrow">${esc(opts.eyebrow || "Dolor al llegar")}</p><h2 id="silTit">${esc(opts.titulo || "Marcar en el cuerpo")}</h2></div>
+    <div class="sil-top"><div><p class="eyebrow">${esc(opts.eyebrow || "Dolor al llegar")}</p><h2 id="silTit">${esc(opts.titulo || "Marcar en el cuerpo")}</h2>
+      <p class="sil-otros" aria-live="polite" hidden></p></div>
       <button type="button" class="icon-btn" data-sil-cerrar aria-label="Cerrar sin cambios">✕</button></div>
     <div class="sil-cuerpo">
       <div class="sil-escena">
@@ -246,13 +247,14 @@ async function abrirSilueta(opts = {}){
           <p class="sil-msg" aria-live="polite"></p>
         </div>
         <ul class="sil-lista"></ul>
-        <div class="sil-acc"><button type="button" class="btn-outline" data-sil-cerrar>${opts.onListo ? "Cancelar" : "Cerrar"}</button>${opts.onListo ? `<button type="button" class="btn-primary" data-sil-listo>Listo</button>` : ""}</div>
+        <div class="sil-acc"><button type="button" class="btn-outline" data-sil-cerrar>${opts.onListo && !opts.alCambiar ? "Cancelar" : "Cerrar"}</button>${opts.onListo ? `<button type="button" class="btn-primary" data-sil-listo>Listo</button>` : ""}</div>
       </div>
     </div>`;
   document.body.appendChild(dlg);
   try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
   let vivo = true, raf = 0;
-  const cerrar = ()=>{ vivo = false; cancelAnimationFrame(raf); if(silUI.ro) silUI.ro.disconnect(); if(dlg.open) dlg.close(); dlg.remove(); if(silUI.renderer){ silUI.renderer.dispose(); silUI.renderer = null; } };
+  let sync = null;
+  const cerrar = ()=>{ vivo = false; cancelAnimationFrame(raf); if(sync) sync.cerrar(); if(silUI.ro) silUI.ro.disconnect(); if(dlg.open) dlg.close(); dlg.remove(); if(silUI.renderer){ silUI.renderer.dispose(); silUI.renderer = null; } };
   dlg.addEventListener("cancel", (e)=>{ e.preventDefault(); cerrar(); });
   dlg.querySelectorAll("[data-sil-cerrar]").forEach(b => b.onclick = cerrar);
   const ayuda = dlg.querySelector(".sil-ayuda");
@@ -310,7 +312,7 @@ async function abrirSilueta(opts = {}){
   /* ---------- Estado ---------- */
   const zonas = {};
   IDS.forEach((id, i) => { zonas[id] = { id, i, dolor: 0 }; });
-  const grupoActivo = {};   // grupo → true si se marcó «las 3»
+  let grupoActivo = {};   // grupo → true si se marcó «las 3»
   let maldita = silIdDeNombre(opts.maldita);
   const notas = {};          // clave → comentario del dolor en esa zona
   (opts.zonas || []).forEach(z => {
@@ -372,6 +374,8 @@ async function abrirSilueta(opts = {}){
     idsSel().forEach(id => { zonas[id].dolor = n; });
     if(g){ if(modo === "grupo") grupoActivo[g] = n > 0; else grupoActivo[g] = false; }
     recolorear(); pintarPanel(); lista();
+    if(sync) sync.estado(estadoActual());
+    avisarCambio();
   };
   if(chk) chk.onchange = async ()=>{
     const nuevo = chk.checked ? claveSel() : null, antes = maldita;
@@ -403,19 +407,46 @@ async function abrirSilueta(opts = {}){
       ${z.inicio && opts.onListo ? `<label class="sr-only" for="silNota_${esc(z.clave.replace(/\W/g, "_"))}">Comentario sobre el dolor en ${esc(z.zona)}</label>
       <textarea class="sil-nota" id="silNota_${esc(z.clave.replace(/\W/g, "_"))}" data-nota="${esc(z.clave)}" rows="1" maxlength="300" placeholder="Comentario: cómo es el dolor, cuándo aparece…">${esc(notas[z.clave] || "")}</textarea>` : ""}</li>`).join("")
       : `<li class="muted">Todavía no hay zonas marcadas.</li>`;
-    listaEl.querySelectorAll("[data-nota]").forEach(t => { t.oninput = ()=>{ notas[t.dataset.nota] = t.value.trim(); }; });
+    listaEl.querySelectorAll("[data-nota]").forEach(t => { t.oninput = ()=>{ notas[t.dataset.nota] = t.value.trim(); if(sync) sync.estado(estadoActual(), true); avisarCambio(); }; });
     listaEl.querySelectorAll("[data-z]").forEach(b => b.onclick = ()=>{
       const k = b.dataset.z;
       if(k.startsWith("grupo:")){ sel = SIL_GRUPOS[k.slice(6)].ids[1]; modo = "grupo"; pintarPanel(); destello = 1; }
       else elegir(k);
       objetivo = /dorsal|lumbar|sacro|gluteo|isquio|pantorrilla|cervical/.test(k) ? Math.PI : 0;
+      if(sync) sync.giro(objetivo, 0, true);
     });
   }
+  /* En el Mirador lo marcado pasa a la tarjeta al instante (y de ahí a los demás coaches) */
+  let tCambio = null;
+  function avisarCambio(){
+    if(!opts.alCambiar) return;
+    clearTimeout(tCambio);
+    tCambio = setTimeout(()=> opts.alCambiar(resultado().map(({ zona, inicio, nota }) => ({ zona, inicio, nota }))), 400);
+  }
+  /* ---------- Compartir en vivo con los demás coaches que miran la misma tarjeta ---------- */
+  function estadoActual(){
+    const z = {};
+    IDS.forEach(id => { if(zonas[id].dolor) z[id] = zonas[id].dolor; });
+    return { z, g: { ...grupoActivo }, n: { ...notas } };
+  }
+  function aplicarEstado(e){
+    if(!e || !e.z) return;
+    IDS.forEach(id => { zonas[id].dolor = Number(e.z[id]) || 0; });
+    grupoActivo = { ...(e.g || {}) };
+    const activo = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.nota : null;
+    Object.keys(notas).forEach(k => { if(k !== activo) delete notas[k]; });
+    Object.entries(e.n || {}).forEach(([k, v]) => { if(k !== activo) notas[k] = v; });
+    recolorear(); pintarPanel();
+    if(activo && listaEl.contains(document.activeElement)){
+      /* Se está escribiendo un comentario aquí: solo se actualizan los otros */
+      listaEl.querySelectorAll("[data-nota]").forEach(t => { if(t.dataset.nota !== activo) t.value = notas[t.dataset.nota] || ""; });
+    } else lista();
+  }
   const listo = dlg.querySelector("[data-sil-listo]");
-  if(listo) listo.onclick = ()=>{ opts.onListo(resultado().map(({ zona, inicio, nota }) => ({ zona, inicio, nota }))); cerrar(); };
+  if(listo) listo.onclick = ()=>{ clearTimeout(tCambio); if(sync) sync.estado(estadoActual()); opts.onListo(resultado().map(({ zona, inicio, nota }) => ({ zona, inicio, nota }))); cerrar(); };
 
   /* ---------- Girar y tocar ---------- */
-  let rotY = .5, rotX = 0, objetivo = null, abajo = null;
+  let rotY = .5, rotX = 0, objetivo = null, abajo = null, remoto = null;
   lienzo.addEventListener("pointerdown", (e)=>{ abajo = { x: e.clientX, y: e.clientY, rx: rotY, ry: rotX, mov: 0 }; try{ lienzo.setPointerCapture(e.pointerId); } catch { /* sin captura */ } objetivo = null; });
   lienzo.addEventListener("pointermove", (e)=>{
     if(!abajo) return;
@@ -423,7 +454,9 @@ async function abrirSilueta(opts = {}){
     abajo.mov = Math.max(abajo.mov, Math.hypot(dx, dy));
     rotY = abajo.rx + dx * .012;
     rotX = Math.max(-.3, Math.min(.3, abajo.ry + dy * .004));
+    remoto = null;
     marcarVista();
+    if(sync) sync.giro(rotY, rotX);
   });
   lienzo.addEventListener("pointerup", (e)=>{ if(abajo && abajo.mov < 8) tocar(e); abajo = null; });
   lienzo.addEventListener("pointercancel", ()=>{ abajo = null; });
@@ -440,7 +473,7 @@ async function abrirSilueta(opts = {}){
     elegir(IDS[G.zonaV[mejor]]);
   }
   const vistas = dlg.querySelectorAll("[data-vista]");
-  vistas.forEach(b => b.onclick = ()=>{ objetivo = Number(b.dataset.vista); rotX = 0; });
+  vistas.forEach(b => b.onclick = ()=>{ objetivo = Number(b.dataset.vista); rotX = 0; remoto = null; if(sync) sync.giro(objetivo, 0, true); });
   function marcarVista(){
     const a = ((rotY % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
     vistas.forEach(b => { const v = ((Number(b.dataset.vista) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); const d = Math.min(Math.abs(a - v), 2 * Math.PI - Math.abs(a - v)); b.setAttribute("aria-pressed", String(d < .4)); });
@@ -470,6 +503,13 @@ async function abrirSilueta(opts = {}){
   const quieto = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   function loop(t){
     if(!vivo) return;
+    if(remoto && !abajo){
+      /* Giro que hace otro coach: se sigue suave */
+      let d = remoto.y - rotY; d = Math.atan2(Math.sin(d), Math.cos(d));
+      rotY += d * (quieto ? 1 : .35); rotX += (remoto.x - rotX) * (quieto ? 1 : .35);
+      if(Math.abs(d) < .002 && Math.abs(remoto.x - rotX) < .002) remoto = null;
+      marcarVista();
+    }
     if(objetivo !== null){
       let d = objetivo - rotY; d = Math.atan2(Math.sin(d), Math.cos(d));
       rotY += d * (quieto ? 1 : .12);
@@ -484,7 +524,108 @@ async function abrirSilueta(opts = {}){
     raf = requestAnimationFrame(loop);
   }
   dlg.silElegir = elegir;   // para las pruebas automáticas
+  if(opts.compartir && opts.compartir.clave && opts.compartir.atleta){
+    sync = silCompartir(opts.compartir, {
+      estado: ()=> estadoActual(),
+      giroActual: ()=> ({ y: rotY, x: rotX }),
+      alEstado: (e)=> aplicarEstado(e),
+      alGiro: (g)=>{ if(abajo) return; objetivo = null; remoto = { y: Number(g.y) || 0, x: Number(g.x) || 0 }; },
+      alOtros: (nombres)=>{
+        const el = dlg.querySelector(".sil-otros");
+        el.hidden = !nombres.length;
+        el.textContent = nombres.length ? `${nombres.join(", ")} ${nombres.length === 1 ? "también está" : "también están"} viendo esta silueta` : "";
+      }
+    });
+  }
   recolorear(); lista(); marcarVista();
   ayuda.textContent = "Arrastra para girar · toca una zona";
   raf = requestAnimationFrame(loop);
+}
+
+/* ---------- Silueta compartida en vivo ----------
+   Canal privado de Supabase Realtime («sil:<tarjeta>», solo el equipo): giro, zonas, comentarios y quién mira.
+   Si el canal privado no conecta, usa la tabla mirador_silueta con tiempo real (un poco más lento, mismo resultado). */
+function silCompartir(cfg, h){
+  const yo = Math.random().toString(36).slice(2, 10);
+  const nombre = primerNombre((state.profile || {}).nombre) || "Otro coach";
+  let modo = null, ch = null, chDb = null, cerrado = false;
+  let tGiro = 0, pendGiro = null, timerGiro = null, timerEst = null;
+  const vistos = new Map();   // otro → { nombre, hasta }
+  const marcarOtro = (de, nom)=>{
+    if(!de || de === yo) return;
+    vistos.set(de, { nombre: nom || "Otro coach", hasta: Date.now() + 15000 });
+    pintarOtros();
+  };
+  const pintarOtros = ()=>{
+    const ahora = Date.now();
+    const n = [...new Set([...vistos.values()].filter(v => v.hasta > ahora).map(v => v.nombre))];
+    h.alOtros(n);
+  };
+  const intervaloOtros = setInterval(pintarOtros, 5000);
+  const recibir = (ev, p)=>{
+    if(!p || p.de === yo || cerrado) return;
+    marcarOtro(p.de, p.nombre);
+    if(ev === "giro") h.alGiro(p);
+    else if(ev === "estado") h.alEstado(p.e);
+    else if(ev === "hola"){ enviar("estado", { e: h.estado() }); enviar("giro", h.giroActual()); }
+  };
+  async function enviar(ev, datos){
+    if(cerrado) return;
+    const p = { ...datos, de: yo, nombre };
+    if(modo === "canal" && ch){ try{ await ch.send({ type: "broadcast", event: ev, payload: p }); } catch { /* sin conexión */ } return; }
+    if(modo === "tabla"){
+      if(ev === "hola") return;
+      const fila = { clave: cfg.clave, atleta_id: cfg.atleta, de: yo, autor_nombre: nombre, updated_at: new Date().toISOString() };
+      if(ev === "estado") fila.estado = p.e; else fila.giro = { y: p.y, x: p.x, anim: !!p.anim };
+      const { error } = await sb.from("mirador_silueta").upsert(fila);
+      if(error) console.error(error);
+    }
+  }
+  function usarTabla(){
+    if(cerrado || modo === "tabla") return;
+    modo = "tabla";
+    if(ch){ try{ sb.removeChannel(ch); } catch { /* ya cerrado */ } ch = null; }
+    chDb = sb.channel("sil-db-" + cfg.clave + "-" + yo)
+      .on("postgres_changes", { event: "*", schema: "public", table: "mirador_silueta", filter: "clave=eq." + cfg.clave }, (pl)=>{
+        const f = pl && pl.new; if(!f || f.de === yo) return;
+        marcarOtro(f.de, f.autor_nombre);
+        if(f.giro && pl.old && JSON.stringify(pl.old.giro) !== JSON.stringify(f.giro)) h.alGiro(f.giro);
+        else if(f.giro && !pl.old) h.alGiro(f.giro);
+        if(f.estado && (!pl.old || JSON.stringify(pl.old.estado) !== JSON.stringify(f.estado))) h.alEstado(f.estado);
+      }).subscribe();
+    /* Si alguien la movió hace poco, se parte de su estado */
+    sb.from("mirador_silueta").select("*").eq("clave", cfg.clave).maybeSingle().then(({ data })=>{
+      if(data && data.de !== yo && Date.now() - new Date(data.updated_at).getTime() < 120000){
+        if(data.estado) h.alEstado(data.estado);
+        if(data.giro) h.alGiro(data.giro);
+      }
+    }, ()=>{});
+  }
+  try{
+    ch = sb.channel("sil:" + cfg.clave, { config: { private: true, broadcast: { self: false } } });
+    ["giro", "estado", "hola"].forEach(ev => ch.on("broadcast", { event: ev }, (m)=> recibir(ev, m && m.payload)));
+    const espera = setTimeout(usarTabla, 5000);
+    ch.subscribe((st)=>{
+      if(st === "SUBSCRIBED"){ clearTimeout(espera); if(modo) return; modo = "canal"; enviar("hola", {}); }
+      else if(st === "CHANNEL_ERROR" || st === "TIMED_OUT"){ clearTimeout(espera); usarTabla(); }
+    });
+  } catch { usarTabla(); }
+  return {
+    giro(y, x, anim){
+      pendGiro = { y, x, anim: !!anim };
+      const espera = (modo === "tabla" ? 140 : 50) - (Date.now() - tGiro);
+      if(espera <= 0){ tGiro = Date.now(); enviar("giro", pendGiro); pendGiro = null; return; }
+      clearTimeout(timerGiro);
+      timerGiro = setTimeout(()=>{ tGiro = Date.now(); if(pendGiro){ enviar("giro", pendGiro); pendGiro = null; } }, espera);
+    },
+    estado(e, escribiendo){
+      clearTimeout(timerEst);
+      timerEst = setTimeout(()=> enviar("estado", { e }), escribiendo ? 350 : 0);
+    },
+    cerrar(){
+      cerrado = true; clearInterval(intervaloOtros); clearTimeout(timerGiro); clearTimeout(timerEst);
+      [ch, chDb].forEach(c => { if(c){ try{ sb.removeChannel(c); } catch { /* ya cerrado */ } } });
+    },
+    modo: ()=> modo
+  };
 }

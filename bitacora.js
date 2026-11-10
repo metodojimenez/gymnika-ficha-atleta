@@ -166,7 +166,9 @@ function abrirSiluetaCampos(campos){
     titulo: a ? primerNombre(a.nombre) + " · ¿dónde le duele?" : "¿Dónde le duele?",
     zonas, maldita: atleta ? (state.maldita || {})[atleta] || null : null,
     onMaldita: atleta ? (nombre)=> guardarZonaMaldita(atleta, nombre) : null,
-    onListo: (zs)=> aplicarZonasSilueta(campos, zs)
+    onListo: (zs)=> aplicarZonasSilueta(campos, zs),
+    alCambiar: campos.closest(".mir-card") ? (zs)=>{ if(campos.isConnected) aplicarZonasSilueta(campos, zs); } : null,
+    compartir: campos.closest(".mir-card") && atleta ? { clave: campos.closest(".mir-card").dataset.reserva, atleta } : null
   });
 }
 async function guardarZonaMaldita(atleta, nombre){
@@ -1054,14 +1056,13 @@ function recibirBorrador(fila, inicial){
   const dlg = document.getElementById("modalMirador");
   const card = dlg ? [...dlg.querySelectorAll(".mir-card")].find(c => c.dataset.reserva === fila.clave) : null;
   const quien = propio ? "otro dispositivo tuyo" : primerNombre(fila.autor_nombre) || "otro coach";
-  if(card && card.contains(document.activeElement) && document.activeElement.matches("input, textarea, select")){
-    avisoVivo(card, `✎ ${quien} también está escribiendo aquí. Al soltar, verás sus cambios.`);
-    miradorUI.pendienteVivo = miradorUI.pendienteVivo || {};
-    miradorUI.pendienteVivo[fila.clave] = fila;
-    return;
-  }
   miradorUI.borradores[fila.clave] = fila.datos || {};
-  if(card){ aplicarBorrador(card, fila.datos || {}); if(!inicial) avisoVivo(card, `✎ Actualizado por ${quien}`); }
+  if(!card) return;
+  /* En vivo, campo por campo: lo que estás escribiendo no se toca; todo lo demás se actualiza al instante */
+  const activo = card.contains(document.activeElement) ? document.activeElement : null;
+  const diferidas = aplicarBorrador(card, fila.datos || {}, activo);
+  if(diferidas){ miradorUI.pendienteVivo = miradorUI.pendienteVivo || {}; miradorUI.pendienteVivo[fila.clave] = fila; }
+  if(!inicial) avisoVivo(card, `✎ ${quien} está editando esta tarjeta`);
 }
 function avisoVivo(card, texto){
   const el = card.querySelector(".mir-vivo");
@@ -1069,25 +1070,46 @@ function avisoVivo(card, texto){
   el.textContent = texto; el.hidden = false;
   clearTimeout(el._t); el._t = setTimeout(()=>{ el.hidden = true; }, 5000);
 }
-/* Pone en la tarjeta lo que escribió otro coach, sin tocar las fotos que se están eligiendo */
-function aplicarBorrador(card, d){
+/* Pone en la tarjeta lo que escribió otro coach, sin tocar las fotos ni el campo que tienes abierto.
+   Devuelve true si las zonas quedaron pendientes (las estabas editando y cambió su cantidad). */
+function aplicarBorrador(card, d, activo){
   const pre = card.dataset.pre, campos = card.querySelector(".bit-campos");
-  if(!campos) return;
-  BIT_CAMPOS.forEach(([c]) => { const t = campos.querySelector(`[data-campo="${c}"]`); if(t) t.value = d[c] || ""; });
-  campos.querySelectorAll(`input[name="${pre}estiramientos"]`).forEach(i => { i.checked = (i.value === "si" && d.estiramientos === true) || (i.value === "no" && d.estiramientos === false); });
+  if(!campos) return false;
+  BIT_CAMPOS.forEach(([c]) => { const t = campos.querySelector(`[data-campo="${c}"]`); if(t && t !== activo) t.value = d[c] || ""; });
+  const est = campos.querySelectorAll(`input[name="${pre}estiramientos"]`);
+  if(![...est].includes(activo)) est.forEach(i => { i.checked = (i.value === "si" && d.estiramientos === true) || (i.value === "no" && d.estiramientos === false); });
   const zs = zonasDe(d).length ? zonasDe(d) : [{}];
-  campos.querySelector('[data-lista="llegada"] .zonas-lista').innerHTML = zs.map((z, k) => zonaLlegadaHTML(pre, k, z)).join("");
-  campos.querySelector('[data-lista="salida"] .zonas-lista').innerHTML = zs.map((z, k) => zonaSalidaHTML(pre, k, z)).join("");
-  campos.dataset.zn = zs.length;
+  const lleg = campos.querySelector('[data-lista="llegada"] .zonas-lista'), sal = campos.querySelector('[data-lista="salida"] .zonas-lista');
+  const filas = [...lleg.querySelectorAll(".zona-row")];
+  const enZonas = activo && (lleg.contains(activo) || sal.contains(activo));
+  if(!enZonas){
+    lleg.innerHTML = zs.map((z, k) => zonaLlegadaHTML(pre, k, z)).join("");
+    sal.innerHTML = zs.map((z, k) => zonaSalidaHTML(pre, k, z)).join("");
+    campos.dataset.zn = zs.length;
+    return false;
+  }
+  if(filas.length !== zs.length) return true;
+  /* Misma cantidad de zonas: se actualiza cada una en su lugar, salvo lo que tienes abierto */
+  filas.forEach((row, i) => {
+    const z = zs[i] || {}, k = row.dataset.z;
+    const sel = row.querySelector("[data-zona-sel]"), otra = row.querySelector("[data-zona-otra]"), nota = row.querySelector("[data-zona-nota]");
+    const conocida = !z.zona || ZONAS_DOLOR.includes(z.zona);
+    if(sel !== activo){ sel.value = z.zona ? (conocida ? z.zona : "__otra") : ""; }
+    if(otra !== activo){ otra.value = z.zona && !conocida ? z.zona : ""; otra.hidden = conocida; }
+    if(nota && nota !== activo) nota.value = z.nota || "";
+    const marcar = (nombre, v)=>{ const rs = campos.querySelectorAll(`input[name="${pre}${nombre}${k}"]`); if(![...rs].includes(activo)) rs.forEach(r => { r.checked = hayValor(v) && Number(r.value) === Number(v); }); };
+    marcar("zi", z.inicio); marcar("zs", z.salida);
+    const nom = sal.querySelector(`.zona-row[data-z="${k}"] .zona-nombre`); if(nom) nom.textContent = nombreZona(z);
+  });
+  return false;
 }
-/* Al salir de un campo, si llegó un cambio de otro coach mientras se escribía, se aplica */
+/* Al salir de un campo, si quedó algo pendiente de otro coach, se aplica */
 document.addEventListener("focusout", (e)=>{
   const card = e.target.closest && e.target.closest(".mir-card");
   if(!card || !miradorUI.pendienteVivo) return;
   const fila = miradorUI.pendienteVivo[card.dataset.reserva];
   if(!fila) return;
   setTimeout(()=>{
-    if(card.contains(document.activeElement)) return;
     delete miradorUI.pendienteVivo[card.dataset.reserva];
     recibirBorrador(fila);
   }, 150);
