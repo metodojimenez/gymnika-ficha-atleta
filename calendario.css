@@ -1108,5 +1108,10 @@ button.wk-cap:focus-visible{ outline:2px solid var(--accent); outline-offset:1px
 .cred-actual{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 12px; margin:6px 0 8px; border-radius:12px; background:var(--danger-bg); border:1px solid var(--danger-line); }
 .cred-actual p{ margin:0; flex:1 1 200px; }
 .cred-actual .num{ color:var(--danger); font-size:18px; }
-.cred-form select{ flex:0 0 auto; width:auto; }
-.cred-form input{ flex:1 1 180px; min-width:0; }
+.cred-tit{ margin:0 0 4px; font-weight:700; }
+.cred-form{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px 10px; margin-top:4px; }
+.cred-campo{ display:grid; gap:2px; flex:0 0 auto; }
+.cred-campo label{ margin:0; font-size:14px; }
+.cred-campo.cred-motivo{ flex:1 1 220px; min-width:0; }
+.credito-adj .cred-form select{ flex:none; width:auto; min-width:150px; }
+.cred-form .btn-outline{ margin-top:0; }

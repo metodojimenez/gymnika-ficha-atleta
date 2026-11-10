@@ -198,14 +198,16 @@ function creditoControlHTML(profile, plan, rs){
   const actual = profile.credito_sesiones || 0;
   const ult = (plan.creditoHist || []).find(h => h.credito_nuevo === actual && h.credito_nuevo > 0);
   return `<div class="credito-adj">
-      <label for="credSel">Tokens a crédito (negativos)</label>
+      <p class="cred-tit">Tokens a crédito (negativos)</p>
       ${actual ? `<div class="cred-actual">
         <p><strong class="num">−${actual}</strong> a crédito · ${rs.puede ? `puede agendar ${rs.puede} más` : "ya los agendó todos"}${ult ? `<br><span class="muted">Motivo: <strong>${esc(ult.motivo || "")}</strong> · ${esc(nombreAutor(ult.creado_por))}, ${fmtFecha(String(ult.created_at).slice(0, 10))}</span>` : ""}</p>
         <button type="button" class="btn-primary sm" id="btnRegCredito">Registrar pago</button>
       </div>` : ""}
-      <div class="inline-add cred-form">
-        <select id="credSel" aria-label="Tokens a crédito">${Array.from({ length: 9 }, (_, i) => `<option value="${i}" ${i === actual ? "selected" : ""}>${i === 0 ? "Sin crédito" : "−" + i + (i === 1 ? " sesión" : " sesiones")}</option>`).join("")}</select>
-        <input id="credMotivo" placeholder="Motivo (obligatorio) · solo lo ve el equipo" aria-label="Motivo del crédito (obligatorio, solo lo ve el equipo)" maxlength="200">
+      <div class="cred-form">
+        <div class="cred-campo"><label for="credSel">Cantidad</label>
+          <select id="credSel">${Array.from({ length: 9 }, (_, i) => `<option value="${i}" ${i === actual ? "selected" : ""}>${i === 0 ? "Sin crédito" : "−" + i + (i === 1 ? " sesión" : " sesiones")}</option>`).join("")}</select></div>
+        <div class="cred-campo cred-motivo"><label for="credMotivo">Motivo <span class="req" aria-hidden="true">*</span> <span class="muted">· solo lo ve el equipo</span></label>
+          <input id="credMotivo" placeholder="Ej: paga el viernes por Yape" maxlength="200" required></div>
         <button type="button" class="btn-outline" id="btnCredito">${actual ? "Cambiar" : "Asignar"}</button>
       </div>
       <p class="muted">Se ven como −N en sus disponibles y puede agendarlas normal. Siguen en negativo hasta que registres su pago.</p>
