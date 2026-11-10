@@ -109,7 +109,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${reloj}
     ${estirar}
     ${consejoCoach}
-    ${panelHTML("tipCard", esc(tip.titulo), 12, { cls: "coach-voice consejo-dia", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
+    ${consejoVinetaHTML(tip)}
     ${familia}`,
       reservar: `
     ${panelHTML("reservarCard", "Reservar sesión", 8, { note: "Cada reserva usa 1 sesión" })}
@@ -132,7 +132,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("reservarCard", "Reservar horario", 8, { note: "Obligatorio para entrar" })}
     ${panelHTML("misReservasCard", esHijo ? "Sus horarios" : "Mis horarios", 4)}`,
       progreso: `
-    ${panelHTML("tipCard", esc(tip.titulo), 12, { cls: "coach-voice consejo-dia", eyebrow: "Consejo del día", body: `<p class="coach-quote">${esc(tip.texto)}</p>` })}
+    ${consejoVinetaHTML(tip)}
     ${macroHTML}
     ${resumenHTML}
     ${panelHTML("fuerzaCard", "Progresión de fuerza", 8, { note: "Carga el coach" })}
@@ -1366,10 +1366,71 @@ function pintarEstiramientosAlumno(box, lista, uid, nota, reps){
     }); });
   };
   pintar(null);
+  avisoEstiroAyer(uid, ()=>{ if(box.isConnected){ pintar(true); renderDisciplina(uid); } });
   sb.from("bienestar_diario").select("estiro").eq("user_id", uid).eq("fecha", todayStr()).maybeSingle()
     .then(({ data })=>{ if(box.isConnected && data && data.estiro !== null && data.estiro !== undefined) pintar(data.estiro); }, ()=>{});
   renderDisciplina(uid);
 }
+/* Consejo del día en viñeta de cómic: lo dice MarianI.A. (marianIA.js) */
+function consejoVinetaHTML(tip){
+  return `
+    <section class="panel span-12 vineta-consejo" aria-labelledby="h_tipCard">
+      <span class="vineta-rotulo">Consejo del día</span>
+      <div class="vineta-av" aria-hidden="true">${avatarMarianIA("feliz", { fondo: false, recorte: false })}</div>
+      <div class="globo-comic vineta-globo" id="tipCard">
+        <span class="chat-quien">MarianI.A. dice</span>
+        <h2 id="h_tipCard">${esc(tip.titulo)}</h2>
+        <p>${esc(tip.texto)}</p>
+      </div>
+    </section>`;
+}
+
+/* Si ayer no marcó «Sí, la hice», al día siguiente MarianI.A. aparece molesto, una sola vez por día.
+   No sale el primer día de la cuenta ni cuando ya hay otra ventana abierta. */
+let avisoEstiroVisto = "";
+async function avisoEstiroAyer(uid, alHacerla){
+  const hoy = todayStr();
+  if(uid !== state.profile.id || esEquipo() || avisoEstiroVisto === hoy) return;
+  const clave = "gymEstiroAviso:" + uid;
+  try{ if(localStorage.getItem(clave) === hoy) return; } catch { /* sin almacenamiento */ }
+  const ayer = fechaISO(sumarDias(parseFecha(hoy), -1));
+  const creado = state.profile.created_at ? new Date(state.profile.created_at).toLocaleDateString("en-CA", { timeZone: "America/Lima" }) : "";
+  if(!creado || creado >= ayer) return;
+  const { data, error } = await sb.from("bienestar_diario").select("estiro").eq("user_id", uid).eq("fecha", ayer).maybeSingle();
+  if(error || (data && data.estiro === true)) return;
+  if(document.querySelector("dialog[open], .overlay") || avisoEstiroVisto === hoy) return;
+  avisoEstiroVisto = hoy;
+  try{ localStorage.setItem(clave, hoy); } catch { /* sin almacenamiento */ }
+  const d = await datosDisciplina(uid);
+  const dlg = document.createElement("dialog");
+  dlg.className = "aviso-estiro";
+  dlg.setAttribute("aria-labelledby", "avEstT");
+  dlg.innerHTML = `
+    <span class="aviso-grito" aria-hidden="true">¡OYE!</span>
+    <div class="aviso-cara">${avatarMarianIA("molesto")}</div>
+    <div class="globo-comic aviso-globo"><span class="chat-quien">MarianI.A.</span>
+      <h2 id="avEstT">Ayer no estiraste.</h2>
+      <p>No estás estirando todos los días. Son 5 minutos y te ahorran dolor.</p></div>
+    ${d.total > 0 ? `<p class="aviso-datos">Este mes: ${plural(d.dias, "día", "días")} de ${d.total} · ${d.pct}%</p>` : ""}
+    <div class="aviso-btns">
+      <button type="button" class="btn-primary" data-av="hice">Ya la hice hoy</button>
+      <button type="button" class="btn-outline" data-av="ok">Entendido</button>
+    </div>
+    <p class="aviso-msg" aria-live="polite"></p>`;
+  document.body.appendChild(dlg);
+  const cerrar = ()=>{ if(dlg.open) dlg.close(); dlg.remove(); };
+  dlg.addEventListener("cancel", (e)=>{ e.preventDefault(); cerrar(); });
+  dlg.querySelector("[data-av='ok']").onclick = cerrar;
+  const bh = dlg.querySelector("[data-av='hice']");
+  bh.onclick = ()=> withBusy(bh, "…", async ()=>{
+    const { error: e2 } = await sb.from("bienestar_diario").upsert({ user_id: uid, fecha: hoy, estiro: true }, { onConflict: "user_id,fecha" });
+    if(e2){ showError(dlg.querySelector(".aviso-msg"), e2); return; }
+    cerrar();
+    if(alHacerla) alHacerla();
+  });
+  try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
+}
+
 /* Rueda de disciplina: % de días del mes en que estiró, contando solo los días que van del mes.
    Hoy cuenta si ya la marcó; si todavía no, el día no le baja el porcentaje. */
 async function datosDisciplina(uid){

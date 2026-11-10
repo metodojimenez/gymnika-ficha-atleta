@@ -1227,6 +1227,14 @@ button.wk-cap:focus-visible{ outline:2px solid var(--accent); outline-offset:1px
 .chat-badge{ min-width:22px; height:22px; padding:0 6px; border-radius:999px; background:#D2553F; color:#fff; font-size:12.5px; font-weight:800; display:inline-grid; place-items:center; font-variant-numeric:tabular-nums; }
 .chat-fab .chat-badge{ position:absolute; top:-4px; right:-4px; border:2px solid var(--surface); }
 @media (max-width: 899px){ body.con-tabs .chat-fab{ bottom:calc(86px + env(safe-area-inset-bottom)); } .chat-fab-t{ display:none; } .chat-fab{ padding:14px; } }
+/* Botón de chat con la cara de MarianI.A. */
+.chat-fab:has(.chat-fab-av){ padding:3px; width:64px; height:64px; justify-content:center; }
+.chat-fab-av{ width:58px; height:58px; display:block; border-radius:50%; overflow:hidden; }
+.chat-fab-av svg{ width:100%; height:100%; display:block; }
+.chat-fab-dice{ position:absolute; right:74px; top:14px; white-space:nowrap; pointer-events:none; background:#fff; color:#1E1A1C; border:2.5px solid #1E1A1C; border-radius:14px;
+  padding:2px 10px; font:400 16px/1.3 var(--font-comic); letter-spacing:.05em; box-shadow:2px 2px 0 #1E1A1C; }
+.chat-fab-dice::after{ content:""; position:absolute; right:-10px; top:9px; border:6px solid transparent; border-left:8px solid #1E1A1C; }
+@media (max-width: 899px){ .chat-fab:has(.chat-fab-av){ padding:3px; } .chat-fab-dice{ display:none; } }
 body:has(.instalar) .chat-fab{ display:none; }
 .chat-dialog{ width:min(460px, calc(100vw - 16px)); height:min(680px, calc(100dvh - 16px)); max-width:none; max-height:none; padding:0; border:0; border-radius:18px; margin:auto;
   background:var(--surface); color:var(--ink); box-shadow:0 24px 60px rgba(30,20,25,.3); display:flex; flex-direction:column; overflow:hidden; }
@@ -1284,3 +1292,53 @@ body:has(.instalar) .chat-fab{ display:none; }
 /* Acceso de bienvenida (7 días) por regularizar */
 .bienvenida-acc{ margin-top:10px; }
 .plan-unit.bienvenida-txt{ display:block; flex-basis:100%; margin-top:6px; font-size:14px; color:var(--ink-soft); }
+
+
+/* ---------- MarianI.A.: globos de cómic ---------- */
+:root{ --font-comic:'Bangers', 'Impact', 'Arial Black', sans-serif; --comic-ink:#1E1A1C; }
+.globo-comic{ position:relative; background:#FFFFFF; color:#2B2326; border:2.5px solid var(--comic-ink); border-radius:18px; box-shadow:3px 3px 0 var(--comic-ink); }
+.globo-comic .chat-quien{ font:400 14px/1.2 var(--font-comic); letter-spacing:.07em; color:var(--accent); }
+/* Chat: la respuesta la dice el avatar */
+.chat-habla{ align-self:flex-start; display:flex; align-items:flex-end; gap:8px; max-width:90%; }
+.chat-av{ width:44px; height:44px; flex:none; border-radius:50%; overflow:hidden; }
+.chat-av svg, .chat-top-av svg{ width:100%; height:100%; display:block; }
+.chat-habla .chat-msg.globo-comic{ max-width:none; border-radius:18px; padding:8px 12px 6px; background:#FFFFFF; border-color:var(--comic-ink); }
+.chat-habla .globo-comic::before{ content:""; position:absolute; left:-11px; bottom:12px; border:7px solid transparent; border-right:9px solid var(--comic-ink); border-left:0; }
+.chat-habla .globo-comic::after{ content:""; position:absolute; left:-6px; bottom:14px; border:5px solid transparent; border-right:6px solid #FFFFFF; border-left:0; }
+.chat-habla:last-child .chat-av{ animation:mia-habla .5s ease-in-out 3; transform-origin:50% 100%; }
+@keyframes mia-habla{ 50%{ transform:rotate(-5deg) scale(1.05); } }
+.chat-top-av{ width:44px; height:44px; flex:none; border-radius:50%; overflow:hidden; }
+/* Consejo del día en viñeta */
+.panel.vineta-consejo{ position:relative; overflow:hidden; display:grid; grid-template-columns:minmax(96px, 150px) 1fr; align-items:end; gap:6px; padding:20px 18px 0;
+  border:2.5px solid var(--comic-ink); box-shadow:4px 4px 0 var(--comic-ink);
+  background:radial-gradient(circle, rgba(14,124,134,.16) 1.4px, transparent 1.7px) 0 0 / 10px 10px, #F3EBDD; }
+.vineta-rotulo{ position:absolute; top:0; left:0; z-index:1; background:#D9A21B; color:var(--comic-ink); font:400 16px/1.3 var(--font-comic); letter-spacing:.08em;
+  padding:3px 12px 2px; border-right:2.5px solid var(--comic-ink); border-bottom:2.5px solid var(--comic-ink); border-bottom-right-radius:10px; }
+.vineta-av svg{ width:100%; height:auto; display:block; margin-bottom:-6px; }
+.vineta-globo{ margin:18px 0 18px 10px; padding:12px 16px; border-radius:24px; }
+.vineta-globo::before{ content:""; position:absolute; left:-15px; top:48%; border:9px solid transparent; border-right:14px solid var(--comic-ink); border-left:0; }
+.vineta-globo::after{ content:""; position:absolute; left:-9px; top:calc(48% + 3px); border:6px solid transparent; border-right:10px solid #FFFFFF; border-left:0; }
+.vineta-globo h2{ font-size:clamp(17px, 2.2vw, 21px); line-height:1.2; margin:2px 0 4px; color:#2B2326; }
+.vineta-globo p{ margin:0; font-size:15.5px; line-height:1.5; color:#3B3236; max-width:62ch; white-space:pre-line; }
+@media (max-width: 520px){ .panel.vineta-consejo{ grid-template-columns:88px 1fr; padding:22px 12px 0; } .vineta-globo{ margin-left:6px; padding:10px 12px; } }
+/* Aviso: ayer no estiraste */
+.aviso-estiro{ width:min(380px, calc(100vw - 32px)); border:2.5px solid var(--comic-ink); border-radius:22px; box-shadow:6px 6px 0 var(--comic-ink); padding:16px 16px 18px;
+  background:var(--surface); color:var(--ink); text-align:center; overflow:visible; }
+.aviso-estiro[open]{ display:grid; justify-items:center; gap:4px; animation:aviso-entra .6s cubic-bezier(.2,.9,.3,1.3) both; }
+.aviso-estiro::backdrop{ background:rgba(20,16,18,.55); }
+.aviso-grito{ font:400 44px/1 var(--font-comic); letter-spacing:.04em; color:#C2321F; -webkit-text-stroke:1.2px var(--comic-ink); text-shadow:2px 2px 0 var(--comic-ink); transform:rotate(-4deg); }
+.aviso-cara{ width:160px; }
+.aviso-cara svg{ width:100%; height:auto; display:block; }
+.aviso-estiro[open] .aviso-cara{ animation:aviso-sacude .5s ease-in-out .55s 2; }
+.aviso-globo{ margin-top:-6px; padding:10px 14px; text-align:left; }
+.aviso-globo::before{ content:""; position:absolute; left:30px; top:-14px; border:7px solid transparent; border-bottom:13px solid var(--comic-ink); border-top:0; }
+.aviso-globo::after{ content:""; position:absolute; left:33px; top:-8px; border:4px solid transparent; border-bottom:9px solid #FFFFFF; border-top:0; }
+.aviso-globo h2{ font-size:19px; margin:2px 0; color:#2B2326; }
+.aviso-globo p{ margin:0; font-size:15.5px; color:#3B3236; }
+.aviso-datos{ margin:6px 0 0; font-size:13.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; }
+.aviso-btns{ display:flex; gap:8px; width:100%; margin-top:10px; }
+.aviso-btns button{ flex:1; }
+.aviso-msg{ margin:0; font-size:14px; }
+@keyframes aviso-entra{ from{ transform:translateY(40px) scale(.85); opacity:0; } }
+@keyframes aviso-sacude{ 25%{ transform:rotate(-4deg); } 75%{ transform:rotate(4deg); } }
+@media (prefers-reduced-motion: reduce){ .aviso-estiro[open], .aviso-estiro[open] .aviso-cara, .chat-habla:last-child .chat-av{ animation:none; } }

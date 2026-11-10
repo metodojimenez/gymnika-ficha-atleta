@@ -1650,7 +1650,7 @@ if(esIOS()) setTimeout(()=> mostrarInstalar("ios"), 1500);
    En el teléfono la app puede quedar abierta días sin recargarse. Al volver a ella revisa si se publicó
    una versión nueva (cambia el ?v= de los archivos) y se actualiza sola; si la persona está escribiendo,
    muestra un aviso con el botón "Actualizar". También renueva la lista de atletas del equipo. */
-const firmaVersion = (html)=> (String(html).match(/\b(?:app|ficha|planes|rutinas|coach|bitacora|entrenos|silueta|chat|estilos|calendario)\.(?:js|css)\?v=\d+/g) || []).sort().join("|");
+const firmaVersion = (html)=> (String(html).match(/\b(?:app|ficha|planes|rutinas|coach|bitacora|entrenos|silueta|chat|marianIA|estilos|calendario)\.(?:js|css)\?v=\d+/g) || []).sort().join("|");
 const VERSION_CARGADA = firmaVersion(document.head ? document.head.innerHTML : "");
 const versionUI = { revisada: 0, aside: Date.now() };
 function appOcupada(){

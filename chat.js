@@ -1,8 +1,8 @@
 /* ====================== CHAT CON GYMNIKA ======================
    Cada atleta tiene una conversación con Gymnika; la responde cualquier master coach.
+   El atleta ve las respuestas del equipo dichas por MarianI.A., el avatar de Gymnika (marianIA.js).
    Los mensajes llegan en vivo (Supabase Realtime) y avisan por la campanita y notificación push. */
 const chatUI = { canal: null, abiertoDe: null, sinLeer: 0, lista: [], tLista: null };
-const ICONO_CHAT = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1 1 21 12Z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01"/></svg>`;
 function chatRouteId(){
   const m = location.hash.match(/^#\/chat\/([^/?#]+)/);
   return m ? decodeURIComponent(m[1]) : null;
@@ -21,12 +21,16 @@ function burbujasChatHTML(msgs, atletaId){
   return msgs.map(m => {
     const mio = m.autor_id === yo;
     const deEquipo = m.autor_id !== atletaId;
+    const habla = !mio && !esEquipo() && deEquipo;   // respuesta del equipo vista por el atleta: la dice MarianI.A.
     const quien = mio ? "" : esEquipo()
       ? (deEquipo ? nombreAutor(m.autor_id) : primerNombre(((state.athleteList || []).find(a => a.id === atletaId) || {}).nombre) || "Atleta")
-      : "Gymnika" + (nombreEquipoChat(m.autor_id) ? " · " + nombreEquipoChat(m.autor_id) : "");
+      : habla ? "MarianI.A." : (nombreEquipoChat(m.autor_id) || "Atleta");
     const d = new Date(m.created_at).toLocaleDateString("es-PE", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Lima" });
     const sep = d !== dia ? `<li class="chat-dia"><span>${esc(d)}</span></li>` : "";
     dia = d;
+    if(habla) return `${sep}<li class="chat-habla"><span class="chat-av">${avatarMarianIA("feliz")}</span>
+      <div class="chat-msg globo-comic"><span class="chat-quien">MarianI.A.</span>
+      <p>${esc(m.texto)}</p><span class="chat-hora">${esc(horaChat(m.created_at))}</span></div></li>`;
     return `${sep}<li class="chat-msg${mio ? " mio" : ""}${esEquipo() && deEquipo && !mio ? " equipo" : ""}">
       ${quien ? `<span class="chat-quien">${esc(quien)}</span>` : ""}
       <p>${esc(m.texto)}</p><span class="chat-hora">${esc(horaChat(m.created_at))}</span></li>`;
@@ -76,8 +80,8 @@ function iniciarChatAtleta(){
   if(!document.getElementById("chatFab")){
     const b = document.createElement("button");
     b.type = "button"; b.id = "chatFab"; b.className = "chat-fab";
-    b.setAttribute("aria-label", "Chat con Gymnika");
-    b.innerHTML = `${ICONO_CHAT}<span class="chat-fab-t">Chat</span><span class="chat-badge" hidden></span>`;
+    b.setAttribute("aria-label", "Chat con MarianI.A. de Gymnika");
+    b.innerHTML = `<span class="chat-fab-dice" aria-hidden="true">¿Dudas?</span><span class="chat-fab-av">${avatarMarianIA("feliz")}</span><span class="chat-badge" hidden></span>`;
     b.onclick = abrirChatAtleta;
     document.body.appendChild(b);
   }
@@ -100,7 +104,7 @@ function pintarBadgeAtleta(n){
   const b = document.querySelector("#chatFab .chat-badge");
   if(!b) return;
   b.hidden = !n; b.textContent = n > 9 ? "9+" : String(n);
-  document.getElementById("chatFab").setAttribute("aria-label", n ? `Chat con Gymnika: ${plural(n, "mensaje nuevo", "mensajes nuevos")}` : "Chat con Gymnika");
+  document.getElementById("chatFab").setAttribute("aria-label", n ? `Chat con MarianI.A. de Gymnika: ${plural(n, "mensaje nuevo", "mensajes nuevos")}` : "Chat con MarianI.A. de Gymnika");
 }
 async function abrirChatAtleta(){
   const yo = state.profile.id;
@@ -110,8 +114,8 @@ async function abrirChatAtleta(){
     dlg.id = "chatDialog"; dlg.className = "chat-dialog";
     dlg.setAttribute("aria-labelledby", "chatTit");
     dlg.innerHTML = `
-      <header class="chat-top"><img src="/icono-192.png" alt="" width="40" height="40">
-        <div><h2 id="chatTit">Gymnika</h2><p>Te responde un master coach</p></div>
+      <header class="chat-top"><span class="chat-top-av">${avatarMarianIA("feliz")}</span>
+        <div><h2 id="chatTit">MarianI.A.</h2><p>Te responde un master coach de Gymnika</p></div>
         <button type="button" class="icon-btn" data-chat-cerrar aria-label="Cerrar el chat">✕</button></header>
       <ol class="chat-lista" aria-live="polite"><li class="chat-vacio">Cargando…</li></ol>
       ${formChatHTML(yo)}`;
