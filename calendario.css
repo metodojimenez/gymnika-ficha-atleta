@@ -1017,3 +1017,15 @@ body.mirador-activo .rt-ficha{ bottom:76px; }
 .rt-sem-card .rt-hoy-acc{ padding:10px 14px 12px; }
 .rt-sem-card.vacia .rt-hoy-txt .muted:first-of-type{ font-style:italic; }
 @media (prefers-reduced-motion: reduce){ .rt-sem-flecha{ transition:none; } }
+
+/* Agregar al Mirador a mano */
+.mir-top .mir-agregar{ margin-left:auto; margin-right:6px; flex:none; }
+.mir-add-lista{ list-style:none; margin:10px 0 0; padding:0; display:grid; gap:6px; max-height:56vh; overflow-y:auto; }
+.mir-add-item{ width:100%; display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--line); border-radius:12px; background:var(--surface); text-align:left; font:inherit; color:inherit; cursor:pointer; min-height:52px; }
+.mir-add-item:hover{ border-color:var(--accent); background:var(--accent-tint); }
+.mir-add-item:disabled{ opacity:.6; cursor:progress; }
+.mir-add-item .avatar{ width:36px; height:36px; font-size:13px; flex:none; }
+.mir-add-txt{ flex:1; min-width:0; display:grid; }
+.mir-add-txt .muted{ font-size:13px; }
+.mir-add-mas{ flex:none; font-size:20px; font-weight:800; color:var(--accent); }
+.mir-acc [data-mir-quitar]{ margin-right:auto; }

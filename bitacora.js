@@ -10,7 +10,7 @@ const BIT_CAMPOS = [
   ["que_ocurrio", "¿Qué ocurrió?"],
   ["pendiente", "¿Pendiente para la próxima?"]
 ];
-const miradorUI = { turno: null, pend: [], vistos: new Set(), cargando: false, borradores: {}, hist: {} };
+const miradorUI = { turno: null, pend: [], vistos: new Set(), cargando: false, borradores: {}, hist: {}, manuales: [] };
 const bitUI = { filtro: "", q: "" };
 
 function routeBitacoraId(){
@@ -234,6 +234,7 @@ async function cargarTurno(){
   miradorUI.turno = (data || [])[0] || null;
   /* Si quedó abierto de otro día, la base lo cierra sola: aquí tampoco cuenta */
   if(miradorUI.turno && String(new Date(miradorUI.turno.inicio).toLocaleDateString("en-CA", { timeZone: "America/Lima" })) !== todayStr()) miradorUI.turno = null;
+  miradorUI.manuales = leerManuales();
   pintarTurno();
   if(miradorUI.turno) actualizarMirador();
 }
@@ -286,12 +287,14 @@ function pintarTurno(){
       <div class="turno-txt"><strong>En turno desde las ${esc(horaDe(t.inicio))}</strong>
         <span class="muted">Mirador activo · ${n ? plural(n, "persona presente sin bitácora", "personas presentes sin bitácora") : "nadie pendiente por ahora"}</span></div>
       <div class="turno-acc"><button type="button" class="btn-outline sm" data-abrir-mirador>Abrir Mirador${n ? ` (${n})` : ""}</button>
+        <button type="button" class="btn-outline sm" data-agregar-mirador>+ Agregar persona</button>
         <button type="button" class="btn-danger sm" data-fin-turno>Fin de turno</button></div>` : `
       <span class="turno-luz off" aria-hidden="true"></span>
       <div class="turno-txt"><strong>No has iniciado tu turno</strong>
         <span class="muted">Escanea el QR de recepción al llegar. Así se activa el Mirador con cada persona que llegue.</span></div>
       <div class="turno-acc"><button type="button" class="btn-primary sm" data-escanear-turno>Escanear QR · iniciar turno</button></div>`;
     bar.querySelector("[data-abrir-mirador]")?.addEventListener("click", ()=> abrirMirador());
+    bar.querySelector("[data-agregar-mirador]")?.addEventListener("click", ()=> abrirAgregarMirador());
     bar.querySelector("[data-fin-turno]")?.addEventListener("click", confirmarFinTurno);
     bar.querySelector("[data-escanear-turno]")?.addEventListener("click", ()=> abrirEscanerQR());
   }
@@ -317,7 +320,7 @@ async function actualizarMirador(){
   try{
     const { data, error } = await sb.rpc("mirador_pendientes");
     if(error){ console.error(error); return; }
-    const lista = data || [];
+    const lista = (data || []).concat(miradorUI.manuales.filter(m => !(data || []).some(x => x.reserva_id === m.reserva_id || (m.sinReserva && x.atleta_id === m.atleta_id))));
     await cargarReferencias(lista.map(p => p.atleta_id));
     const nuevos = lista.filter(p => !miradorUI.vistos.has(p.reserva_id));
     nuevos.forEach(p => miradorUI.vistos.add(p.reserva_id));
@@ -360,12 +363,12 @@ function tarjetaMiradorHTML(p){
   return `<article class="mir-card" data-reserva="${esc(p.reserva_id)}" data-pre="${pre}" aria-label="${esc(p.nombre || "Alumno")}">
     <header class="mir-head"><span class="avatar" aria-hidden="true">${esc(initials(p.nombre || ""))}</span>
       <div><h3>${esc(p.nombre || "Alumno")}</h3>
-        <p class="muted">${esc(cat)} · ${esc(horaDe(p.inicio))} · llegó ${esc(horaDe(p.checkin_at))}</p></div>
+        <p class="muted">${esc(cat)}${p.sinReserva ? ` · sin reserva · agregado a las ${esc(horaDe(p.checkin_at))}` : ` · ${esc(horaDe(p.inicio))} · llegó ${esc(horaDe(p.checkin_at))}`}</p></div>
       <a class="link-inline mir-hist" href="#/bitacora/${encodeURIComponent(p.atleta_id)}" data-ir-bitacora>Historial</a></header>
     ${tieneLesion(p.lesiones) ? `<p class="mir-lesion"><strong>Lesión:</strong> ${esc(p.lesiones)}</p>` : ""}
     ${referenciasHTML(miradorUI.hist[p.atleta_id])}
     ${camposBitacoraHTML(pre, miradorUI.borradores[p.reserva_id] || {})}
-    <div class="mir-acc"><span class="mir-msg" aria-live="polite"></span><button type="button" class="btn-primary" data-guardar-mir>Guardar</button></div>
+    <div class="mir-acc">${p.sinReserva ? `<button type="button" class="btn-link" data-mir-quitar>Quitar del Mirador</button>` : ""}<span class="mir-msg" aria-live="polite"></span><button type="button" class="btn-primary" data-guardar-mir>Guardar</button></div>
   </article>`;
 }
 function abrirMirador(irA){
@@ -376,6 +379,7 @@ function abrirMirador(irA){
     dlg.setAttribute("aria-labelledby", "mirTitulo");
     dlg.innerHTML = `
       <div class="mir-top"><div><p class="eyebrow">Mirador · en turno</p><h2 id="mirTitulo"></h2></div>
+        <button type="button" class="btn-outline sm mir-agregar" data-mir-agregar>+ Agregar</button>
         <button type="button" class="icon-btn" data-mir-cerrar aria-label="Cerrar el Mirador">✕</button></div>
       <div class="mir-horas" role="group" aria-label="Ver el turno por horas"></div>
       <div class="mir-hora" hidden aria-live="polite"></div>
@@ -394,6 +398,9 @@ function abrirMirador(irA){
       if(e.target.closest("[data-mir-cerrar]")){ cerrar(); return; }
       if(e.target.closest("[data-mir-fin]")){ cerrar(); confirmarFinTurno(); return; }
       if(e.target.closest("[data-ir-bitacora]")){ cerrar(); return; }
+      if(e.target.closest("[data-mir-agregar]")){ cerrar(); abrirAgregarMirador(); return; }
+      const qt = e.target.closest("[data-mir-quitar]");
+      if(qt){ quitarManual(dlg, qt.closest(".mir-card")); return; }
       if(e.target.closest("[data-mir-prev]")){ moverMirador(dlg, -1); return; }
       if(e.target.closest("[data-mir-next]")){ moverMirador(dlg, 1); return; }
       const p = e.target.closest(".mir-puntos button");
@@ -434,7 +441,7 @@ function sincronizarTarjetas(dlg){
   miradorUI.pend.forEach(p => { if(!hay.has(p.reserva_id)) track.insertAdjacentHTML("beforeend", tarjetaMiradorHTML(p)); });
   const vacio = track.querySelector(".mir-vacio");
   if(!miradorUI.pend.length && !track.querySelector(".mir-card")){
-    if(!vacio) track.insertAdjacentHTML("beforeend", `<div class="mir-vacio"><p class="empty-title">Nadie pendiente</p><p class="muted">Cuando alguien escanee el QR al llegar, aparecerá aquí.</p></div>`);
+    if(!vacio) track.insertAdjacentHTML("beforeend", `<div class="mir-vacio"><p class="empty-title">Nadie pendiente</p><p class="muted">Cuando alguien escanee el QR al llegar, aparecerá aquí. Si no lo escaneó, agrégalo con «+ Agregar».</p></div>`);
   } else if(vacio) vacio.remove();
   marcarPosicion(dlg);
 }
@@ -476,7 +483,7 @@ async function guardarTarjeta(dlg, card, btn){
   if(!p) return;
   const msg = card.querySelector(".mir-msg");
   await withBusy(btn, "Guardando…", async ()=>{
-    const { data: nueva, error } = await sb.from("bitacora").insert({ atleta_id: p.atleta_id, reserva_id: reserva, ...leerCampos(card, card.dataset.pre) }).select("id").single();
+    const { data: nueva, error } = await sb.from("bitacora").insert({ atleta_id: p.atleta_id, reserva_id: p.sinReserva ? null : reserva, ...leerCampos(card, card.dataset.pre) }).select("id").single();
     if(error && !/23505|duplicate|unique/i.test((error.code || "") + " " + (error.message || ""))){ msg.textContent = errorES(error); return; }
     if(error) msg.textContent = "Otro coach ya guardó la bitácora de esta sesión.";
     let fallas = 0;
@@ -485,6 +492,7 @@ async function guardarTarjeta(dlg, card, btn){
     if(fallas) msg.textContent = `Se guardó, pero ${plural(fallas, "foto no se subió", "fotos no se subieron")}. Agrégalas desde la Bitácora.`;
     delete miradorUI.borradores[reserva];
     delete miradorUI.hist[p.atleta_id];
+    if(miradorUI.manuales.some(m => m.reserva_id === reserva)){ miradorUI.manuales = miradorUI.manuales.filter(m => m.reserva_id !== reserva); guardarManuales(); }
     miradorUI.pend = miradorUI.pend.filter(x => x.reserva_id !== reserva);
     const i = tarjetas(dlg).indexOf(card);
     card.classList.add("saliendo");
@@ -804,4 +812,110 @@ async function completarDesdeHora(dlg, reservaId){
   sincronizarTarjetas(dlg);
   const i = tarjetas(dlg).findIndex(c => c.dataset.reserva === reservaId);
   if(i >= 0) requestAnimationFrame(()=> irATarjeta(dlg, i, "instant"));
+}
+
+/* ---------- Agregar personas al Mirador a mano (no escanearon el QR) ----------
+   Con reserva hoy: se marca su llegada y entra como si hubiera escaneado.
+   Sin reserva: tarjeta «sin reserva» que guarda la bitácora sin sesión; se recuerda en este navegador hasta guardarla. */
+function claveManuales(){ return miradorUI.turno ? "gymnika-mirador-manual-" + miradorUI.turno.id : ""; }
+function leerManuales(){
+  const k = claveManuales();
+  if(!k) return [];
+  try{ return JSON.parse(sessionStorage.getItem(k) || "[]") || []; } catch { return []; }
+}
+function guardarManuales(){
+  const k = claveManuales();
+  if(!k) return;
+  try{ sessionStorage.setItem(k, JSON.stringify(miradorUI.manuales)); } catch { /* sin almacenamiento: quedan solo en memoria */ }
+}
+function abrirAgregarMirador(){
+  if(!miradorUI.turno) return;
+  const area = areaCoach();
+  const alumnos = (state.athleteList || []).filter(a => !area || catsDe(a.categoria).includes(area))
+    .sort((x, y) => String(x.nombre || "").localeCompare(String(y.nombre || ""), "es"));
+  const d = openDialog("Agregar al Mirador", `
+    <p class="muted" style="margin-top:0">Para quien llegó y no escaneó el QR. Si tiene reserva hoy, se marca su llegada; si no, entra «sin reserva».</p>
+    <label class="sr-only" for="mirAddQ">Buscar por nombre</label>
+    <input type="search" id="mirAddQ" placeholder="Buscar por nombre" autocomplete="off">
+    <div id="mirAddMsg" aria-live="polite"></div>
+    <ul class="mir-add-lista" id="mirAddLista"></ul>`);
+  const lista = d.el.querySelector("#mirAddLista"), q = d.el.querySelector("#mirAddQ");
+  const pintar = ()=>{
+    const t = normalizar(q.value || "");
+    const vis = alumnos.filter(a => !t || normalizar(a.nombre || "").includes(t)).slice(0, 40);
+    lista.innerHTML = vis.length ? vis.map(a => {
+      const ya = miradorUI.pend.some(p => p.atleta_id === a.id);
+      return `<li><button type="button" class="mir-add-item" data-mir-add="${esc(a.id)}">
+        <span class="avatar" aria-hidden="true">${esc(initials(a.nombre || ""))}</span>
+        <span class="mir-add-txt"><strong>${esc(a.nombre || "(sin nombre)")}</strong><span class="muted">${esc((CATEGORIAS[a.categoria] || {}).nombre || "")}${ya ? " · ya está en el Mirador" : ""}</span></span>
+        <span class="mir-add-mas" aria-hidden="true">${ya ? "→" : "+"}</span></button></li>`;
+    }).join("") : `<li class="muted" style="padding:10px 4px">Nadie con ese nombre.</li>`;
+  };
+  pintar();
+  q.oninput = pintar;
+  setTimeout(()=> q.focus(), 30);
+  lista.onclick = (e)=>{
+    const b = e.target.closest("[data-mir-add]");
+    if(b) agregarAlMirador(alumnos.find(a => a.id === b.dataset.mirAdd), d, b);
+  };
+}
+async function agregarAlMirador(a, d, btn){
+  if(!a) return;
+  const msg = d.el.querySelector("#mirAddMsg");
+  const ya = miradorUI.pend.find(p => p.atleta_id === a.id);
+  if(ya){ d.close(); abrirMirador(ya.reserva_id); return; }
+  btn.disabled = true;
+  const listo = (id)=>{ d.close(); abrirMirador(id); };
+  try{
+    const { data: rs, error } = await sb.from("reservas").select("id, horario_id, inicio, estado, checkin_at")
+      .eq("user_id", a.id).eq("fecha", todayStr()).in("estado", ["confirmada", "asistio", "no_asistio"]).order("inicio");
+    if(error){ showError(msg, error); return; }
+    const ahora = Date.now();
+    const ids = (rs || []).map(r => r.id);
+    const { data: hechas } = ids.length ? await sb.from("bitacora").select("reserva_id").in("reserva_id", ids) : { data: [] };
+    const conBit = new Set((hechas || []).map(x => x.reserva_id));
+    /* La sesión de hoy más cercana a esta hora que todavía no tiene bitácora */
+    const libres = (rs || []).filter(r => !conBit.has(r.id)).sort((x, y) => Math.abs(new Date(x.inicio) - ahora) - Math.abs(new Date(y.inicio) - ahora));
+    if((rs || []).length && !libres.length){
+      showMsg(msg, "error", `${primerNombre(a.nombre) || "Esta persona"} ya tiene bitácora de ${rs.length === 1 ? "su sesión de las " + horaDe(rs[0].inicio) : "sus sesiones de hoy"}.`);
+      return;
+    }
+    const cand = libres[0];
+    if(cand){
+      if(cand.estado !== "asistio" || !cand.checkin_at){
+        const { error: e2 } = await sb.rpc("marcar_asistencia", { p_reserva: cand.id, p_asistio: true });
+        if(e2){ showError(msg, e2); return; }
+      }
+      miradorUI.vistos.add(cand.id);
+      miradorUI.cargando = false;
+      await actualizarMirador();
+      if(miradorUI.pend.some(p => p.reserva_id === cand.id)){ listo(cand.id); return; }
+      /* Su sesión terminó antes de tu turno: igual se agrega con su reserva */
+      const [h] = (await cargarHorarios()).filter(x => x.id === cand.horario_id);
+      const p = { reserva_id: cand.id, atleta_id: a.id, nombre: a.nombre, categoria: (h || {}).categoria || a.categoria, inicio: cand.inicio, checkin_at: cand.checkin_at || new Date().toISOString(), lesiones: a.lesiones };
+      miradorUI.manuales.push(p); guardarManuales();
+      miradorUI.pend.push(p);
+      listo(p.reserva_id);
+      return;
+    }
+    const ahoraISO = new Date().toISOString();
+    const p = { reserva_id: "manual-" + a.id, atleta_id: a.id, nombre: a.nombre, categoria: a.categoria === "transicion" ? "fortalecimiento" : a.categoria,
+      inicio: ahoraISO, checkin_at: ahoraISO, lesiones: a.lesiones, sinReserva: true };
+    miradorUI.manuales.push(p); guardarManuales();
+    miradorUI.vistos.add(p.reserva_id);
+    await cargarReferencias([a.id]);
+    miradorUI.pend.push(p);
+    pintarTurno();
+    listo(p.reserva_id);
+  } finally { btn.disabled = false; }
+}
+function quitarManual(dlg, card){
+  if(!card) return;
+  const id = card.dataset.reserva;
+  miradorUI.manuales = miradorUI.manuales.filter(m => m.reserva_id !== id); guardarManuales();
+  miradorUI.pend = miradorUI.pend.filter(p => p.reserva_id !== id);
+  delete miradorUI.borradores[id];
+  card.remove();
+  sincronizarTarjetas(dlg);
+  pintarTurno();
 }
