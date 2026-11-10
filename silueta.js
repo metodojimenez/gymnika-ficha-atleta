@@ -283,6 +283,15 @@ async function abrirSilueta(opts = {}){
   geo.computeBoundingSphere();
   const malla = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: .45, metalness: 0, clearcoat: .35, clearcoatRoughness: .4, side: THREE.DoubleSide }));
   cuerpo.add(malla);
+  /* Ojos (solo para saber dónde está el frente; no son una zona y no tapan el toque) */
+  const ojoMat = new THREE.MeshStandardMaterial({ color: new THREE.Color("#2B2326"), roughness: .3 });
+  const brilloMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  [-1, 1].forEach(sx => {
+    const ojo = new THREE.Mesh(new THREE.SphereGeometry(.055, 24, 16), ojoMat);
+    ojo.position.set(sx * .15, 3.9, .425); ojo.scale.set(1, 1.35, .45); cuerpo.add(ojo);
+    const br = new THREE.Mesh(new THREE.SphereGeometry(.014, 10, 8), brilloMat);
+    br.position.set(sx * .15 + .018, 3.93, .452); cuerpo.add(br);
+  });
   const sc = document.createElement("canvas"); sc.width = sc.height = 128;
   const c2 = sc.getContext("2d"); const gr = c2.createRadialGradient(64, 64, 4, 64, 64, 62); gr.addColorStop(0, "rgba(40,30,30,.32)"); gr.addColorStop(1, "rgba(40,30,30,0)");
   c2.fillStyle = gr; c2.fillRect(0, 0, 128, 128);
