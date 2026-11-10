@@ -1280,3 +1280,7 @@ body:has(.instalar) .chat-fab{ display:none; }
   .chat-panel:not(.con-conv) .chat-conv{ display:none; }
   .chat-volver{ display:inline-block; }
 }
+
+/* Acceso de bienvenida (7 días) por regularizar */
+.bienvenida-acc{ margin-top:10px; }
+.plan-unit.bienvenida-txt{ display:block; flex-basis:100%; margin-top:6px; font-size:14px; color:var(--ink-soft); }

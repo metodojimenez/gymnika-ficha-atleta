@@ -452,6 +452,7 @@ async function renderPlanAlumno(profile){
     } else if(est.vigente){
       const quedan = diasEntre(hoy, est.finTotal) + 1;
       estadoHTML = `<span class="plan-num plan-word">Activo</span><span class="plan-unit">hasta el ${fmtFecha(est.finTotal, true)} · ${plural(quedan, "día", "días")}</span>`;
+      if(est.vigente.provisional) estadoHTML += `<span class="plan-unit bienvenida-txt">Son tus 7 días de bienvenida. Para seguir después, compra tu plan o coordínalo en el centro.</span>`;
     } else if(est.futura){
       estadoHTML = `<span class="plan-num plan-word">Desde el ${fmtFecha(est.futura.inicio, false)}</span><span class="plan-unit">hasta el ${fmtFecha(est.finTotal, true)}</span>`;
     } else {

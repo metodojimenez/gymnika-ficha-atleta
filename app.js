@@ -1266,6 +1266,11 @@ async function cargarAlertas(){
   state.alertas = error ? [] : (data || []);
   return state.alertas;
 }
+/* Días que le quedan al acceso de bienvenida («vence hoy» / «3 días») */
+function diasBienvenidaTexto(fin){
+  const d = diasEntre(todayStr(), fin) + 1;
+  return d <= 1 ? "vence hoy" : `${d} días`;
+}
 /* Acceso vigente sin alerta: «Acceso noviembre» (mes en que termina; con año si no es este año) */
 function accesoOkTexto(uid){
   const est = (state.accesos || {})[uid];
@@ -1312,11 +1317,14 @@ async function refreshCoachAside(){
     sb.from("profiles").select("id,nombre,role").neq("role", "atleta"),
     sb.from("ficha_interna").select("user_id,color_riesgo,zona_maldita"),
     cargarAlertas(),
-    sb.from("membresias").select("user_id, inicio, fin").gte("fin", todayStr()),
+    sb.from("membresias").select("user_id, inicio, fin, provisional").gte("fin", todayStr()),
     sb.from("congelamientos").select("user_id, desde, hasta").gte("hasta", todayStr())
   ]);
   /* Acceso de fortalecimiento por alumno, para el aviso verde «Acceso <mes>» de la lista */
   state.accesos = {};
+  /* Acceso de bienvenida (7 días al registrarse en fortalecimiento) que un master aún no regulariza */
+  state.porRegularizar = {};
+  (mems || []).filter(m => m.provisional).forEach(m => { state.porRegularizar[m.user_id] = m.fin; });
   (athletes || []).filter(a => ["fortalecimiento", "transicion"].includes(a.categoria)).forEach(a => {
     const membresias = (mems || []).filter(m => m.user_id === a.id).sort((x, y) => y.fin.localeCompare(x.fin));
     if(membresias.length) state.accesos[a.id] = estadoMembresia({ membresias, congelamientos: (congs || []).filter(c => c.user_id === a.id) });
@@ -1416,7 +1424,9 @@ function renderAthleteListInto(list){
   box.innerHTML = list.map(a => {
     const flags = [];
     const alerta = (state.alertas || []).find(x => x.user_id === a.id);
-    if(alerta) flags.push(`<span class="flag alerta">${esc(alertaTexto(alerta))}</span>`);
+    const bienvenida = (state.porRegularizar || {})[a.id];
+    if(bienvenida && esMaster()) flags.push(`<span class="flag alerta">Por regularizar · ${esc(diasBienvenidaTexto(bienvenida))}</span>`);
+    else if(alerta) flags.push(`<span class="flag alerta">${esc(alertaTexto(alerta))}</span>`);
     else if(accesoOkTexto(a.id)) flags.push(`<span class="flag ok">${esc(accesoOkTexto(a.id))}</span>`);
     if(a.categoria && (!areaCoach() || a.categoria === "transicion")) flags.push(`<span class="flag cat-${a.categoria}">${CATEGORIAS[a.categoria].nombre}</span>`);
     if(tieneLesion(a.lesiones)) flags.push(`<span class="flag warn">Lesión</span>`);

@@ -19,6 +19,7 @@ function pintarAccesoChip(plan, cat, rs){
     }
     else if(est.futura){ txt = `Acceso desde el ${fmtFecha(est.futura.inicio)} · ${plural(diasEntre(est.futura.inicio, est.finTotal) + 1, "día", "días")}`; }
     else { txt = est.ultima ? `Acceso vencido el ${fmtFecha(est.ultima.fin)}` : "Sin acceso"; nivel = "fin"; }
+    if(plan.membresias.some(m => m.provisional)){ txt += " · por regularizar"; if(nivel === "ok") nivel = "poco"; }
   }
   chip.textContent = txt;
   chip.className = "chip acceso-chip acc-" + nivel;
@@ -104,6 +105,15 @@ async function renderPlanCoach(profile){
   const hoy = todayStr();
   /* Con acceso activo, congelado o programado no se ofrece «Habilitar acceso»: queda «Extender acceso» plegado */
   const conAcceso = !!(est.vigente || est.congelado || est.futura);
+  /* Acceso de bienvenida: 7 días automáticos al registrarse en fortalecimiento, hasta que un master lo regularice */
+  const bienvenida = plan.membresias.find(m => m.provisional);
+  const bienvenidaHTML = !bienvenida || !master ? "" : `
+    <div class="plan-alert warn bienvenida" role="status">
+      <strong>Acceso de bienvenida por regularizar.</strong> Al crear su cuenta recibió 7 días (del ${fmtFecha(bienvenida.inicio)} al ${fmtFecha(bienvenida.fin, true)}).
+      Cuando pague, extiende su acceso o aprueba su compra y queda regularizado. Si no va a seguir, quítale el acceso.
+      <div class="bienvenida-acc"><button type="button" class="btn-outline" id="btnRegularizar">Ya está regularizado</button></div>
+      <div id="regMsg" aria-live="polite"></div>
+    </div>`;
   /* Transición: además del acceso de fortalecimiento, las sesiones de terapia (y el color de riesgo para el horario de terapia) */
   const terHTML = cat !== "transicion" ? "" : `
     <div class="trans-ter-coach">
@@ -127,9 +137,9 @@ async function renderPlanCoach(profile){
         : est.futura ? `<span class="plan-num plan-word">Programado</span><span class="plan-unit">del ${fmtFecha(est.futura.inicio)} al ${fmtFecha(est.finTotal, true)}</span>`
         : `<span class="plan-num plan-word off">${est.ultima ? "Vencido" : "Sin acceso"}</span><span class="plan-unit">${est.ultima ? "venció el " + fmtFecha(est.ultima.fin, true) : ""}</span>`}
     </div></div>
-    ${alertaAccesoHTML(profile.id)}
+    ${bienvenidaHTML || alertaAccesoHTML(profile.id)}
     ${master ? `
-    ${conAcceso ? `<details class="acceso-ext"><summary>Extender acceso</summary>` : ""}
+    ${conAcceso ? `<details class="acceso-ext"${bienvenida ? " open" : ""}><summary>Extender acceso</summary>` : ""}
     <div class="acceso-adj">
       ${conAcceso ? `<p class="muted" style="margin-top:0">Suma días a partir de cuando termina el acceso actual.</p>` : `<p class="acceso-adj-t">Habilitar acceso${cat === "transicion" ? " a fortalecimiento" : ""}</p>`}
       <div class="inline-add">
@@ -157,9 +167,17 @@ async function renderPlanCoach(profile){
     if(!dias || dias < 1){ showMsg(msg, "error", "Escribe cuántos días de acceso."); return; }
     const { data, error } = await sb.rpc("asignar_acceso", { p_user: profile.id, p_desde: desde, p_dias: dias });
     if(error){ showError(msg, error); return; }
+    if(state.porRegularizar) delete state.porRegularizar[profile.id];
     await renderPlanCoach(profile);
     if(document.getElementById("reservarCard")){ state.plan = null; await renderReservasAlumno(profile); }
     showMsg(document.getElementById("accOk"), "ok", `Acceso habilitado hasta el ${fmtFecha(data, true)}. Ya puede escoger su horario.`);
+  });
+  const breg = document.getElementById("btnRegularizar");
+  if(breg) breg.onclick = ()=> withBusy(breg, "…", async ()=>{
+    const { error } = await sb.rpc("regularizar_acceso", { p_user: profile.id });
+    if(error){ showError(document.getElementById("regMsg"), error); return; }
+    if(state.porRegularizar) delete state.porRegularizar[profile.id];
+    await renderPlanCoach(profile);
   });
   const bq = document.getElementById("btnQuitarAcceso");
   if(bq) bq.onclick = ()=> abrirQuitarAcceso(profile, plan);
