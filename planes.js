@@ -143,12 +143,15 @@ function calcIMC(profile, medidas){
 }
 
 /* ====================== ALUMNO: MI PLAN ====================== */
-/* El motivo de un ajuste o congelamiento vive en notas_privadas: solo el equipo puede leerlo */
+/* El motivo de un ajuste, congelamiento o crédito vive en tablas que solo puede leer el equipo */
 async function adjuntarNotasPrivadas(uid, plan){
   if(!esEquipo()) return plan;
-  const { data } = await sb.from("notas_privadas").select("ref_tabla, ref_id, nota").eq("user_id", uid);
+  const [{ data }, { data: hist }] = await Promise.all([
+    sb.from("notas_privadas").select("ref_tabla, ref_id, nota").eq("user_id", uid),
+    sb.from("creditos_historial").select("*").eq("user_id", uid).order("created_at", { ascending: false }).limit(10)
+  ]);
+  plan.creditoHist = hist || [];
   const notas = new Map((data || []).map(n => [n.ref_tabla + ":" + n.ref_id, n.nota]));
-  if(!notas.size) return plan;
   (plan.movs || []).forEach(m => { const n = notas.get("tokens_movimientos:" + m.id); if(n) m.nota = n; });
   (plan.congelamientos || []).forEach(c => { const n = notas.get("congelamientos:" + c.id); if(n) c.motivo = n; });
   return plan;
@@ -336,31 +339,34 @@ function resumenSesiones(plan, cat){
   /* Crédito (lo da un master, hasta 8): puede reservar sin saldo y lo usado queda como deuda */
   const credito = plan.credito || 0, deuda = Math.max(0, -saldo);
   const aCredito = Math.max(0, Math.min(credito, saldo + credito));
-  return { disponibles, agendadas, consumidas, total: disponibles + agendadas.length, saldo, credito, deuda, aCredito };
+  /* Con crédito asignado, «Disponibles» muestra −crédito aunque aún no lo use: sigue en negativo hasta que un master registre el pago */
+  const debe = credito > 0 ? Math.max(credito, deuda) : deuda;
+  const puede = Math.max(0, saldo + credito);
+  return { disponibles, agendadas, consumidas, total: (credito > 0 ? puede : disponibles) + agendadas.length, saldo, credito, deuda, aCredito, debe, puede };
 }
 function creditoHTML(rs, propio){
-  if(!rs.credito && !rs.deuda) return "";
+  if(!rs.debe) return "";
   const s = (n, a, b)=> n === 1 ? a : b;
-  const txt = rs.deuda
-    ? (propio ? `<strong>Debes ${rs.deuda} ${s(rs.deuda, "sesión", "sesiones")} a crédito.</strong> ${rs.aCredito ? `Puedes reservar ${rs.aCredito} más a crédito.` : "Ya usaste todo tu crédito."} Regulariza tu pago con el centro.`
-              : `<strong>Debe ${rs.deuda} ${s(rs.deuda, "sesión", "sesiones")} a crédito.</strong> ${rs.aCredito ? `Puede reservar ${rs.aCredito} más a crédito.` : "Ya usó todo su crédito."}`)
-    : (propio ? `Tienes crédito: puedes reservar hasta <strong>${rs.credito} ${s(rs.credito, "sesión", "sesiones")}</strong> aunque no tengas saldo, y luego regularizas el pago.`
-              : `Crédito: puede reservar hasta <strong>${rs.credito} ${s(rs.credito, "sesión", "sesiones")}</strong> sin saldo.`);
-  return `<p class="ses-credito${rs.deuda ? " debe" : ""}" role="status">${txt}</p>`;
+  const txt = rs.credito
+    ? (propio ? `<strong>Tienes ${rs.credito} ${s(rs.credito, "sesión", "sesiones")} a crédito.</strong> ${rs.puede ? `Puedes agendar ${rs.puede} ${s(rs.puede, "más", "más")}.` : "Ya las agendaste todas."} Se ven en negativo hasta que regularices tu pago con el centro.`
+              : `<strong>${rs.credito} ${s(rs.credito, "sesión", "sesiones")} a crédito.</strong> ${rs.puede ? `Puede agendar ${rs.puede} más.` : "Ya las agendó todas."} Sigue en negativo hasta que un master registre su pago.`)
+    : (propio ? `<strong>Debes ${rs.deuda} ${s(rs.deuda, "sesión", "sesiones")} a crédito.</strong> Regulariza tu pago con el centro.`
+              : `<strong>Debe ${rs.deuda} ${s(rs.deuda, "sesión", "sesiones")} a crédito.</strong>`);
+  return `<p class="ses-credito debe" role="status">${txt}</p>`;
 }
 function sesionesHTML(rs, opts = {}){
   const { baja, propio = true } = opts;
   const prox = rs.agendadas.slice(0, 4);
   return `
     <div class="ses-cuenta" role="group" aria-label="Sesiones de terapia">
-      ${rs.deuda ? `<div class="ses-n disp debe"><span class="num${baja ? " baja" : ""}"${opts.idSaldo ? ` id="${opts.idSaldo}"` : ""}>−${rs.deuda}</span><span class="ses-l">Saldo</span><span class="ses-s">a crédito</span></div>`
+      ${rs.debe ? `<div class="ses-n disp debe"><span class="num${baja ? " baja" : ""}"${opts.idSaldo ? ` id="${opts.idSaldo}"` : ""}>−${rs.debe}</span><span class="ses-l">Disponibles</span><span class="ses-s">a crédito</span></div>`
         : `<div class="ses-n disp"><span class="num${baja ? " baja" : ""}"${opts.idSaldo ? ` id="${opts.idSaldo}"` : ""}>${rs.disponibles}</span><span class="ses-l">Disponibles</span><span class="ses-s">por agendar</span></div>`}
       <div class="ses-n agen"><span class="num">${rs.agendadas.length}</span><span class="ses-l">Agendadas</span><span class="ses-s">por hacer</span></div>
       <div class="ses-n total"><span class="num">${rs.total}</span><span class="ses-l">Total</span><span class="ses-s">${rs.consumidas ? plural(rs.consumidas, "realizada", "realizadas") : "&nbsp;"}</span></div>
     </div>
     ${prox.length ? `<div class="ses-prox"><p class="ses-prox-t">${propio ? "Tus próximas sesiones" : "Próximas sesiones"}</p>
       <ul>${prox.map(r => `<li><span class="num">${fmtFechaHora(r.inicio)}</span></li>`).join("")}${rs.agendadas.length > prox.length ? `<li class="muted">y ${rs.agendadas.length - prox.length} más</li>` : ""}</ul></div>` : ""}
-    ${creditoHTML(rs, propio)}`;
+    ${opts.sinCredito ? "" : creditoHTML(rs, propio)}`;
 }
 
 /* Asistencias de fortalecimiento: cuántas veces vino este mes, en verde si viene seguido,

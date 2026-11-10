@@ -1104,3 +1104,9 @@ button.wk-cap:focus-visible{ outline:2px solid var(--accent); outline-offset:1px
 .hc-res li.mal{ color:var(--danger, #B3261E); }
 .hc-van > li, .hc-lista > li{ margin:0; padding:0; }
 .hc-van > li.muted{ padding:4px 2px; }
+/* Tokens a crédito: estado actual con motivo y «Registrar pago» */
+.cred-actual{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 12px; margin:6px 0 8px; border-radius:12px; background:var(--danger-bg); border:1px solid var(--danger-line); }
+.cred-actual p{ margin:0; flex:1 1 200px; }
+.cred-actual .num{ color:var(--danger); font-size:18px; }
+.cred-form select{ flex:0 0 auto; width:auto; }
+.cred-form input{ flex:1 1 180px; min-width:0; }

@@ -1265,7 +1265,7 @@ function accesoOkTexto(uid){
 }
 function alertaTexto(a){
   /* Terapia: ya no tiene sesiones por agendar; valor = sesiones agendadas que le quedan por hacer */
-  if(a.tipo === "deuda") return `Debe ${a.valor} ${a.valor === 1 ? "sesión" : "sesiones"} a crédito`;
+  if(a.tipo === "deuda") return `−${a.valor} a crédito`;
   if(a.tipo === "sesiones") return a.valor <= 0 ? "Sin sesiones" : a.valor === 1 ? "Le queda 1 agendada" : `Le quedan ${a.valor} agendadas`;
   return a.valor <= 1 ? "Su acceso vence hoy" : `Última semana · vence en ${a.valor} días`;
 }

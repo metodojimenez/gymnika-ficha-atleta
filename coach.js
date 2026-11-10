@@ -7,8 +7,8 @@ function pintarAccesoChip(plan, cat, rs){
   let txt = "", nivel = "ok";
   if(cat === "terapia"){
     const n = rs.disponibles;
-    txt = rs.deuda ? `Debe ${plural(rs.deuda, "sesión", "sesiones")} a crédito` : n > 0 ? `${plural(n, "sesión disponible", "sesiones disponibles")}` : rs.credito ? `Sin saldo · ${plural(rs.credito, "sesión", "sesiones")} a crédito` : "Sin sesiones disponibles";
-    nivel = rs.deuda ? "fin" : n > 2 ? "ok" : n > 0 || rs.credito ? "poco" : "fin";
+    txt = rs.debe ? `−${rs.debe} a crédito${rs.puede ? ` · puede agendar ${rs.puede}` : ""}` : n > 0 ? `${plural(n, "sesión disponible", "sesiones disponibles")}` : "Sin sesiones disponibles";
+    nivel = rs.debe ? "fin" : n > 2 ? "ok" : n > 0 ? "poco" : "fin";
   } else {
     const est = estadoMembresia(plan);
     if(est.congelado){ txt = `Acceso congelado hasta el ${fmtFecha(est.congelado.hasta)}`; nivel = "poco"; }
@@ -43,7 +43,7 @@ async function renderPlanCoach(profile){
   plan.credito = profile.credito_sesiones || 0;
   const rs = resumenSesiones(plan, cat);
   pintarAccesoChip(plan, cat, rs);
-  const avisoSesiones = rs.disponibles <= 0 && rs.agendadas.length <= 2 && (plan.movs || []).length
+  const avisoSesiones = !rs.debe && rs.disponibles <= 0 && rs.agendadas.length <= 2 && (plan.movs || []).length
     ? `<p class="plan-alert warn" role="status">${rs.agendadas.length ? `Ya agendó todas sus sesiones: le ${rs.agendadas.length === 1 ? "queda 1" : "quedan 2"} por hacer.` : "No le quedan sesiones."}${master ? " Conviene ofrecerle un nuevo paquete." : ""}</p>` : "";
   const comprasHTML = master && plan.compras.length ? `
     <details class="records"><summary>Pagos (${plan.compras.length})</summary>
@@ -56,14 +56,14 @@ async function renderPlanCoach(profile){
     const prox = plan.reservas.filter(r => ["confirmada","espera"].includes(r.estado) && new Date(r.inicio) > ahora)
       .sort((a,b)=> String(a.inicio).localeCompare(String(b.inicio)));
     box.innerHTML = catSelect + riesgoPickerHTML(profile) + `
-      ${sesionesHTML(rs, { propio: false })}
+      ${sesionesHTML(rs, { propio: false, sinCredito: master })}
       ${avisoSesiones}
       ${master ? `<div class="inline-add tokens-adj">
         <input type="number" id="adjCant" inputmode="numeric" placeholder="+2 o −1" aria-label="Sesiones a sumar o restar">
         <input id="adjNota" placeholder="Motivo (ej: cortesía) · solo lo ve el equipo" aria-label="Motivo del ajuste (solo lo ve el equipo)" title="El alumno no ve este motivo">
         <button type="button" class="btn-outline" id="btnAjustar">Ajustar</button>
       </div>
-      ${creditoControlHTML(profile)}` : ""}
+      ${creditoControlHTML(profile, plan, rs)}` : ""}
       <div id="adjMsg" aria-live="polite"></div>
       <h3 class="sub-h">Próximas reservas</h3>
       ${prox.length ? `<ul class="res-list">${prox.map(r => `
@@ -75,7 +75,7 @@ async function renderPlanCoach(profile){
       ${comprasHTML}`;
     bindCat();
     bindRiesgo(profile);
-    bindCredito(profile);
+    bindCredito(profile, rs);
     const ba = document.getElementById("btnAjustar");
     if(ba) ba.onclick = ()=> withBusy(ba, "…", async ()=>{
       const n = parseInt(document.getElementById("adjCant").value, 10);
@@ -109,14 +109,14 @@ async function renderPlanCoach(profile){
     <div class="trans-ter-coach">
       <p class="eyebrow">Terapia</p>
       ${riesgoPickerHTML(profile)}
-      ${sesionesHTML(rs, { propio: false })}
+      ${sesionesHTML(rs, { propio: false, sinCredito: master })}
       ${avisoSesiones}
       ${master ? `<div class="inline-add tokens-adj">
         <input type="number" id="adjCant" inputmode="numeric" placeholder="+2 o −1" aria-label="Sesiones a sumar o restar">
         <input id="adjNota" placeholder="Motivo (ej: cortesía) · solo lo ve el equipo" aria-label="Motivo del ajuste (solo lo ve el equipo)" title="El alumno no ve este motivo">
         <button type="button" class="btn-outline" id="btnAjustar">Ajustar</button>
       </div>
-      ${creditoControlHTML(profile)}` : ""}
+      ${creditoControlHTML(profile, plan, rs)}` : ""}
       <div id="adjMsg" aria-live="polite"></div>
       <p class="eyebrow" style="margin-top:14px">Fortalecimiento</p>
     </div>`;
@@ -162,7 +162,7 @@ async function renderPlanCoach(profile){
   });
   if(cat === "transicion"){
     bindRiesgo(profile);
-    bindCredito(profile);
+    bindCredito(profile, rs);
     const ba = document.getElementById("btnAjustar");
     if(ba) ba.onclick = ()=> withBusy(ba, "…", async ()=>{
       const n = parseInt(document.getElementById("adjCant").value, 10);
@@ -192,32 +192,75 @@ async function renderPlanCoach(profile){
   }
 }
 
-/* Sesiones a crédito (solo master): de 0 a 8. Permite reservar terapia sin saldo; lo usado queda como deuda hasta que pague */
-function creditoControlHTML(profile){
+/* Tokens a crédito (solo master): de 0 a 8 con motivo obligatorio (solo lo ve el equipo).
+   Se ven como −N en «Disponibles», se agendan normal y siguen en negativo hasta que un master registra el pago */
+function creditoControlHTML(profile, plan, rs){
   const actual = profile.credito_sesiones || 0;
+  const ult = (plan.creditoHist || []).find(h => h.credito_nuevo === actual && h.credito_nuevo > 0);
   return `<div class="credito-adj">
-      <label for="credSel">Sesiones a crédito</label>
-      <div class="inline-add">
-        <select id="credSel">${Array.from({ length: 9 }, (_, i) => `<option value="${i}" ${i === actual ? "selected" : ""}>${i === 0 ? "Sin crédito" : i + (i === 1 ? " sesión" : " sesiones")}</option>`).join("")}</select>
-        <button type="button" class="btn-outline" id="btnCredito">Guardar</button>
+      <label for="credSel">Tokens a crédito (negativos)</label>
+      ${actual ? `<div class="cred-actual">
+        <p><strong class="num">−${actual}</strong> a crédito · ${rs.puede ? `puede agendar ${rs.puede} más` : "ya los agendó todos"}${ult ? `<br><span class="muted">Motivo: <strong>${esc(ult.motivo || "")}</strong> · ${esc(nombreAutor(ult.creado_por))}, ${fmtFecha(String(ult.created_at).slice(0, 10))}</span>` : ""}</p>
+        <button type="button" class="btn-primary sm" id="btnRegCredito">Registrar pago</button>
+      </div>` : ""}
+      <div class="inline-add cred-form">
+        <select id="credSel" aria-label="Tokens a crédito">${Array.from({ length: 9 }, (_, i) => `<option value="${i}" ${i === actual ? "selected" : ""}>${i === 0 ? "Sin crédito" : "−" + i + (i === 1 ? " sesión" : " sesiones")}</option>`).join("")}</select>
+        <input id="credMotivo" placeholder="Motivo (obligatorio) · solo lo ve el equipo" aria-label="Motivo del crédito (obligatorio, solo lo ve el equipo)" maxlength="200">
+        <button type="button" class="btn-outline" id="btnCredito">${actual ? "Cambiar" : "Asignar"}</button>
       </div>
-      <p class="muted">Puede reservar hasta esa cantidad aunque no tenga saldo; lo que use queda como deuda y se descuenta cuando pague su paquete.</p>
+      <p class="muted">Se ven como −N en sus disponibles y puede agendarlas normal. Siguen en negativo hasta que registres su pago.</p>
       <div id="credMsg" aria-live="polite"></div>
     </div>`;
 }
-function bindCredito(profile){
+function bindCredito(profile, rs){
   const b = document.getElementById("btnCredito");
   if(!b) return;
-  b.onclick = ()=> withBusy(b, "…", async ()=>{
-    const n = parseInt(document.getElementById("credSel").value, 10);
-    const { error } = await sb.rpc("asignar_credito", { p_user: profile.id, p_credito: n });
-    if(error){ showError(document.getElementById("credMsg"), error); return; }
-    profile.credito_sesiones = n;
+  const recargar = async ()=>{
     const a = (state.athleteList || []).find(x => x.id === profile.id);
-    if(a) a.credito_sesiones = n;
+    if(a) a.credito_sesiones = profile.credito_sesiones;
     await renderPlanCoach(profile);
     if(document.getElementById("reservarCard")){ state.plan = null; await renderReservasAlumno(profile); }
-    showMsg(document.getElementById("credMsg"), "ok", n ? `Listo: puede reservar hasta ${n} ${n === 1 ? "sesión" : "sesiones"} a crédito. Le llegó un aviso.` : "Crédito quitado.");
+    await cargarAlertas();
+    renderAthleteListInto(filterAthletes(state.search));
+  };
+  b.onclick = ()=> withBusy(b, "…", async ()=>{
+    const n = parseInt(document.getElementById("credSel").value, 10);
+    const motivo = document.getElementById("credMotivo").value.trim();
+    const msg = document.getElementById("credMsg");
+    if(n === (profile.credito_sesiones || 0)){ showMsg(msg, "error", "Elige otra cantidad."); return; }
+    if(!motivo){ showMsg(msg, "error", "Escribe el motivo del crédito."); document.getElementById("credMotivo").focus(); return; }
+    const { error } = await sb.rpc("asignar_credito", { p_user: profile.id, p_credito: n, p_motivo: motivo });
+    if(error){ showError(msg, error); return; }
+    profile.credito_sesiones = n;
+    await recargar();
+    showMsg(document.getElementById("credMsg"), "ok", n ? `Listo: −${n} a crédito. Puede agendarlas y le llegó un aviso.` : "Crédito quitado.");
+  });
+  const reg = document.getElementById("btnRegCredito");
+  if(reg) reg.onclick = ()=> abrirRegistrarPagoCredito(profile, rs, recargar);
+}
+function abrirRegistrarPagoCredito(profile, rs, recargar){
+  const credito = profile.credito_sesiones || 0;
+  const usadas = Math.max(0, -rs.saldo);
+  const d = openDialog("Registrar pago del crédito", `
+    <p style="margin-top:0">${esc(profile.nombre || "")} tiene <strong>−${credito}</strong> a crédito${usadas ? ` y ya usó ${plural(usadas, "sesión", "sesiones")}` : ""}.</p>
+    <label for="regSes">Sesiones que pagó</label>
+    <input type="number" id="regSes" inputmode="numeric" min="${usadas}" max="200" value="${credito}">
+    <p class="muted" style="margin-top:4px">Se suman a su saldo y el crédito se cierra${usadas ? ` (mínimo ${usadas}, las que ya usó)` : ""}. Si ya pagó con un paquete que aprobaste en Pagos, pon ${usadas ? "lo que falte" : "0"}.</p>
+    <label for="regNota">Nota (opcional · solo la ve el equipo)</label>
+    <input id="regNota" placeholder="Ej: pagó por Yape el 12/11" maxlength="200">
+    <button type="button" class="btn-primary" id="regOk">Registrar pago y cerrar crédito</button>
+    <div id="regMsg" aria-live="polite"></div>`);
+  const ok = d.el.querySelector("#regOk");
+  ok.onclick = ()=> withBusy(ok, "Guardando…", async ()=>{
+    const n = parseInt(d.el.querySelector("#regSes").value, 10);
+    const msg = d.el.querySelector("#regMsg");
+    if(!Number.isInteger(n) || n < 0){ showMsg(msg, "error", "Escribe cuántas sesiones pagó."); return; }
+    const { data, error } = await sb.rpc("regularizar_credito", { p_user: profile.id, p_sesiones: n, p_nota: d.el.querySelector("#regNota").value });
+    if(error){ showError(msg, error); return; }
+    d.close();
+    profile.credito_sesiones = 0;
+    await recargar();
+    showMsg(document.getElementById("credMsg"), "ok", `Pago registrado. Ahora tiene ${plural((data && data.saldo) || 0, "sesión disponible", "sesiones disponibles")}.`);
   });
 }
 
