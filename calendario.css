@@ -1115,3 +1115,7 @@ button.wk-cap:focus-visible{ outline:2px solid var(--accent); outline-offset:1px
 .cred-campo.cred-motivo{ flex:1 1 220px; min-width:0; }
 .credito-adj .cred-form select{ flex:none; width:auto; min-width:150px; }
 .cred-form .btn-outline{ margin-top:0; }
+.acc-quitar{ display:inline-block; margin-top:10px; }
+/* Gráficos de progreso: últimas 8 semanas o historial */
+.chart-rango{ margin:0 0 8px; }
+.ext-historial{ margin-top:12px; }

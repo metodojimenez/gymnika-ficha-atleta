@@ -1451,7 +1451,7 @@ async function showCoachRoute(){
     if(seccion === "pagos") await renderCoachPagos(main);
     else if(seccion === "hoy") await renderCoachHoy(main);
     else if(seccion === "bitacora") await renderCoachBitacora(main);
-    else if(seccion === "agenda") await renderCoachAgenda(main);
+    else if(seccion === "agenda"){ agendaUI.semana = null; await renderCoachAgenda(main); }
     else if(seccion === "rutinas") renderCoachRutinas(main);
     else if(seccion === "resumen") await renderCoachResumen(main);
     else if(seccion === "equipo") await renderCoachEquipo(main);
@@ -1495,8 +1495,26 @@ window.addEventListener("hashchange", ()=>{
     return;
   }
   if(esEquipo() && document.getElementById("coachLayout")) showCoachRoute();
-  else if(state.profile && !esEquipo() && document.getElementById("athleteMain")) activarSeccionAlumno(seccionAlumnoDeURL());
+  else if(state.profile && !esEquipo() && document.getElementById("athleteMain")){
+    const k = seccionAlumnoDeURL();
+    activarSeccionAlumno(k);
+    /* Al entrar a Reservar, el calendario muestra hoy */
+    if(k === "reservar" && reservaUI.perfil && reservaUI.dia !== todayStr()){ reservaUI.mes = null; reservaUI.dia = null; reservaUI.hoy = null; renderReservasAlumno(reservaUI.perfil); }
+  }
 });
+
+/* Si cambia el día con la app abierta (o al volver a ella al día siguiente), se recarga para que
+   calendarios, «hoy» y accesos muestren la fecha real. No interrumpe si hay algo abierto o se está escribiendo. */
+const diaApp = { dia: todayStr() };
+function revisarCambioDeDia(){
+  if(document.visibilityState !== "visible" || todayStr() === diaApp.dia) return;
+  const ocupado = document.querySelector(".overlay, dialog[open]") || (document.activeElement && document.activeElement.matches("input, textarea, select"));
+  if(ocupado) return;
+  diaApp.dia = todayStr();
+  location.reload();
+}
+document.addEventListener("visibilitychange", revisarCambioDeDia);
+setInterval(revisarCambioDeDia, 60000);
 
 
 /* ====================== INSTALAR LA APP EN EL TELÉFONO ======================

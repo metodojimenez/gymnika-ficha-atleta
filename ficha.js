@@ -626,6 +626,17 @@ function setupChartDefaults(){
   Chart.defaults.plugins.tooltip.titleFont = { weight: "700" };
 }
 
+/* Gráficos de progreso: por defecto las últimas 8 semanas; «Historial» muestra todo */
+const rangoGraficos = { fuerza: "8", peso: "8" };
+function rangoToggle(cual, antes, hayMas){
+  const prev = antes.parentElement.querySelector(`[data-rango-de="${cual}"]`);
+  if(prev) prev.remove();
+  if(!hayMas) return;
+  antes.insertAdjacentHTML("beforebegin", `<div class="seg chart-rango" role="group" aria-label="Rango del gráfico" data-rango-de="${cual}">
+    <button type="button" data-rango="8" aria-pressed="${rangoGraficos[cual] === "8"}">Últimas 8 semanas</button>
+    <button type="button" data-rango="todo" aria-pressed="${rangoGraficos[cual] === "todo"}">Historial</button></div>`);
+  return antes.parentElement.querySelector(`[data-rango-de="${cual}"]`);
+}
 let pesoGrasaChartInstance = null;
 function renderPesoGrasaChart(medidas){
   const canvas = document.getElementById("pesoGrasaChart");
@@ -633,7 +644,17 @@ function renderPesoGrasaChart(medidas){
   if(pesoGrasaChartInstance){ pesoGrasaChartInstance.destroy(); pesoGrasaChartInstance = null; }
   const prevEmpty0 = document.getElementById("pesoGrasaEmpty");
   if(prevEmpty0) prevEmpty0.remove();
-  const datos = medidas.filter(m => m.peso !== null || m.grasa_pct !== null);
+  const todos = medidas.filter(m => m.peso !== null || m.grasa_pct !== null);
+  const hace8 = fechaISO(sumarDias(parseFecha(todayStr()), -55));
+  const recientes = todos.filter(m => m.fecha >= hace8);
+  const tg = rangoToggle("peso", canvas.parentElement, todos.length > recientes.length);
+  if(tg) tg.querySelectorAll("[data-rango]").forEach(b => { b.onclick = ()=>{ rangoGraficos.peso = b.dataset.rango; renderPesoGrasaChart(medidas); }; });
+  const datos = rangoGraficos.peso === "todo" ? todos : recientes;
+  if(!datos.length && todos.length && window.Chart){
+    canvas.parentElement.style.display = "none";
+    canvas.parentElement.insertAdjacentHTML("afterend", `<div id="pesoGrasaEmpty">${emptyHTML("Sin registros en las últimas 8 semanas. Toca «Historial» para ver los anteriores.")}</div>`);
+    return;
+  }
   if(!datos.length || !window.Chart){
     canvas.parentElement.style.display = "none";
     canvas.parentElement.insertAdjacentHTML("afterend", `<div id="pesoGrasaEmpty">${emptyHTML(window.Chart ? "Sin registros de peso o % de grasa todavía." : "No se pudo cargar el gráfico. Revisa tu conexión.")}</div>`);
@@ -712,7 +733,14 @@ function renderFuerza(fuerza, ejercicios, uid, isCoach){
       </details>
     ` : ""}
   `;
-  drawFuerzaChart(fuerza, colorMap);
+  const pintarFuerza = ()=>{
+    const semanas = [...new Set(fuerza.map(f => f.semana))].sort((a, b) => a - b);
+    const tg = rangoToggle("fuerza", document.getElementById("fuerzaChart").parentElement, semanas.length > 8);
+    if(tg) tg.querySelectorAll("[data-rango]").forEach(b => { b.onclick = ()=>{ rangoGraficos.fuerza = b.dataset.rango; pintarFuerza(); }; });
+    const visibles = rangoGraficos.fuerza === "todo" ? semanas : semanas.slice(-8);
+    drawFuerzaChart(fuerza.filter(f => visibles.includes(f.semana)), colorMap);
+  };
+  pintarFuerza();
   renderResumen();
 
   if(!isCoach) return;

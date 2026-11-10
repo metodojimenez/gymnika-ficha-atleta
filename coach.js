@@ -140,6 +140,7 @@ async function renderPlanCoach(profile){
       <p class="muted">${cat === "transicion" ? "En transición el acceso se cobra y coordina en el centro. Al habilitarlo, se le avisa para que escoja su horario." : "Para pagos coordinados en el centro. Se le avisa para que escoja su horario."}</p>
       <div id="accMsg" aria-live="polite"></div>
     </div>${conAcceso ? `</details>` : ""}
+    ${conAcceso ? `<button type="button" class="btn-link danger acc-quitar" id="btnQuitarAcceso">Quitar acceso</button>` : ""}
     <div id="accOk" aria-live="polite"></div>` : ""}
     ${master ? suscripcionHTML(plan, true) : ""}
     <p class="muted">Asistencias registradas: <strong>${plan.asistencias.length}</strong>${plan.asistencias[0] ? " · última: " + fmtFecha(plan.asistencias[0].fecha) : ""}</p>
@@ -160,6 +161,8 @@ async function renderPlanCoach(profile){
     if(document.getElementById("reservarCard")){ state.plan = null; await renderReservasAlumno(profile); }
     showMsg(document.getElementById("accOk"), "ok", `Acceso habilitado hasta el ${fmtFecha(data, true)}. Ya puede escoger su horario.`);
   });
+  const bq = document.getElementById("btnQuitarAcceso");
+  if(bq) bq.onclick = ()=> abrirQuitarAcceso(profile, plan);
   if(cat === "transicion"){
     bindRiesgo(profile);
     bindCredito(profile, rs);
@@ -239,6 +242,40 @@ function bindCredito(profile, rs){
   });
   const reg = document.getElementById("btnRegCredito");
   if(reg) reg.onclick = ()=> abrirRegistrarPagoCredito(profile, rs, recargar);
+}
+/* Quitar el acceso a mano (solo master): desde ese día no tiene acceso y se cancelan sus horarios de fortalecimiento */
+function abrirQuitarAcceso(profile, plan){
+  const hoy = todayStr();
+  const horariosFort = (desde)=> (plan.reservas || []).filter(r => ["confirmada", "espera"].includes(r.estado) && r.fecha >= desde
+    && new Date(r.inicio) > new Date() && ((planes.horarios || []).find(h => h.id === r.horario_id) || {}).categoria === "fortalecimiento").length;
+  const susc = (plan.suscripciones || []).some(s => s.estado === "activa");
+  const d = openDialog(`Quitar acceso · ${primerNombre(profile.nombre) || "alumno"}`, `
+    <label for="qaDesde" style="margin-top:0">Sin acceso desde</label>
+    <input type="date" id="qaDesde" value="${hoy}" min="${hoy}">
+    <p class="muted" id="qaRes" style="margin-top:6px"></p>
+    ${susc ? `<p class="plan-alert warn" role="status">Tiene una suscripción activa de Mercado Pago: el próximo cobro le volvería a dar acceso. Cancélala en Mercado Pago.</p>` : ""}
+    <div class="sheet-actions"><button type="button" class="btn-outline" data-no>Cancelar</button><button type="button" class="btn-danger" id="qaOk">Quitar acceso</button></div>
+    <div id="qaMsg" aria-live="polite"></div>`);
+  const inp = d.el.querySelector("#qaDesde");
+  const resumen = ()=>{
+    const desde = inp.value || hoy;
+    const n = horariosFort(desde);
+    d.el.querySelector("#qaRes").textContent = `${desde === hoy ? "Desde hoy" : "Desde el " + fmtFecha(desde)} no podrá reservar ni entrar.${n ? ` Se cancelarán ${n === 1 ? "su horario reservado" : `sus ${n} horarios reservados`} desde ese día.` : ""} Le llegará un aviso.`;
+  };
+  resumen();
+  inp.onchange = resumen;
+  d.el.querySelector("[data-no]").onclick = d.close;
+  const ok = d.el.querySelector("#qaOk");
+  ok.onclick = ()=> withBusy(ok, "Quitando…", async ()=>{
+    const { data, error } = await sb.rpc("quitar_acceso", { p_user: profile.id, p_desde: inp.value || hoy });
+    if(error){ showError(d.el.querySelector("#qaMsg"), error); return; }
+    d.close();
+    await renderPlanCoach(profile);
+    if(document.getElementById("reservarCard")){ state.plan = null; await renderReservasAlumno(profile); }
+    refreshCoachAside();
+    const n = (data && data.cancelados) || 0;
+    showMsg(document.getElementById("accOk"), "ok", `Acceso quitado${n ? ` y ${n === 1 ? "1 horario cancelado" : n + " horarios cancelados"}` : ""}. Le llegó un aviso.`);
+  });
 }
 function abrirRegistrarPagoCredito(profile, rs, recargar){
   const credito = profile.credito_sesiones || 0;

@@ -747,6 +747,9 @@ async function renderReservasAlumno(profile){
   if(!box) return;
   /* Transición: se elige si reservar terapia o fortalecimiento y el calendario trabaja en esa categoría */
   const real = perfilReal(profile);
+  /* Otra persona u otro día: el calendario vuelve a hoy */
+  if(reservaUI.uid !== real.id || reservaUI.hoy !== todayStr()){ reservaUI.mes = null; reservaUI.dia = null; }
+  reservaUI.uid = real.id; reservaUI.hoy = todayStr(); reservaUI.perfil = profile;
   if(real.categoria === "transicion"){
     reservaUI.cat = profile._real ? profile.categoria : (reservaUI.cat || "terapia");
     let sel = document.getElementById("transCat");
@@ -787,14 +790,14 @@ async function renderReservasAlumno(profile){
   const saldo = plan.saldo || 0;
   const credito = plan.credito;
 
-  /* Día elegido: el que ya estaba o el primero del mes con horarios por delante */
+  /* Día elegido: el que ya estaba; si no, hoy (en el mes actual) o el primero del mes con horarios por delante */
   const enMes = (iso)=> iso.slice(0, 7) === reservaUI.mes;
   if(!reservaUI.dia || !enMes(reservaUI.dia) || reservaUI.dia < hoyISO){
-    reservaUI.dia = null;
-    for(let d = new Date(Math.max(primero, parseFecha(hoyISO))); d <= ultimo; d = sumarDias(d, 1)){
-      if(futurosDe(fechaISO(d)).length){ reservaUI.dia = fechaISO(d); break; }
+    reservaUI.dia = enMes(hoyISO) ? hoyISO : null;
+    for(let d = new Date(primero); !reservaUI.dia && d <= ultimo; d = sumarDias(d, 1)){
+      if(futurosDe(fechaISO(d)).length) reservaUI.dia = fechaISO(d);
     }
-    reservaUI.dia = reservaUI.dia || (enMes(hoyISO) ? hoyISO : fechaISO(primero));
+    reservaUI.dia = reservaUI.dia || fechaISO(primero);
   }
 
   const celdas = [];

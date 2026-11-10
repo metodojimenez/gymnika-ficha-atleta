@@ -313,7 +313,7 @@ async function renderExternos(box, uid, opts = {}){
     <div data-ext-msg aria-live="polite"></div>
     ${error ? `<div class="error" role="alert">${esc(errorES(error))}</div>` : ""}
     ${resumen}
-    ${lista.length ? `<ul class="ext-lista">${lista.map(e => {
+    ${lista.length ? `<details class="records ext-historial"${opts.abierto ? " open" : ""}><summary>Ver historial (${lista.length})</summary><ul class="ext-lista">${lista.map(e => {
       const det = lineaDetalles(e);
       return `<li class="ext-item${e.molestia >= 6 ? " ext-alerta" : ""}">
         <span class="ext-ico" aria-hidden="true">${(DEPORTES[e.deporte] || DEPORTES.otro).ico}</span>
@@ -331,9 +331,10 @@ async function renderExternos(box, uid, opts = {}){
             <button type="button" class="btn-link danger" data-ext-borrar="${esc(e.id)}">Borrar</button>
           </div>
         </div></li>`;
-    }).join("")}</ul>` : emptyHTML(esCoach ? "Todavía no registra entrenamientos fuera de Gymnika." : "Todavía no registras entrenamientos fuera de Gymnika.")}`;
+    }).join("")}</ul></details>` : emptyHTML(esCoach ? "Todavía no registra entrenamientos fuera de Gymnika." : "Todavía no registras entrenamientos fuera de Gymnika.")}`;
   const msg = box.querySelector("[data-ext-msg]");
-  const refrescar = ()=> renderExternos(box, uid, opts);
+  /* Al guardar, editar o borrar, el historial queda abierto para ver el cambio */
+  const refrescar = ()=> renderExternos(box, uid, { ...opts, abierto: true });
   box.querySelector("[data-ext-ayuda]").onclick = abrirAyudaReloj;
   box.querySelector("[data-ext-manual]").onclick = ()=> abrirFormEntreno(uid, null, null, refrescar);
   const inp = box.querySelector("[data-ext-archivo]");
