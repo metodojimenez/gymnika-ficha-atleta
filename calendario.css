@@ -1029,3 +1029,12 @@ body.mirador-activo .rt-ficha{ bottom:76px; }
 .mir-add-txt .muted{ font-size:13px; }
 .mir-add-mas{ flex:none; font-size:20px; font-weight:800; color:var(--accent); }
 .mir-acc [data-mir-quitar]{ margin-right:auto; }
+
+/* Equipo: turno de cada coach */
+.eq-turno{ display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; margin-top:6px; font-size:13.5px; }
+.eq-turno:empty{ display:none; }
+.eq-turno-on{ display:inline-flex; align-items:center; gap:6px; font-weight:700; color:var(--ok); }
+.eq-turno .btn-link{ min-height:32px; padding:2px 4px; font-size:13.5px; }
+.eq-turno .btn-outline.sm{ min-height:32px; }
+.inbox-item{ transition:background-color .6s ease; }
+@media (prefers-reduced-motion: reduce){ .inbox-item{ transition:none; } }

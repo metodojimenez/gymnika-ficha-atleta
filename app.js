@@ -467,6 +467,7 @@ function borrarTraspaso(){ try{ if("caches" in window) caches.delete(TRASPASO.ca
 async function doLogout(){
   stopInbox();
   quitarSuscripcionTareas();
+  quitarBitacoraEnVivo();
   await quitarPushDispositivo();
   avisoPagos.vistos = null; avisoPagos.forzar = true;
   borrarTraspaso();
@@ -1117,6 +1118,9 @@ function renderInboxPanel(){
   if(!panel) return;
   const esCoach = esEquipo();
   const sinLeer = inbox.items.some(x => !x.leida);
+  /* Al repintar con el panel abierto, el foco vuelve al mismo elemento (o al primero) */
+  const act = panel.contains(document.activeElement) ? document.activeElement : null;
+  const focoId = act ? (act.dataset.notif || act.id || "primero") : "";
   panel.innerHTML = `
     <div class="inbox-head">
       <h2>Notificaciones</h2>
@@ -1140,6 +1144,10 @@ function renderInboxPanel(){
   const all = document.getElementById("btnInboxAll");
   if(all) all.onclick = (e)=>{ e.stopPropagation(); marcarTodasLeidas(); };
   panel.querySelectorAll("[data-notif]").forEach(b => { b.onclick = (e)=>{ e.stopPropagation(); abrirNotificacion(b.dataset.notif); }; });
+  if(focoId){
+    const dest = (focoId !== "primero" && (panel.querySelector(`[data-notif="${CSS.escape(focoId)}"]`) || panel.querySelector("#" + CSS.escape(focoId)))) || panel.querySelector("button");
+    if(dest) dest.focus();
+  }
 }
 function onInboxKey(e){ if(e.key === "Escape"){ e.preventDefault(); closeInbox(true); } }
 function onInboxOutside(e){
@@ -1158,10 +1166,14 @@ function openInbox(){
   const primero = panel.querySelector("button");
   if(primero) primero.focus();
   loadInbox();
+  /* Al segundo de abrir, todo lo que se ve queda como leído */
+  clearTimeout(inbox.leerTimer);
+  inbox.leerTimer = setTimeout(()=>{ if(inbox.open) marcarTodasLeidas(); }, 1000);
 }
 function closeInbox(devolverFoco){
   const panel = document.getElementById("inboxPanel"), btn = document.getElementById("btnInbox");
   inbox.open = false;
+  clearTimeout(inbox.leerTimer);
   if(panel) panel.hidden = true;
   if(btn){ btn.setAttribute("aria-expanded", "false"); if(devolverFoco) btn.focus(); }
   document.removeEventListener("keydown", onInboxKey);
@@ -1171,7 +1183,17 @@ async function marcarLeida(ids){
   if(!ids.length) return;
   inbox.items.forEach(x => { if(ids.includes(x.id)) x.leida = true; });
   renderInboxBadge();
-  if(inbox.open) renderInboxPanel();
+  /* Con el panel abierto se actualiza sin repintar, para no mover el foco */
+  const panel = inbox.open && document.getElementById("inboxPanel");
+  if(panel){
+    ids.forEach(id => { const b = panel.querySelector(`[data-notif="${CSS.escape(id)}"]`); if(b){ b.classList.remove("unread"); b.querySelector(".inbox-title .sr-only")?.remove(); } });
+    const todo = panel.querySelector("#btnInboxAll");
+    if(todo && !inbox.items.some(x => !x.leida)){
+      const tenia = document.activeElement === todo;
+      todo.remove();
+      if(tenia){ const sig = panel.querySelector("[data-notif]"); if(sig) sig.focus(); }
+    }
+  }
   const { error } = await sb.from("notificaciones").update({ leida: true }).in("id", ids);
   if(error) console.error(error);
 }
@@ -1261,6 +1283,7 @@ async function renderCoachHome(){
   `;
   document.getElementById("btnLogout").onclick = doLogout;
   initInbox();
+  suscribirBitacoraEnVivo();
   if(routeAthleteId() || routeCoachSeccion()) document.getElementById("coachLayout").classList.add("has-selection");
   await refreshCoachAside();
   showCoachRoute();

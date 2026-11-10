@@ -943,7 +943,8 @@ async function renderCoachEquipo(main){
     <li class="eq-row" data-id="${esc(c.id)}">
       <span class="avatar" aria-hidden="true">${esc(initials(c.nombre))}</span>
       <span class="eq-info"><strong>${esc(c.nombre || "(sin nombre)")}${c.id === state.profile.id ? " <span class=\"muted\">(tú)</span>" : ""}</strong>
-        <span class="muted">${esc(c.email || "")}${c.role === "atleta" ? ` · alumno${c.categoria ? " de " + CATEGORIAS[c.categoria].nombre.toLowerCase() : ""}` : ""}</span></span>
+        <span class="muted">${esc(c.email || "")}${c.role === "atleta" ? ` · alumno${c.categoria ? " de " + CATEGORIAS[c.categoria].nombre.toLowerCase() : ""}` : ""}</span>
+        ${c.role !== "atleta" ? `<span class="eq-turno" data-turno-de="${esc(c.id)}"></span>` : ""}</span>
       <span class="eq-actions">${c.id === state.profile.id ? `<span class="badge">${ROLES_EQUIPO[c.role]}</span>`
         : `${rolSelectHTML(c.id, c.role, conQuitar)}<button type="button" class="btn-outline sm" data-guardar-rol="${esc(c.id)}">${c.role === "atleta" ? "Agregar" : "Guardar"}</button>`}</span>
       <span class="eq-msg" aria-live="polite"></span>
@@ -976,6 +977,7 @@ async function renderCoachEquipo(main){
   document.getElementById("eqCount").textContent = plural(eq.length, "persona", "personas");
   lista.innerHTML = `<ul class="eq-list">${eq.map(c => filaHTML(c, true)).join("")}</ul>`;
   enlazar(lista);
+  pintarTurnosEquipo();
   document.getElementById("eqBuscarForm").onsubmit = async (e)=>{
     e.preventDefault();
     const q = document.getElementById("eqQ").value.trim();
@@ -989,6 +991,47 @@ async function renderCoachEquipo(main){
       : `<p class="muted" style="margin-top:10px">${(data || []).length ? "Esa persona ya está en el equipo." : "No encontramos una cuenta con ese nombre o correo. Pídele que se registre primero."}</p>`;
     enlazar(out);
   };
+}
+
+/* Equipo: el master ve quién está en turno y puede iniciar o terminar el turno de cualquier coach */
+async function pintarTurnosEquipo(){
+  const box = document.getElementById("eqLista");
+  if(!box) return;
+  const { data, error } = await sb.from("turnos_coach").select("id, coach_id, inicio, iniciado_por").is("fin", null);
+  if(error || !document.getElementById("eqLista")) return;
+  const hoy = todayStr();
+  const abiertos = (data || []).filter(t => new Date(t.inicio).toLocaleDateString("en-CA", { timeZone: "America/Lima" }) === hoy);
+  box.querySelectorAll("[data-turno-de]").forEach(el => {
+    const id = el.dataset.turnoDe;
+    const t = abiertos.find(x => x.coach_id === id);
+    const quien = t && t.iniciado_por && t.iniciado_por !== id ? (t.iniciado_por === state.profile.id ? " · lo iniciaste tú" : " · lo inició " + esc(primerNombre(nombreEquipo(t.iniciado_por)))) : "";
+    el.innerHTML = t
+      ? `<span class="eq-turno-on"><span class="turno-luz" aria-hidden="true"></span>En turno desde las ${esc(horaDe(t.inicio))}${quien}</span>
+         <button type="button" class="btn-link danger" data-fin-turno-de="${esc(id)}">Terminar turno</button>`
+      : `<span class="muted">Sin turno</span><button type="button" class="btn-outline sm" data-iniciar-turno-de="${esc(id)}">Iniciar turno</button>`;
+  });
+  const nombreDe = (id)=> id === state.profile.id ? "tu" : "el de " + (primerNombre(nombreEquipo(id)) || "este coach");
+  box.querySelectorAll("[data-iniciar-turno-de]").forEach(b => { b.onclick = ()=> withBusy(b, "…", async ()=>{
+    const id = b.dataset.iniciarTurnoDe;
+    const { error: e } = await sb.rpc("iniciar_turno_de", { p_coach: id });
+    const msg = b.closest(".eq-row").querySelector(".eq-msg");
+    if(e){ showError(msg, e); return; }
+    if(id === state.profile.id) await cargarTurno();
+    await pintarTurnosEquipo();
+    showMsg(b.closest(".eq-row") ? b.closest(".eq-row").querySelector(".eq-msg") : msg, "ok", id === state.profile.id ? "Tu turno quedó iniciado." : "Turno iniciado. Le llegó un aviso.");
+  }); });
+  box.querySelectorAll("[data-fin-turno-de]").forEach(b => { b.onclick = ()=>{
+    const id = b.dataset.finTurnoDe;
+    if(!confirm(`¿Terminar ${nombreDe(id)} turno? Su Mirador se apaga.`)) return;
+    withBusy(b, "…", async ()=>{
+      const { error: e } = await sb.rpc("terminar_turno_de", { p_coach: id });
+      const msg = b.closest(".eq-row").querySelector(".eq-msg");
+      if(e){ showError(msg, e); return; }
+      if(id === state.profile.id) await cargarTurno();
+      await pintarTurnosEquipo();
+      showMsg(msg, "ok", "Turno terminado.");
+    });
+  }; });
 }
 
 /* ====================== AJUSTES: HISTORIAL DE CONSEJOS (MASTER) ======================

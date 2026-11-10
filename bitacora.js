@@ -605,6 +605,9 @@ async function pintarNotasHistorial(a, tipo){
   const { data, error } = await sb.from(cfg.tabla).select("id, texto, autor_nombre, created_at").eq("user_id", a.id).order("created_at", { ascending: false }).limit(200);
   if(!document.getElementById(cfg.caja) || routeBitacoraId() !== a.id) return;
   const lista = data || [];
+  /* Si llega un cambio en vivo mientras se escribe, se conserva lo escrito */
+  const previo = document.getElementById("nota_" + tipo);
+  const borrador = previo ? previo.value : "", enfocado = previo && document.activeElement === previo;
   box.innerHTML = `
     <label for="nota_${tipo}" style="margin-top:0">${esc(cfg.etiqueta)}</label>
     <textarea id="nota_${tipo}" rows="3" placeholder="${esc(cfg.placeholder)}"></textarea>
@@ -616,6 +619,9 @@ async function pintarNotasHistorial(a, tipo){
           <p class="nota-meta"><strong>${esc(mayuscula(fechaLarga(fechaLima(n.created_at))))}</strong> <span class="muted">por ${esc(n.autor_nombre || "el equipo")} · ${esc(horaDe(n.created_at))}</span>${i === 0 && tipo === "consejos" ? ` <span class="badge soft">El que ve hoy</span>` : ""}</p>
           <p class="nota-txt">${esc(n.texto)}</p></li>`).join("")}</ol>`
       : `<p class="muted" style="margin-top:14px">${esc(cfg.vacio)}</p>`}`;
+  const ta = document.getElementById("nota_" + tipo);
+  if(borrador){ ta.value = borrador; }
+  if(enfocado){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
   const btn = document.getElementById("btnNota_" + tipo);
   btn.onclick = ()=> withBusy(btn, "Guardando…", async ()=>{
     const texto = document.getElementById("nota_" + tipo).value.trim();
@@ -626,6 +632,7 @@ async function pintarNotasHistorial(a, tipo){
       : await sb.from("ficha_interna").upsert({ user_id: a.id, comentarios: texto });
     if(e){ showError(msg, e); return; }
     if(tipo === "consejos") a.consejos_coach = texto;
+    document.getElementById("nota_" + tipo).value = "";
     await pintarNotasHistorial(a, tipo);
     showMsg(document.getElementById("notaMsg_" + tipo), "ok", "Guardado.");
   });
@@ -918,4 +925,46 @@ function quitarManual(dlg, card){
   card.remove();
   sincronizarTarjetas(dlg);
   pintarTurno();
+}
+
+/* ---------- Bitácora en vivo ----------
+   Cualquier cambio del equipo (entradas, fotos, consejos, comentarios internos, turnos) llega al instante a todas las
+   pantallas abiertas. Realtime de Supabase respeta las políticas: cada coach solo recibe lo de su área. */
+const vivoUI = { canal: null, espera: {} };
+function suscribirBitacoraEnVivo(){
+  if(vivoUI.canal || typeof sb.channel !== "function" || !esEquipo()) return;
+  const ch = sb.channel("bitacora-en-vivo");
+  ["bitacora", "bitacora_fotos", "comentarios_internos", "consejos_historial", "turnos_coach"].forEach(t => {
+    ch.on("postgres_changes", { event: "*", schema: "public", table: t }, (payload)=>{
+      clearTimeout(vivoUI.espera[t]);
+      vivoUI.espera[t] = setTimeout(()=> refrescarEnVivo(t, payload || {}), 350);
+    });
+  });
+  vivoUI.canal = ch.subscribe();
+}
+function quitarBitacoraEnVivo(){
+  if(vivoUI.canal){ try { sb.removeChannel(vivoUI.canal); } catch { /* ya cerrado */ } vivoUI.canal = null; }
+}
+function refrescarEnVivo(tabla, payload){
+  const fila = payload.new && Object.keys(payload.new).length ? payload.new : (payload.old || {});
+  if(tabla === "turnos_coach"){
+    if(!fila.coach_id || fila.coach_id === state.profile.id) cargarTurno();
+    if(document.getElementById("eqLista")) pintarTurnosEquipo();
+    return;
+  }
+  const id = routeBitacoraId();
+  const uid = fila.atleta_id || fila.user_id;
+  if(tabla === "bitacora" || tabla === "bitacora_fotos"){
+    if(uid) delete miradorUI.hist[uid];
+    if(miradorUI.turno) actualizarMirador();
+    const dlg = document.getElementById("modalMirador");
+    if(dlg && dlg.open && miradorUI.vista !== undefined && miradorUI.vista !== "pend") verHoraMirador(dlg, miradorUI.vista);
+    if(id && document.getElementById("bitLista") && (!uid || uid === id)) pintarHistorial(id);
+    if(!id && document.getElementById("bitClientes") && (!document.activeElement || document.activeElement.id !== "bitBuscar")) renderCoachBitacora(document.getElementById("coachMain"));
+    return;
+  }
+  if(id && (!uid || uid === id)){
+    const a = (state.athleteList || []).find(x => x.id === id);
+    if(a) pintarNotasHistorial(a, tabla === "consejos_historial" ? "consejos" : "internos");
+  }
 }
