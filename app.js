@@ -474,7 +474,8 @@ async function doLogout(){
   document.getElementById("modalPago")?.remove();
   miradorUI.turno = null; miradorUI.pend = []; miradorUI.vistos = new Set(); miradorUI.borradores = {};
   document.getElementById("modalMirador")?.remove(); document.getElementById("miradorFab")?.remove();
-  await sb.auth.signOut();
+  /* Solo cierra la sesión de este dispositivo: las demás (teléfono, tablet de recepción) siguen abiertas */
+  await sb.auth.signOut({ scope: "local" });
   state = { session: null, profile: null, viewingAthleteId: null, athleteList: [], search: "", renderToken: state.renderToken + 1, detail: null };
   if(location.hash) history.replaceState(null, "", location.pathname + location.search);
   renderAuth();

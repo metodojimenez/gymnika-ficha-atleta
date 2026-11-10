@@ -1236,6 +1236,8 @@ window.addEventListener("DOMContentLoaded", ()=>{
   }
   /* La sesión queda guardada en el teléfono y se renueva sola: solo se cierra con "Salir" */
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  /* Pide al navegador que no borre los datos guardados (la sesión) aunque falte espacio o no se use la app por un tiempo */
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{}); } catch { /* no disponible */ }
   setupChartDefaults();
   /* Llegada desde el QR de recepción: #/checkin/CODIGO */
   const codigoQR = codigoCheckinDeURL();
