@@ -1063,3 +1063,14 @@ body.mirador-activo .rt-ficha{ bottom:76px; }
 .evo-dot-salida{ background:transparent !important; border:2px dashed var(--c4, #3F5E7A); box-sizing:border-box; }
 @media (prefers-reduced-motion: reduce){ .evo-tramo{ animation:none; } }
 @media (max-width:520px){ .evo-hitos li span{ display:none; } .evo-hitos li.cerca{ display:none; } .evo-franja-wrap{ margin-bottom:28px; } }
+
+/* Sesiones a crédito */
+.ses-credito{ margin:10px 0 0; padding:10px 12px; border-radius:10px; background:var(--accent-tint); font-size:14px; line-height:1.4; }
+.ses-credito.debe{ background:#FDF0E3; border:1px solid #F2C79A; color:#5A3412; }
+.ses-n.disp.debe{ background:#FDF0E3; border-color:#F2C79A; }
+.ses-n.disp.debe .num{ color:#B4531B; }
+.credito-adj{ margin-top:12px; padding-top:10px; border-top:1px dashed var(--line); }
+.credito-adj label{ margin-top:0; }
+.credito-adj .inline-add{ margin-top:4px; }
+.credito-adj select{ flex:1 1 160px; margin:0; }
+.credito-adj .muted{ font-size:13px; margin:6px 0 0; }

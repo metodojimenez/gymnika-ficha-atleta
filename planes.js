@@ -318,20 +318,36 @@ function resumenSesiones(plan, cat){
   const agendadas = ter.filter(r => r.estado === "confirmada" && new Date(r.inicio) > ahora)
     .sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)));
   const consumidas = ter.filter(r => ["asistio", "no_asistio", "cancelada_tarde"].includes(r.estado) || (r.estado === "confirmada" && new Date(r.inicio) <= ahora)).length;
-  const disponibles = Math.max(0, plan.saldo || 0);
-  return { disponibles, agendadas, consumidas, total: disponibles + agendadas.length };
+  const saldo = plan.saldo || 0;
+  const disponibles = Math.max(0, saldo);
+  /* Crédito (lo da un master, hasta 8): puede reservar sin saldo y lo usado queda como deuda */
+  const credito = plan.credito || 0, deuda = Math.max(0, -saldo);
+  const aCredito = Math.max(0, Math.min(credito, saldo + credito));
+  return { disponibles, agendadas, consumidas, total: disponibles + agendadas.length, saldo, credito, deuda, aCredito };
+}
+function creditoHTML(rs, propio){
+  if(!rs.credito && !rs.deuda) return "";
+  const s = (n, a, b)=> n === 1 ? a : b;
+  const txt = rs.deuda
+    ? (propio ? `<strong>Debes ${rs.deuda} ${s(rs.deuda, "sesión", "sesiones")} a crédito.</strong> ${rs.aCredito ? `Puedes reservar ${rs.aCredito} más a crédito.` : "Ya usaste todo tu crédito."} Regulariza tu pago con el centro.`
+              : `<strong>Debe ${rs.deuda} ${s(rs.deuda, "sesión", "sesiones")} a crédito.</strong> ${rs.aCredito ? `Puede reservar ${rs.aCredito} más a crédito.` : "Ya usó todo su crédito."}`)
+    : (propio ? `Tienes crédito: puedes reservar hasta <strong>${rs.credito} ${s(rs.credito, "sesión", "sesiones")}</strong> aunque no tengas saldo, y luego regularizas el pago.`
+              : `Crédito: puede reservar hasta <strong>${rs.credito} ${s(rs.credito, "sesión", "sesiones")}</strong> sin saldo.`);
+  return `<p class="ses-credito${rs.deuda ? " debe" : ""}" role="status">${txt}</p>`;
 }
 function sesionesHTML(rs, opts = {}){
   const { baja, propio = true } = opts;
   const prox = rs.agendadas.slice(0, 4);
   return `
     <div class="ses-cuenta" role="group" aria-label="Sesiones de terapia">
-      <div class="ses-n disp"><span class="num${baja ? " baja" : ""}"${opts.idSaldo ? ` id="${opts.idSaldo}"` : ""}>${rs.disponibles}</span><span class="ses-l">Disponibles</span><span class="ses-s">por agendar</span></div>
+      ${rs.deuda ? `<div class="ses-n disp debe"><span class="num${baja ? " baja" : ""}"${opts.idSaldo ? ` id="${opts.idSaldo}"` : ""}>−${rs.deuda}</span><span class="ses-l">Saldo</span><span class="ses-s">a crédito</span></div>`
+        : `<div class="ses-n disp"><span class="num${baja ? " baja" : ""}"${opts.idSaldo ? ` id="${opts.idSaldo}"` : ""}>${rs.disponibles}</span><span class="ses-l">Disponibles</span><span class="ses-s">por agendar</span></div>`}
       <div class="ses-n agen"><span class="num">${rs.agendadas.length}</span><span class="ses-l">Agendadas</span><span class="ses-s">por hacer</span></div>
       <div class="ses-n total"><span class="num">${rs.total}</span><span class="ses-l">Total</span><span class="ses-s">${rs.consumidas ? plural(rs.consumidas, "realizada", "realizadas") : "&nbsp;"}</span></div>
     </div>
     ${prox.length ? `<div class="ses-prox"><p class="ses-prox-t">${propio ? "Tus próximas sesiones" : "Próximas sesiones"}</p>
-      <ul>${prox.map(r => `<li><span class="num">${fmtFechaHora(r.inicio)}</span></li>`).join("")}${rs.agendadas.length > prox.length ? `<li class="muted">y ${rs.agendadas.length - prox.length} más</li>` : ""}</ul></div>` : ""}`;
+      <ul>${prox.map(r => `<li><span class="num">${fmtFechaHora(r.inicio)}</span></li>`).join("")}${rs.agendadas.length > prox.length ? `<li class="muted">y ${rs.agendadas.length - prox.length} más</li>` : ""}</ul></div>` : ""}
+    ${creditoHTML(rs, propio)}`;
 }
 
 /* Asistencias de fortalecimiento: cuántas veces vino este mes, en verde si viene seguido,
@@ -386,6 +402,7 @@ async function renderPlanAlumno(profile){
   if(!document.getElementById("planCard")) return;
   const saldoPrevio = state.plan && state.plan._uid === profile.id && typeof state.plan.saldo === "number" ? state.plan.saldo : null;
   const propio = !paraDe(profile);
+  plan.credito = profile.credito_sesiones || 0;
   state.plan = plan;
   pintarInicioHoy(profile, plan);
   const conHoy = !!document.getElementById("inicioHoyCard");
@@ -529,7 +546,8 @@ function mostrarConsejoDelDia(){
 
 function movimientoTexto(m){
   if(m.motivo === "compra") return "Compra" + (m.nota ? ": " + m.nota : "");
-  if(m.motivo === "reserva") return m.nota === "Lista de espera" ? "Reserva (desde lista de espera)" : "Reserva de sesión";
+  if(m.motivo === "reserva") return (m.nota || "").startsWith("Lista de espera") ? "Reserva (desde lista de espera)" + (/crédito/.test(m.nota) ? " a crédito" : "")
+    : m.nota === "A crédito" ? "Reserva de sesión a crédito" : "Reserva de sesión";
   if(m.motivo === "devolucion") return m.nota === "Cambio de horario" ? "Cambio de horario (la sesión pasó al nuevo)" : "Devolución por cancelación";
   return "Ajuste del coach" + (m.nota ? ": " + m.nota : "");
 }
@@ -744,9 +762,11 @@ async function renderReservasAlumno(profile){
     state.plan && state.plan._uid === real.id ? Promise.resolve(state.plan) : cargarPlanDe(real.id, real.categoria)
   ]);
   if(!document.getElementById("reservarCard")) return;
+  plan.credito = real.credito_sesiones || profile.credito_sesiones || 0;
   state.plan = plan;
   const mias = (plan.reservas || []).filter(r => ["confirmada", "espera", "asistio"].includes(r.estado));
   const saldo = plan.saldo || 0;
+  const credito = plan.credito;
 
   /* Día elegido: el que ya estaba o el primero del mes con horarios por delante */
   const enMes = (iso)=> iso.slice(0, 7) === reservaUI.mes;
@@ -786,7 +806,7 @@ async function renderReservasAlumno(profile){
       <p class="cal-leyenda muted"><span><i class="lg lg-disp"></i>Con horarios</span><span><i class="lg lg-mia"></i>${paraDe(profile) ? "Su reserva" : "Tu reserva"}</span>${esTer ? "" : `<span><i class="lg lg-sin"></i>Fuera de tu acceso</span>`}</p>
     </div>
     <div class="cal-dia" id="calDia" aria-live="polite"></div>
-    ${esTer && saldo < 1 ? `<div class="plan-alert" style="margin-top:12px">${avisoSinSesionesHTML(profile)}</div>` : ""}
+    ${esTer && saldo + credito < 1 ? `<div class="plan-alert" style="margin-top:12px">${avisoSinSesionesHTML(profile, credito)}</div>` : ""}
     <div id="reservarMsg" aria-live="polite"></div>`;
 
   const pintarDia = ()=>{
@@ -878,8 +898,10 @@ function avisoSinAccesoHTML(profile){
   if(perfilReal(profile).categoria === "transicion") return `${paraDe(profile) ? "Su" : "Tu"} acceso a fortalecimiento no cubre este día. Lo habilita el master coach.`;
   return `${paraDe(profile) ? "Su" : "Tu"} acceso mensual no cubre este día. <button type="button" class="link-inline" data-comprar>Renuévalo</button> para reservar.`;
 }
-function avisoSinSesionesHTML(profile){
-  if(esEquipo()) return `No tiene sesiones disponibles. Súmale sesiones con <strong>Ajustar</strong> en su plan para poder agendar.`;
+function avisoSinSesionesHTML(profile, credito){
+  if(credito) return esEquipo() ? `Ya usó sus ${credito} sesiones a crédito. Debe regularizar el pago para seguir agendando.`
+    : `${paraDe(profile) ? "Ya usó sus" : "Ya usaste tus"} ${credito} sesiones a crédito. <button type="button" class="link-inline" id="btnComprarDesdeReservas">Regulariza tu pago</button> para seguir reservando.`;
+  if(esEquipo()) return `No tiene sesiones disponibles. Súmale sesiones con <strong>Ajustar</strong> o dale crédito en su plan para poder agendar.`;
   return `${paraDe(profile) ? "No tiene" : "No tienes"} sesiones disponibles. <button type="button" class="link-inline" id="btnComprarDesdeReservas">Compra un paquete</button> para reservar.`;
 }
 
@@ -952,9 +974,13 @@ function confirmarReserva(profile, h, fecha, o, aj, saldo, reemplaza){
   const limite = limiteCancelacion(ini, aj);
   /* Al cambiar una sesión de terapia confirmada, la sesión pasa al horario nuevo: no hace falta saldo */
   const pasaSesion = reemplaza && reemplaza.estado === "confirmada" && reemplaza.cat === "terapia";
-  if(esTer && saldo < 1 && !pasaSesion){
-    if(master){ openDialog("Sin sesiones disponibles", `<p style="margin-top:0">${avisoSinSesionesHTML(profile)}</p>`); return; }
-    const d = openDialog("Necesitas sesiones", `<p>Para reservar ${propio ? "necesitas" : "necesita"} al menos 1 sesión disponible.</p><button type="button" class="btn-primary" id="dlgComprar">Comprar sesiones</button>`);
+  const credito = (state.plan && state.plan.credito) || profile.credito_sesiones || 0;
+  const aCredito = esTer && saldo < 1 && saldo + credito >= 1;
+  if(esTer && saldo + credito < 1 && !pasaSesion){
+    if(master){ openDialog("Sin sesiones disponibles", `<p style="margin-top:0">${avisoSinSesionesHTML(profile, credito)}</p>`); return; }
+    const d = openDialog(credito ? "Crédito usado" : "Necesitas sesiones", credito
+      ? `<p>${propio ? "Ya usaste tus" : "Ya usó sus"} ${credito} sesiones a crédito. Para seguir reservando hay que regularizar el pago.</p><button type="button" class="btn-primary" id="dlgComprar">Comprar sesiones</button>`
+      : `<p>Para reservar ${propio ? "necesitas" : "necesita"} al menos 1 sesión disponible.</p><button type="button" class="btn-primary" id="dlgComprar">Comprar sesiones</button>`);
     d.el.querySelector("#dlgComprar").onclick = ()=>{ d.close(); abrirCompra(profile); };
     return;
   }
@@ -968,6 +994,7 @@ function confirmarReserva(profile, h, fecha, o, aj, saldo, reemplaza){
     ? `${lleno
         ? `<p>Este horario está lleno. Si se libera un cupo, la reserva se confirma sola y se usa 1 sesión ${propio ? "de tu saldo. Te avisaremos en el inbox." : "de su saldo."}</p>`
         : pasaSesion ? `<p>No se usa otra sesión: la de las ${reemplaza.hora} pasa a este horario.</p>`
+        : aCredito ? `<p>Se usará <strong>1 sesión a crédito</strong>: ${propio ? "quedarás debiendo" : "quedará debiendo"} ${1 - saldo} ${1 - saldo === 1 ? "sesión" : "sesiones"} hasta regularizar el pago.</p>`
         : `<p>Se usará <strong>1 sesión</strong> de ${propio ? "tu" : "su"} saldo (${propio ? "te" : "le"} quedarán ${saldo - 1}).</p>`}
        <p class="muted">${master ? "Si el centro la cancela, la sesión se le devuelve." : `Puedes cancelar sin costo hasta el <strong>${fmtFechaHora(limite.toISOString())}</strong>. Después de eso, o si no asiste, la sesión se pierde.`}</p>`
     : `<p>El cupo queda guardado. Al llegar, ${propio ? "escanea" : "se escanea"} el QR de recepción desde la app.</p>

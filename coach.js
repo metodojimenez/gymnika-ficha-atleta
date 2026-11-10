@@ -7,8 +7,8 @@ function pintarAccesoChip(plan, cat, rs){
   let txt = "", nivel = "ok";
   if(cat === "terapia"){
     const n = rs.disponibles;
-    txt = n > 0 ? `${plural(n, "sesión disponible", "sesiones disponibles")}` : "Sin sesiones disponibles";
-    nivel = n > 2 ? "ok" : n > 0 ? "poco" : "fin";
+    txt = rs.deuda ? `Debe ${plural(rs.deuda, "sesión", "sesiones")} a crédito` : n > 0 ? `${plural(n, "sesión disponible", "sesiones disponibles")}` : rs.credito ? `Sin saldo · ${plural(rs.credito, "sesión", "sesiones")} a crédito` : "Sin sesiones disponibles";
+    nivel = rs.deuda ? "fin" : n > 2 ? "ok" : n > 0 || rs.credito ? "poco" : "fin";
   } else {
     const est = estadoMembresia(plan);
     if(est.congelado){ txt = `Acceso congelado hasta el ${fmtFecha(est.congelado.hasta)}`; nivel = "poco"; }
@@ -40,6 +40,7 @@ async function renderPlanCoach(profile){
   if(!cat){ box.innerHTML = catSelect + `<p class="muted" style="margin-top:10px">Elige la categoría para ver sus sesiones o su acceso mensual.</p>`; bindCat(); return; }
   const [plan] = await Promise.all([cargarPlanDe(profile.id, cat), cargarHorarios()]);
   if(!document.getElementById("planCard")) return;
+  plan.credito = profile.credito_sesiones || 0;
   const rs = resumenSesiones(plan, cat);
   pintarAccesoChip(plan, cat, rs);
   const avisoSesiones = rs.disponibles <= 0 && rs.agendadas.length <= 2 && (plan.movs || []).length
@@ -61,7 +62,8 @@ async function renderPlanCoach(profile){
         <input type="number" id="adjCant" inputmode="numeric" placeholder="+2 o −1" aria-label="Sesiones a sumar o restar">
         <input id="adjNota" placeholder="Motivo (ej: cortesía)" aria-label="Motivo del ajuste">
         <button type="button" class="btn-outline" id="btnAjustar">Ajustar</button>
-      </div>` : ""}
+      </div>
+      ${creditoControlHTML(profile)}` : ""}
       <div id="adjMsg" aria-live="polite"></div>
       <h3 class="sub-h">Próximas reservas</h3>
       ${prox.length ? `<ul class="res-list">${prox.map(r => `
@@ -73,6 +75,7 @@ async function renderPlanCoach(profile){
       ${comprasHTML}`;
     bindCat();
     bindRiesgo(profile);
+    bindCredito(profile);
     const ba = document.getElementById("btnAjustar");
     if(ba) ba.onclick = ()=> withBusy(ba, "…", async ()=>{
       const n = parseInt(document.getElementById("adjCant").value, 10);
@@ -112,7 +115,8 @@ async function renderPlanCoach(profile){
         <input type="number" id="adjCant" inputmode="numeric" placeholder="+2 o −1" aria-label="Sesiones a sumar o restar">
         <input id="adjNota" placeholder="Motivo (ej: cortesía)" aria-label="Motivo del ajuste">
         <button type="button" class="btn-outline" id="btnAjustar">Ajustar</button>
-      </div>` : ""}
+      </div>
+      ${creditoControlHTML(profile)}` : ""}
       <div id="adjMsg" aria-live="polite"></div>
       <p class="eyebrow" style="margin-top:14px">Fortalecimiento</p>
     </div>`;
@@ -158,6 +162,7 @@ async function renderPlanCoach(profile){
   });
   if(cat === "transicion"){
     bindRiesgo(profile);
+    bindCredito(profile);
     const ba = document.getElementById("btnAjustar");
     if(ba) ba.onclick = ()=> withBusy(ba, "…", async ()=>{
       const n = parseInt(document.getElementById("adjCant").value, 10);
@@ -185,6 +190,35 @@ async function renderPlanCoach(profile){
       renderAthleteDetail(profile, true, document.getElementById("coachMain"));
     });
   }
+}
+
+/* Sesiones a crédito (solo master): de 0 a 8. Permite reservar terapia sin saldo; lo usado queda como deuda hasta que pague */
+function creditoControlHTML(profile){
+  const actual = profile.credito_sesiones || 0;
+  return `<div class="credito-adj">
+      <label for="credSel">Sesiones a crédito</label>
+      <div class="inline-add">
+        <select id="credSel">${Array.from({ length: 9 }, (_, i) => `<option value="${i}" ${i === actual ? "selected" : ""}>${i === 0 ? "Sin crédito" : i + (i === 1 ? " sesión" : " sesiones")}</option>`).join("")}</select>
+        <button type="button" class="btn-outline" id="btnCredito">Guardar</button>
+      </div>
+      <p class="muted">Puede reservar hasta esa cantidad aunque no tenga saldo; lo que use queda como deuda y se descuenta cuando pague su paquete.</p>
+      <div id="credMsg" aria-live="polite"></div>
+    </div>`;
+}
+function bindCredito(profile){
+  const b = document.getElementById("btnCredito");
+  if(!b) return;
+  b.onclick = ()=> withBusy(b, "…", async ()=>{
+    const n = parseInt(document.getElementById("credSel").value, 10);
+    const { error } = await sb.rpc("asignar_credito", { p_user: profile.id, p_credito: n });
+    if(error){ showError(document.getElementById("credMsg"), error); return; }
+    profile.credito_sesiones = n;
+    const a = (state.athleteList || []).find(x => x.id === profile.id);
+    if(a) a.credito_sesiones = n;
+    await renderPlanCoach(profile);
+    if(document.getElementById("reservarCard")){ state.plan = null; await renderReservasAlumno(profile); }
+    showMsg(document.getElementById("credMsg"), "ok", n ? `Listo: puede reservar hasta ${n} ${n === 1 ? "sesión" : "sesiones"} a crédito. Le llegó un aviso.` : "Crédito quitado.");
+  });
 }
 
 /* Color de riesgo o dificultad del alumno de terapia (rojo = más riesgo, azul = menos). Solo lo ve el equipo. */
