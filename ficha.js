@@ -94,7 +94,8 @@ async function renderAthleteDetail(profile, isCoach, container){
   const macroHTML = `<section class="panel macro span-12" id="macroCard" aria-label="Macrociclo"></section>`;
   let panels, tabsAlumno = null;
   if(!isCoach){
-    const estirar = panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 12, { eyebrow: "Todas las mañanas" });
+    const estirar = panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 8, { eyebrow: "Todas las mañanas" })
+      + panelHTML("disciplinaCard", "Tu rueda de disciplina", 4, { eyebrow: "Estiramientos de este mes" });
     const familia = !esHijo && !state.profile.tutor_id ? panelHTML("familiaCard", "Mi familia", 12, { eyebrow: "Hijos a tu cargo" }) : "";
     /* Inicio: próxima sesión con el botón del QR, estiramientos diarios y consejo del coach; abajo, su plan */
     const hoyAlumno = `<section class="panel span-12 hoy-alumno" id="inicioHoyCard" aria-label="${esHijo ? "Su próxima sesión" : "Tu próxima sesión"}"><div class="skel skel-block"></div></section>`;
@@ -189,7 +190,7 @@ async function renderAthleteDetail(profile, isCoach, container){
             <h1>${esc(profile.nombre || (isCoach ? "(sin nombre)" : "Mi ficha"))}</h1>
             ${chips.length ? `<ul class="chips">${chips.join("")}</ul>` : ""}
           </div>
-          ${isCoach ? `<div class="detail-acc"><a class="btn-outline" href="#/bitacora/${encodeURIComponent(profile.id)}"><span aria-hidden="true">✎</span> Bitácora</a>
+          ${isCoach ? `<div class="detail-acc"><a class="btn-outline" href="#/bitacora/${encodeURIComponent(profile.id)}"><span aria-hidden="true">✎</span> Bitácora</a>${esMaster() ? `<a class="btn-outline" href="#/chat/${encodeURIComponent(profile.id)}"><span aria-hidden="true">❝</span> Chat</a>` : ""}
             ${esMaster() ? `<button type="button" class="btn-danger" id="btnDelAthlete">Borrar atleta</button>` : ""}</div>` : ""}
         </div>
         <div id="detailMsg">${fallo ? `<div class="error" role="alert">${esc("Parte de la ficha no cargó. " + errorES(fallo.error))}</div>` : ""}</div>
@@ -1069,6 +1070,11 @@ function renderEstiramientos(profile, uid, isCoach){
 
   /* El alumno ve solo su rutina personalizada; el menú de opciones es para el coach */
   if(!isCoach){ pintarEstiramientosAlumno(box, actuales, uid, nota, reps); return; }
+  /* El equipo ve la disciplina del mes arriba de la rutina */
+  datosDisciplina(uid).then(d => {
+    if(!box.isConnected || d.total <= 0 || box.querySelector(".disc-coach")) return;
+    box.insertAdjacentHTML("afterbegin", `<p class="disc-coach">Disciplina de ${esc(d.mes)}: <strong>${d.pct}%</strong> · estiró ${plural(d.dias, "día", "días")} de ${d.total}</p>`);
+  }, ()=>{});
 
   const grupos = ESTIRAMIENTO_DIARIO_GRUPOS;
   const predet = grupos.flatMap(g => g.items);
@@ -1333,34 +1339,69 @@ function pintarEstiramientosAlumno(box, lista, uid, nota, reps){
   reps = reps || {};
   if(!lista.length){
     box.innerHTML = `<p class="muted">Tu coach todavía no asignó tu rutina de estiramiento diaria. Cuando lo haga, aparecerá aquí.</p>`;
+    renderDisciplina(uid);
     return;
   }
-  const clave = "gymnika_estiro_" + uid + "_" + todayStr();
-  let hechos = new Set();
-  try{ hechos = new Set(JSON.parse(localStorage.getItem(clave) || "[]")); } catch { /* sin almacenamiento */ }
-  const pintar = ()=>{
-    const n = lista.filter(e => hechos.has(e)).length, total = lista.length;
+  /* La rutina se lee; lo que se marca es una sola cosa: si la hiciste hoy */
+  const pintar = (hecho)=>{
     box.innerHTML = `
       <p class="resena-rutina">${esc(nota)}</p>
-      <div class="estiro-avance" role="status">
-        <span class="estiro-barra" aria-hidden="true"><i style="width:${Math.round(n / total * 100)}%"></i></span>
-        <span>${n === total ? "<strong>Rutina de hoy completa.</strong> Buen trabajo." : `Hoy llevas <strong>${n} de ${total}</strong>`}</span>
-      </div>
-      <ol class="estiro-lista">${lista.map((e, i) => `
-        <li><label class="${hechos.has(e) ? "hecho" : ""}">
-          <input type="checkbox" data-estiro="${i}" ${hechos.has(e) ? "checked" : ""}>
-          <span class="estiro-num num" aria-hidden="true">${i + 1}</span>
-          <span class="estiro-txt"><strong>${esc(e)}</strong>${reps[e] ? `<span class="estiro-reps">${reps[e]} reps</span>` : ""}</span>
-        </label></li>`).join("")}</ol>`;
-    box.querySelectorAll("[data-estiro]").forEach(c => c.onchange = ()=>{
-      const ej = lista[Number(c.dataset.estiro)];
-      if(c.checked) hechos.add(ej); else hechos.delete(ej);
-      try{ localStorage.setItem(clave, JSON.stringify([...hechos])); } catch { /* sin almacenamiento */ }
-      pintar();
-      const otra = box.querySelector(`[data-estiro="${c.dataset.estiro}"]`); if(otra) otra.focus();
-    });
+      <ol class="estiro-lista solo-lectura">${lista.map((e, i) => `
+        <li><span class="estiro-num num" aria-hidden="true">${i + 1}</span>
+          <span class="estiro-txt"><strong>${esc(e)}</strong>${reps[e] ? `<span class="estiro-reps">${reps[e]} reps</span>` : ""}</span></li>`).join("")}</ol>
+      <div class="estiro-hoy${hecho === true ? " si" : ""}" role="group" aria-labelledby="estiroHoyT">
+        <p id="estiroHoyT" class="estiro-hoy-t">${hecho === true ? "¡Rutina de hoy hecha!" : "¿Hiciste tu rutina hoy?"}</p>
+        <div class="estiro-hoy-btns">
+          <button type="button" class="${hecho === true ? "btn-primary" : "btn-outline"}" data-estiro-hoy="si" aria-pressed="${hecho === true}">Sí, la hice</button>
+          <button type="button" class="${hecho === false ? "btn-primary" : "btn-outline"}" data-estiro-hoy="no" aria-pressed="${hecho === false}">Todavía no</button>
+        </div>
+        <p class="estiro-hoy-msg" aria-live="polite"></p>
+      </div>`;
+    box.querySelectorAll("[data-estiro-hoy]").forEach(b => { b.onclick = ()=> withBusy(b, "…", async ()=>{
+      const si = b.dataset.estiroHoy === "si";
+      const { error } = await sb.from("bienestar_diario").upsert({ user_id: uid, fecha: todayStr(), estiro: si }, { onConflict: "user_id,fecha" });
+      if(error){ showError(box.querySelector(".estiro-hoy-msg"), error); return; }
+      pintar(si);
+      renderDisciplina(uid);
+    }); });
   };
-  pintar();
+  pintar(null);
+  sb.from("bienestar_diario").select("estiro").eq("user_id", uid).eq("fecha", todayStr()).maybeSingle()
+    .then(({ data })=>{ if(box.isConnected && data && data.estiro !== null && data.estiro !== undefined) pintar(data.estiro); }, ()=>{});
+  renderDisciplina(uid);
+}
+/* Rueda de disciplina: % de días del mes en que estiró, contando solo los días que van del mes.
+   Hoy cuenta si ya la marcó; si todavía no, el día no le baja el porcentaje. */
+async function datosDisciplina(uid){
+  const hoy = todayStr(), ini = hoy.slice(0, 8) + "01", dia = Number(hoy.slice(8, 10));
+  const { data } = await sb.from("bienestar_diario").select("fecha, estiro").eq("user_id", uid).gte("fecha", ini).lte("fecha", hoy);
+  const filas = data || [];
+  const dias = filas.filter(f => f.estiro === true).length;
+  const hoyHecho = filas.some(f => f.fecha === hoy && f.estiro === true);
+  const total = hoyHecho ? dia : dia - 1;
+  return { dias, total, pct: total > 0 ? Math.round(dias / total * 100) : null, mes: MESES_LARGOS[Number(hoy.slice(5, 7)) - 1] };
+}
+function disciplinaSVG(pct, tam){
+  const r = 44, c = 2 * Math.PI * r, v = Math.max(0, Math.min(100, pct || 0));
+  return `<svg viewBox="0 0 120 120" width="${tam}" height="${tam}" aria-hidden="true">
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--paper-2)" stroke-width="14"/>
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--tono)" stroke-width="14" stroke-linecap="round"
+      stroke-dasharray="${(c * v / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 60 60)"/>
+    <text x="60" y="60" text-anchor="middle" dominant-baseline="central" class="disc-num">${pct === null ? "–" : v + "%"}</text></svg>`;
+}
+async function renderDisciplina(uid){
+  const box = document.getElementById("disciplinaCard");
+  if(!box) return;
+  const d = await datosDisciplina(uid);
+  if(!box.isConnected) return;
+  const nivel = d.pct === null ? "d0" : d.pct >= 80 ? "d1" : d.pct >= 50 ? "d2" : "d3";
+  const txt = d.pct === null ? "Empieza hoy tu racha del mes." : d.pct >= 80 ? "¡Muy disciplinado!" : d.pct >= 50 ? "Vas bien, no la sueltes." : "Hay que retomarla.";
+  box.innerHTML = `<div class="medidor disciplina ${nivel}">
+      <div class="rueda">${disciplinaSVG(d.pct, 112)}</div>
+      <div class="medidor-txt" role="status"><strong>${txt}</strong>
+        <span>${d.total > 0 ? `Estiraste ${plural(d.dias, "día", "días")} de ${d.total} en ${d.mes}.` : `Marca tu rutina de hoy para empezar ${d.mes}.`}</span>
+        <span class="disc-nota">Cuenta solo los días que van del mes.</span></div>
+    </div>`;
 }
 
 /* ---------- Evolución (solo el equipo): el color de riesgo en el tiempo y el dolor de cada sesión de la bitácora ----------

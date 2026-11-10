@@ -34,6 +34,7 @@ const SECCIONES_COACH = {
   resumen:     { t: "Resumen",  ico: "▤", master: true },
   equipo:      { t: "Equipo",   ico: "☰", master: true },
   comunicados: { t: "Avisos",   ico: "✉" },
+  chat:        { t: "Chat",     ico: "❝", master: true },
   ajustes:     { t: "Ajustes",  ico: "⚙", master: true }
 };
 function seccionesPermitidas(p = state.profile){
@@ -470,6 +471,7 @@ async function doLogout(){
   stopInbox();
   quitarSuscripcionTareas();
   quitarBitacoraEnVivo();
+  quitarChat();
   await quitarPushDispositivo();
   avisoPagos.vistos = null; avisoPagos.forzar = true;
   borrarTraspaso();
@@ -842,6 +844,7 @@ async function renderAthleteHome(){
   initInbox();
   state.viewingAthleteId = state.profile.id;
   await renderAthleteDetail(state.profile, false, document.getElementById("athleteMain"));
+  iniciarChatAtleta();
 }
 
 /* 60 consejos [título, texto] de Gymnika (6 nov 2026). La misma lista y orden está en private.enviar_consejo_del_dia(),
@@ -1212,6 +1215,10 @@ async function abrirNotificacion(id){
     openDialog(n.titulo, `<p class="muted">${esc(tiempoRelativo(n.created_at))}</p><div class="prose" style="margin-top:8px">${esc(n.mensaje || "")}</div>`);
     return;
   }
+  if(n.tipo === "chat"){
+    if(!esEquipo()){ abrirChatAtleta(); return; }
+    if(esMaster() && n.atleta_id){ const destino = "#/chat/" + encodeURIComponent(n.atleta_id); if(location.hash === destino) showCoachRoute(); else location.hash = destino; return; }
+  }
   if(esEquipo()){
     if((n.tipo === "pago" || n.tipo === "pago_aprobado") && esMaster()){ if(location.hash === "#/pagos") showCoachRoute(); else location.hash = "#/pagos"; return; }
     if(n.tipo === "checkin" || n.tipo === "reserva_nueva" || n.tipo === "checkin_error"){ if(location.hash === "#/agenda") showCoachRoute(); else location.hash = "#/agenda"; return; }
@@ -1250,7 +1257,7 @@ function routeAthleteId(){
   return m ? decodeURIComponent(m[1]) : null;
 }
 function routeCoachSeccion(){
-  const m = location.hash.match(/^#\/(hoy|bitacora|agenda|rutinas|pagos|resumen|equipo|comunicados|ajustes)\b/);
+  const m = location.hash.match(/^#\/(hoy|bitacora|agenda|rutinas|pagos|resumen|equipo|comunicados|ajustes|chat)\b/);
   return m ? m[1] : null;
 }
 /* Alertas del equipo (última semana de acceso en fortalecimiento, 2 o menos sesiones en terapia) */
@@ -1288,6 +1295,7 @@ async function renderCoachHome(){
   document.getElementById("btnLogout").onclick = doLogout;
   initInbox();
   suscribirBitacoraEnVivo();
+  iniciarChatEquipo();
   if(routeAthleteId() || routeCoachSeccion()) document.getElementById("coachLayout").classList.add("has-selection");
   await refreshCoachAside();
   showCoachRoute();
@@ -1332,7 +1340,7 @@ async function refreshCoachAside(){
       </div>
     </div>`}
     <nav class="coach-nav n-${secciones.length}" aria-label="Secciones del coach">
-      ${secciones.map(k => `<a href="#/${k}" data-nav="${k}"><span class="cn-ico" aria-hidden="true">${SECCIONES_COACH[k].ico}</span>${SECCIONES_COACH[k].t}${k === "pagos" ? `<span class="cn-badge" id="navPagosBadge" hidden></span>` : k === "hoy" && state.alertas.length ? `<span class="cn-badge alerta" aria-label="${plural(state.alertas.length, "alerta", "alertas")}">${state.alertas.length}</span>` : ""}</a>`).join("")}
+      ${secciones.map(k => `<a href="#/${k}" data-nav="${k}"><span class="cn-ico" aria-hidden="true">${SECCIONES_COACH[k].ico}</span>${SECCIONES_COACH[k].t}${k === "pagos" ? `<span class="cn-badge" id="navPagosBadge" hidden></span>` : k === "chat" ? `<span class="cn-badge" id="navChatBadge" hidden></span>` : k === "hoy" && state.alertas.length ? `<span class="cn-badge alerta" aria-label="${plural(state.alertas.length, "alerta", "alertas")}">${state.alertas.length}</span>` : ""}</a>`).join("")}
     </nav>
     ${error ? `<div class="error" role="alert">${esc(errorES(error))}</div>` : ""}
     ${(solicitudesPend && solicitudesPend.length) ? `
@@ -1460,6 +1468,7 @@ async function showCoachRoute(){
     else if(seccion === "resumen") await renderCoachResumen(main);
     else if(seccion === "equipo") await renderCoachEquipo(main);
     else if(seccion === "comunicados") await renderCoachComunicados(main);
+    else if(seccion === "chat") await renderCoachChat(main);
     else await renderCoachAjustes(main);
     return;
   }
@@ -1631,7 +1640,7 @@ if(esIOS()) setTimeout(()=> mostrarInstalar("ios"), 1500);
    En el teléfono la app puede quedar abierta días sin recargarse. Al volver a ella revisa si se publicó
    una versión nueva (cambia el ?v= de los archivos) y se actualiza sola; si la persona está escribiendo,
    muestra un aviso con el botón "Actualizar". También renueva la lista de atletas del equipo. */
-const firmaVersion = (html)=> (String(html).match(/\b(?:app|ficha|planes|rutinas|coach|bitacora|entrenos|silueta|estilos|calendario)\.(?:js|css)\?v=\d+/g) || []).sort().join("|");
+const firmaVersion = (html)=> (String(html).match(/\b(?:app|ficha|planes|rutinas|coach|bitacora|entrenos|silueta|chat|estilos|calendario)\.(?:js|css)\?v=\d+/g) || []).sort().join("|");
 const VERSION_CARGADA = firmaVersion(document.head ? document.head.innerHTML : "");
 const versionUI = { revisada: 0, aside: Date.now() };
 function appOcupada(){
