@@ -15,7 +15,7 @@ function horaChat(iso){
 }
 /* Burbujas: las mías a la derecha; las del otro lado a la izquierda con quién escribió */
 function burbujasChatHTML(msgs, atletaId){
-  if(!msgs.length) return `<p class="chat-vacio">${esEquipo() ? "Todavía no hay mensajes. Escríbele para empezar." : "Escríbenos lo que necesites: dudas, molestias, horarios. Te responde un master coach."}</p>`;
+  if(!msgs.length) return `<p class="chat-vacio">${esEquipo() ? "Todavía no hay mensajes. Escríbele para empezar." : "Escríbenos lo que necesites: dudas, molestias, horarios. Te responde el equipo Gymnika a través de MarianI.A."}</p>`;
   const yo = state.profile.id;
   let dia = "";
   return msgs.map(m => {
@@ -81,7 +81,7 @@ function iniciarChatAtleta(){
     const b = document.createElement("button");
     b.type = "button"; b.id = "chatFab"; b.className = "chat-fab";
     b.setAttribute("aria-label", "Chat con MarianI.A. de Gymnika");
-    b.innerHTML = `<span class="chat-fab-dice" aria-hidden="true">¿Dudas?</span><span class="chat-fab-av">${avatarMarianIA("feliz")}</span><span class="chat-badge" hidden></span>`;
+    b.innerHTML = `<span class="chat-fab-dice" aria-hidden="true">¿Dudas?</span><span class="chat-fab-cara"><span class="chat-fab-av">${avatarMarianIA("feliz")}</span><span class="chat-badge" hidden></span></span><span class="chat-fab-lbl">Chatea con MarianI.A.</span>`;
     b.onclick = abrirChatAtleta;
     document.body.appendChild(b);
   }
@@ -115,7 +115,7 @@ async function abrirChatAtleta(){
     dlg.setAttribute("aria-labelledby", "chatTit");
     dlg.innerHTML = `
       <header class="chat-top"><span class="chat-top-av">${avatarMarianIA("feliz")}</span>
-        <div><h2 id="chatTit">MarianI.A.</h2><p>Te responde un master coach de Gymnika</p></div>
+        <div><h2 id="chatTit">MarianI.A.</h2><p>Te responde el equipo Gymnika a través de MarianI.A.</p></div>
         <button type="button" class="icon-btn" data-chat-cerrar aria-label="Cerrar el chat">✕</button></header>
       <ol class="chat-lista" aria-live="polite"><li class="chat-vacio">Cargando…</li></ol>
       ${formChatHTML(yo)}`;
