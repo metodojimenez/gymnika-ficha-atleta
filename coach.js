@@ -60,7 +60,7 @@ async function renderPlanCoach(profile){
       ${avisoSesiones}
       ${master ? `<div class="inline-add tokens-adj">
         <input type="number" id="adjCant" inputmode="numeric" placeholder="+2 o −1" aria-label="Sesiones a sumar o restar">
-        <input id="adjNota" placeholder="Motivo (ej: cortesía)" aria-label="Motivo del ajuste">
+        <input id="adjNota" placeholder="Motivo (ej: cortesía) · solo lo ve el equipo" aria-label="Motivo del ajuste (solo lo ve el equipo)" title="El alumno no ve este motivo">
         <button type="button" class="btn-outline" id="btnAjustar">Ajustar</button>
       </div>
       ${creditoControlHTML(profile)}` : ""}
@@ -113,7 +113,7 @@ async function renderPlanCoach(profile){
       ${avisoSesiones}
       ${master ? `<div class="inline-add tokens-adj">
         <input type="number" id="adjCant" inputmode="numeric" placeholder="+2 o −1" aria-label="Sesiones a sumar o restar">
-        <input id="adjNota" placeholder="Motivo (ej: cortesía)" aria-label="Motivo del ajuste">
+        <input id="adjNota" placeholder="Motivo (ej: cortesía) · solo lo ve el equipo" aria-label="Motivo del ajuste (solo lo ve el equipo)" title="El alumno no ve este motivo">
         <button type="button" class="btn-outline" id="btnAjustar">Ajustar</button>
       </div>
       ${creditoControlHTML(profile)}` : ""}
@@ -406,7 +406,7 @@ async function pintarSemana(main){
       const pasado = inicioLocal(iso, h.hora) < ahora;
       return `
         <div class="wk-slot ${h.categoria === "terapia" ? "ter" : "fort"}${pasado ? " pasado" : ""}">
-          <span class="wk-cap"><span class="sr-only">${CATEGORIAS[h.categoria].nombre}: </span>${h.categoria === "terapia" ? "Terapia" : "Fortalecimiento"} · <span class="num">${conf.length}/${h.aforo}</span>${llegaron ? ` · <span class="num">${llegaron}</span> ✓` : ""}</span>
+          <button type="button" class="wk-cap" data-slot="${esc(h.id)}|${iso}" aria-label="Abrir ${esc(CATEGORIAS[h.categoria].nombre)} del ${esc(fechaLarga(iso))} a las ${horaCorta(h.hora)}: ${conf.length} de ${h.aforo}${esMaster() && !pasado ? ". Agregar personas" : ""}"><span aria-hidden="true">${h.categoria === "terapia" ? "Terapia" : "Fortalecimiento"} · <span class="num">${conf.length}/${h.aforo}</span>${llegaron ? ` · <span class="num">${llegaron}</span> ✓` : ""}</span>${esMaster() && !pasado ? `<span class="wk-mas" aria-hidden="true">+</span>` : ""}</button>
           ${rs.length ? `<ul class="wk-people">${rs.map(r => {
             const p = perfil(r.user_id);
             const tono = h.categoria === "terapia" ? `r-${(state.riesgo || {})[r.user_id] || "sin"}` : "fort";
@@ -427,7 +427,7 @@ async function pintarSemana(main){
         <tbody>${horas.map(hora => `<tr><th scope="row" class="wk-hora num">${hora}</th>${columnas.map(d => celda(d, hora)).join("")}</tr>`).join("")}</tbody>
       </table>
     </div>
-    <p class="muted wk-nota">Toca un nombre para marcar asistencia, cancelar o abrir su ficha. Se actualiza solo cada 30 segundos.</p>`;
+    <p class="muted wk-nota">Toca la hora para ver quiénes van${esMaster() ? " y agregar a varias personas de una vez" : ""}; toca un nombre para marcar asistencia, cancelar o abrir su ficha. Se actualiza solo cada 30 segundos.</p>`;
 
   const colHoy = body.querySelector("th.hoy");
   if(colHoy && window.matchMedia("(max-width: 1023px)").matches){
@@ -437,6 +437,122 @@ async function pintarSemana(main){
   body.querySelectorAll("[data-res]").forEach(b => {
     b.onclick = ()=> abrirReservaCoach((res || []).find(r => r.id === b.dataset.res), horarios, main);
   });
+  body.querySelectorAll("[data-slot]").forEach(b => {
+    const [hid, iso] = b.dataset.slot.split("|");
+    b.onclick = ()=> abrirHoraCoach(horarios.find(h => h.id === hid), iso, horarios, main);
+  });
+}
+
+/* Una hora del Horario: quiénes van y (master) agregar a varias personas de una vez */
+async function abrirHoraCoach(h, iso, horarios, main){
+  if(!h) return;
+  const pasado = inicioLocal(iso, h.hora) < new Date();
+  const puedeAgregar = esMaster() && !pasado;
+  const ter = h.categoria === "terapia";
+  const d = openDialog(`${horaCorta(h.hora)} · ${CATEGORIAS[h.categoria].nombre}`, `
+    <div class="confirm-slot">
+      <span class="cs-day">${fechaLarga(iso)}</span>
+      <span class="cs-time num">${horaCorta(h.hora)}</span>
+      <span class="muted" id="hcCupos"></span>
+    </div>
+    <div id="hcMsg" aria-live="polite"></div>
+    <h3 class="hc-tit" id="hcTitVan">Van</h3>
+    <ul class="hc-van" id="hcVan" aria-labelledby="hcTitVan"><li class="muted">Cargando…</li></ul>
+    ${puedeAgregar ? `
+    <h3 class="hc-tit">Agregar personas</h3>
+    <p class="muted hc-ayuda">${ter ? "Cada reserva usa 1 sesión de su saldo (o de su crédito). Si ya no hay cupo, queda en lista de espera." : "Necesitan acceso vigente ese día. Si se llena, los demás no entran."} Cada persona recibe un aviso.</p>
+    <label class="sr-only" for="hcQ">Buscar por nombre</label>
+    <input type="search" id="hcQ" placeholder="Buscar por nombre" autocomplete="off">
+    <ul class="hc-lista" id="hcLista"></ul>
+    <div class="hc-pie">
+      <button type="button" class="btn-link" id="hcLimpiar" hidden>Quitar selección</button>
+      <button type="button" class="btn-primary sm" id="hcAgregar" disabled>Agregar</button>
+    </div>` : pasado ? "" : `<p class="muted hc-ayuda">Solo un master coach puede agregar personas a una hora.</p>`}`);
+  const sel = new Set();
+  const perfil = (id)=> state.athleteList.find(a => a.id === id) || {};
+  const alumnos = (state.athleteList || []).filter(a => catsDe(a.categoria).includes(h.categoria))
+    .sort((x, y) => String(x.nombre || "").localeCompare(String(y.nombre || ""), "es"));
+  let delDia = [];
+  const cargar = async ()=>{
+    const { data, error } = await sb.from("reservas").select("id, user_id, horario_id, estado, inicio")
+      .eq("fecha", iso).in("estado", ["confirmada", "espera", "asistio", "no_asistio"]).order("created_at");
+    if(error){ showError(d.el.querySelector("#hcMsg"), error); return false; }
+    delDia = data || [];
+    return true;
+  };
+  const pintarVan = ()=>{
+    const aqui = delDia.filter(r => r.horario_id === h.id);
+    const conf = aqui.filter(r => r.estado !== "espera").length;
+    const libres = Math.max(0, h.aforo - conf);
+    d.el.querySelector("#hcCupos").textContent = `${conf} de ${h.aforo} · ${libres ? `${libres} ${libres === 1 ? "cupo libre" : "cupos libres"}` : "lleno"}`;
+    d.el.querySelector("#hcTitVan").textContent = `Van (${aqui.length})`;
+    d.el.querySelector("#hcVan").innerHTML = aqui.length ? aqui.map(r => {
+      const p = perfil(r.user_id);
+      return `<li><button type="button" class="hc-persona" data-hc-res="${esc(r.id)}">
+        <span class="avatar" aria-hidden="true">${esc(initials(p.nombre || ""))}</span>
+        <span class="hc-nombre">${esc(p.nombre || "Alumno")}</span>
+        <span class="hc-estado st-${esc(r.estado)}">${esc(ESTADO_RESERVA[r.estado] || r.estado)}</span></button></li>`;
+    }).join("") : `<li class="muted">Nadie reservó esta hora todavía.</li>`;
+    d.el.querySelectorAll("[data-hc-res]").forEach(b => {
+      b.onclick = async ()=>{
+        const { data: r } = await sb.from("reservas").select("*").eq("id", b.dataset.hcRes).maybeSingle();
+        d.close(); abrirReservaCoach(r, horarios, main);
+      };
+    });
+  };
+  const pintarLista = ()=>{
+    if(!puedeAgregar) return;
+    const t = normalizar(d.el.querySelector("#hcQ").value);
+    const ocupado = (id)=> delDia.find(r => r.user_id === id && r.estado !== "no_asistio");
+    const vis = alumnos.filter(a => !t || normalizar(a.nombre).includes(t))
+      .sort((x, y) => Number(!!ocupado(x.id)) - Number(!!ocupado(y.id)));
+    d.el.querySelector("#hcLista").innerHTML = vis.length ? vis.map(a => {
+      const otra = ocupado(a.id);
+      const nota = otra ? (otra.horario_id === h.id ? "ya está en esta hora" : `ya reservó a las ${horaDe(otra.inicio)} ese día`) : (CATEGORIAS[a.categoria] || {}).nombre || "";
+      return `<li><label class="hc-item${otra ? " ocupado" : ""}">
+        <input type="checkbox" value="${esc(a.id)}"${sel.has(a.id) ? " checked" : ""}${otra ? " disabled" : ""}>
+        <span class="avatar" aria-hidden="true">${esc(initials(a.nombre || ""))}</span>
+        <span class="hc-txt"><strong>${esc(a.nombre || "(sin nombre)")}</strong><span class="muted">${esc(nota)}</span></span></label></li>`;
+    }).join("") : `<li class="muted" style="padding:10px 4px">Nadie con ese nombre.</li>`;
+  };
+  const pintarPie = ()=>{
+    if(!puedeAgregar) return;
+    const n = sel.size;
+    const b = d.el.querySelector("#hcAgregar");
+    b.disabled = !n;
+    b.textContent = n ? `Agregar ${n === 1 ? "1 persona" : n + " personas"}` : "Agregar";
+    d.el.querySelector("#hcLimpiar").hidden = !n;
+  };
+  if(await cargar()){ pintarVan(); pintarLista(); pintarPie(); }
+  if(!puedeAgregar) return;
+  d.el.querySelector("#hcQ").oninput = pintarLista;
+  d.el.querySelector("#hcLista").onchange = (e)=>{
+    const c = e.target.closest("input[type=checkbox]");
+    if(!c) return;
+    if(c.checked) sel.add(c.value); else sel.delete(c.value);
+    pintarPie();
+  };
+  d.el.querySelector("#hcLimpiar").onclick = ()=>{ sel.clear(); pintarLista(); pintarPie(); };
+  d.el.querySelector("#hcAgregar").onclick = async (e)=>{
+    const btn = e.currentTarget;
+    const ids = [...sel];
+    btn.disabled = true; btn.textContent = "Agregando…";
+    const res = [];
+    for(const id of ids){
+      const { data, error } = await sb.rpc("reservar", { p_horario: h.id, p_fecha: iso, p_lugar: null, p_para: id });
+      res.push({ id, ok: !error, estado: data && data.estado, error });
+    }
+    const bien = res.filter(r => r.ok);
+    res.filter(r => r.ok).forEach(r => sel.delete(r.id));
+    const linea = (r)=> `<li class="${r.ok ? "ok" : "mal"}"><strong>${esc(perfil(r.id).nombre || "Alumno")}</strong> · ${r.ok ? (r.estado === "espera" ? "en lista de espera" : "reservado") : esc(errorES(r.error))}</li>`;
+    d.el.querySelector("#hcMsg").innerHTML = `<div class="${bien.length === res.length ? "success" : "error"} hc-res" role="${bien.length === res.length ? "status" : "alert"}">
+      <p>${bien.length === res.length ? (bien.length === 1 ? "Se agregó 1 persona." : `Se agregaron ${bien.length} personas.`) : `Se agregaron ${bien.length} de ${res.length}.`}</p>
+      <ul>${res.map(linea).join("")}</ul></div>`;
+    d.el.querySelector("#hcQ").value = "";
+    if(await cargar()){ pintarVan(); pintarLista(); }
+    pintarPie();
+    alCambiarReserva(main);
+  };
 }
 
 /* Después de marcar o cancelar: repinta la vista abierta (Horario u Hoy) */

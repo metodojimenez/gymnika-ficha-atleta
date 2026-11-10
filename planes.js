@@ -143,9 +143,22 @@ function calcIMC(profile, medidas){
 }
 
 /* ====================== ALUMNO: MI PLAN ====================== */
+/* El motivo de un ajuste o congelamiento vive en notas_privadas: solo el equipo puede leerlo */
+async function adjuntarNotasPrivadas(uid, plan){
+  if(!esEquipo()) return plan;
+  const { data } = await sb.from("notas_privadas").select("ref_tabla, ref_id, nota").eq("user_id", uid);
+  const notas = new Map((data || []).map(n => [n.ref_tabla + ":" + n.ref_id, n.nota]));
+  if(!notas.size) return plan;
+  (plan.movs || []).forEach(m => { const n = notas.get("tokens_movimientos:" + m.id); if(n) m.nota = n; });
+  (plan.congelamientos || []).forEach(c => { const n = notas.get("congelamientos:" + c.id); if(n) c.motivo = n; });
+  return plan;
+}
 async function cargarPlanDe(uid, categoria){
+  return adjuntarNotasPrivadas(uid, await cargarPlanBase(uid, categoria));
+}
+async function cargarPlanBase(uid, categoria){
   if(categoria === "transicion"){
-    const [ter, fort] = await Promise.all([cargarPlanDe(uid, "terapia"), cargarPlanDe(uid, "fortalecimiento")]);
+    const [ter, fort] = await Promise.all([cargarPlanBase(uid, "terapia"), cargarPlanBase(uid, "fortalecimiento")]);
     return { ...fort, movs: ter.movs, saldo: ter.saldo, _uid: uid };
   }
   if(categoria === "terapia"){
@@ -476,7 +489,7 @@ async function renderPlanAlumno(profile){
       </div>` : ""}
       ${plan.congelamientos.length ? `
       <details class="records"><summary>Congelamientos (${plan.congelamientos.length})</summary>
-        <ul class="mov-list">${plan.congelamientos.map(c => `<li><span class="mov-txt">Del ${fmtFecha(c.desde)} al ${fmtFecha(c.hasta)}${c.motivo ? " · " + esc(c.motivo) : ""}</span></li>`).join("")}</ul>
+        <ul class="mov-list">${plan.congelamientos.map(c => `<li><span class="mov-txt">Del ${fmtFecha(c.desde)} al ${fmtFecha(c.hasta)}</span></li>`).join("")}</ul>
       </details>` : ""}`;
   }
   const bcomp = document.getElementById("btnComprar");

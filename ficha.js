@@ -267,7 +267,7 @@ async function renderFamilia(){
         <button type="button" class="btn-outline" data-ver-hijo="${esc(h.id)}">Ver su panel</button>
       </li>`; }).join("")}</ul>`
       : `<p class="muted" style="margin-top:0">¿Vienes con tus hijos? Agrégalos aquí para reservar sus horarios, ver sus sesiones y su ficha desde tu cuenta. No necesitan correo ni contraseña.</p>`}
-    <button type="button" class="${hijos.length ? "btn-link" : "btn-outline"} familia-add" id="btnAgregarHijo">+ Agregar hijo o hija</button>
+    <button type="button" class="${hijos.length ? "btn-link" : "btn-outline"} familia-add" id="btnAgregarHijo">+ Agregar hijo menor de edad</button>
     <div id="familiaMsg" aria-live="polite"></div>`;
   box.querySelectorAll("[data-ver-hijo]").forEach(b => { b.onclick = ()=> verPanelHijo(hijos.find(h => h.id === b.dataset.verHijo)); });
   document.getElementById("btnAgregarHijo").onclick = abrirAgregarHijo;
@@ -284,7 +284,7 @@ async function volverAMiPanel(){
   await renderAthleteDetail(state.profile, false, document.getElementById("athleteMain"));
 }
 function abrirAgregarHijo(){
-  const d = openDialog("Agregar hijo o hija", `
+  const d = openDialog("Agregar hijo menor de edad", `
     <form id="hijoForm" novalidate>
       <div class="form-grid">
         <div class="full">${categoriaPickerHTML("h_", null).replace("¿A qué vienes a Gymnika?", "¿A qué viene a Gymnika?")}</div>
