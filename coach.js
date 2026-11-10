@@ -488,7 +488,7 @@ async function pintarSemana(main){
       const pasado = inicioLocal(iso, h.hora) < ahora;
       return `
         <div class="wk-slot ${h.categoria === "terapia" ? "ter" : "fort"}${pasado ? " pasado" : ""}">
-          <button type="button" class="wk-cap" data-slot="${esc(h.id)}|${iso}" aria-label="Abrir ${esc(CATEGORIAS[h.categoria].nombre)} del ${esc(fechaLarga(iso))} a las ${horaCorta(h.hora)}: ${conf.length} de ${h.aforo}${esMaster() && !pasado ? ". Agregar personas" : ""}"><span aria-hidden="true">${h.categoria === "terapia" ? "Terapia" : "Fortalecimiento"} · <span class="num">${conf.length}/${h.aforo}</span>${llegaron ? ` · <span class="num">${llegaron}</span> ✓` : ""}</span>${esMaster() && !pasado ? `<span class="wk-mas" aria-hidden="true">+</span>` : ""}</button>
+          <button type="button" class="wk-cap" data-slot="${esc(h.id)}|${iso}" aria-label="Abrir ${esc(CATEGORIAS[h.categoria].nombre)} del ${esc(fechaLarga(iso))} a las ${horaCorta(h.hora)}: ${conf.length} de ${h.aforo}${esMaster() ? (pasado ? ". Registrar quienes vinieron" : ". Agregar personas") : ""}"><span aria-hidden="true">${h.categoria === "terapia" ? "Terapia" : "Fortalecimiento"} · <span class="num">${conf.length}/${h.aforo}</span>${llegaron ? ` · <span class="num">${llegaron}</span> ✓` : ""}</span>${esMaster() ? `<span class="wk-mas" aria-hidden="true">+</span>` : ""}</button>
           ${rs.length ? `<ul class="wk-people">${rs.map(r => {
             const p = perfil(r.user_id);
             const tono = h.categoria === "terapia" ? `r-${(state.riesgo || {})[r.user_id] || "sin"}` : "fort";
@@ -528,8 +528,8 @@ async function pintarSemana(main){
 /* Una hora del Horario: quiénes van y (master) agregar a varias personas de una vez */
 async function abrirHoraCoach(h, iso, horarios, main){
   if(!h) return;
-  const pasado = inicioLocal(iso, h.hora) < new Date();
-  const puedeAgregar = esMaster() && !pasado;
+  const pasado = inicioLocal(iso, h.hora) <= new Date();
+  const puedeAgregar = esMaster();
   const ter = h.categoria === "terapia";
   const d = openDialog(`${horaCorta(h.hora)} · ${CATEGORIAS[h.categoria].nombre}`, `
     <div class="confirm-slot">
@@ -541,15 +541,17 @@ async function abrirHoraCoach(h, iso, horarios, main){
     <h3 class="hc-tit" id="hcTitVan">Van</h3>
     <ul class="hc-van" id="hcVan" aria-labelledby="hcTitVan"><li class="muted">Cargando…</li></ul>
     ${puedeAgregar ? `
-    <h3 class="hc-tit">Agregar personas</h3>
-    <p class="muted hc-ayuda">${ter ? "Cada reserva usa 1 sesión de su saldo (o de su crédito). Si ya no hay cupo, queda en lista de espera." : "Necesitan acceso vigente ese día. Si se llena, los demás no entran."} Cada persona recibe un aviso.</p>
+    <h3 class="hc-tit">${pasado ? "Registrar a quienes vinieron" : "Agregar personas"}</h3>
+    <p class="muted hc-ayuda">${pasado
+      ? `Esta hora ya ${inicioLocal(iso, h.hora).getTime() + (h.duracion_min || 60) * 60000 < Date.now() ? "pasó" : "empezó"}: quedan como «asistió».${ter ? " Cada una usa 1 sesión de su saldo (o de su crédito)." : ""} Si alguien ya tiene otro horario ese día, ábrelo y usa «Mover a otra hora».`
+      : `${ter ? "Cada reserva usa 1 sesión de su saldo (o de su crédito). Si ya no hay cupo, queda en lista de espera." : "Necesitan acceso vigente ese día. Si se llena, los demás no entran."} Cada persona recibe un aviso.`}</p>
     <label class="sr-only" for="hcQ">Buscar por nombre</label>
     <input type="search" id="hcQ" placeholder="Buscar por nombre" autocomplete="off">
     <ul class="hc-lista" id="hcLista"></ul>
     <div class="hc-pie">
       <button type="button" class="btn-link" id="hcLimpiar" hidden>Quitar selección</button>
       <button type="button" class="btn-primary sm" id="hcAgregar" disabled>Agregar</button>
-    </div>` : pasado ? "" : `<p class="muted hc-ayuda">Solo un master coach puede agregar personas a una hora.</p>`}`);
+    </div>` : `<p class="muted hc-ayuda">Solo un master coach puede agregar personas a una hora.</p>`}`);
   const sel = new Set();
   const perfil = (id)=> state.athleteList.find(a => a.id === id) || {};
   const alumnos = (state.athleteList || []).filter(a => catsDe(a.categoria).includes(h.categoria))
@@ -590,7 +592,7 @@ async function abrirHoraCoach(h, iso, horarios, main){
       .sort((x, y) => Number(!!ocupado(x.id)) - Number(!!ocupado(y.id)));
     d.el.querySelector("#hcLista").innerHTML = vis.length ? vis.map(a => {
       const otra = ocupado(a.id);
-      const nota = otra ? (otra.horario_id === h.id ? "ya está en esta hora" : `ya reservó a las ${horaDe(otra.inicio)} ese día`) : (CATEGORIAS[a.categoria] || {}).nombre || "";
+      const nota = otra ? (otra.horario_id === h.id ? "ya está en esta hora" : `${pasado ? "tiene horario" : "ya reservó"} a las ${horaDe(otra.inicio)} ese día`) : (CATEGORIAS[a.categoria] || {}).nombre || "";
       return `<li><label class="hc-item${otra ? " ocupado" : ""}">
         <input type="checkbox" value="${esc(a.id)}"${sel.has(a.id) ? " checked" : ""}${otra ? " disabled" : ""}>
         <span class="avatar" aria-hidden="true">${esc(initials(a.nombre || ""))}</span>
@@ -602,7 +604,7 @@ async function abrirHoraCoach(h, iso, horarios, main){
     const n = sel.size;
     const b = d.el.querySelector("#hcAgregar");
     b.disabled = !n;
-    b.textContent = n ? `Agregar ${n === 1 ? "1 persona" : n + " personas"}` : "Agregar";
+    b.textContent = n ? `${pasado ? "Registrar" : "Agregar"} ${n === 1 ? "1 persona" : n + " personas"}` : (pasado ? "Registrar" : "Agregar");
     d.el.querySelector("#hcLimpiar").hidden = !n;
   };
   if(await cargar()){ pintarVan(); pintarLista(); pintarPie(); }
@@ -618,15 +620,17 @@ async function abrirHoraCoach(h, iso, horarios, main){
   d.el.querySelector("#hcAgregar").onclick = async (e)=>{
     const btn = e.currentTarget;
     const ids = [...sel];
-    btn.disabled = true; btn.textContent = "Agregando…";
+    btn.disabled = true; btn.textContent = pasado ? "Registrando…" : "Agregando…";
     const res = [];
     for(const id of ids){
-      const { data, error } = await sb.rpc("reservar", { p_horario: h.id, p_fecha: iso, p_lugar: null, p_para: id });
+      const { data, error } = pasado
+        ? await sb.rpc("registrar_pasado", { p_horario: h.id, p_fecha: iso, p_para: id })
+        : await sb.rpc("reservar", { p_horario: h.id, p_fecha: iso, p_lugar: null, p_para: id });
       res.push({ id, ok: !error, estado: data && data.estado, error });
     }
     const bien = res.filter(r => r.ok);
     res.filter(r => r.ok).forEach(r => sel.delete(r.id));
-    const linea = (r)=> `<li class="${r.ok ? "ok" : "mal"}"><strong>${esc(perfil(r.id).nombre || "Alumno")}</strong> · ${r.ok ? (r.estado === "espera" ? "en lista de espera" : "reservado") : esc(errorES(r.error))}</li>`;
+    const linea = (r)=> `<li class="${r.ok ? "ok" : "mal"}"><strong>${esc(perfil(r.id).nombre || "Alumno")}</strong> · ${r.ok ? (r.estado === "espera" ? "en lista de espera" : r.estado === "asistio" ? "registrado: asistió" : "reservado") : esc(errorES(r.error))}</li>`;
     d.el.querySelector("#hcMsg").innerHTML = `<div class="${bien.length === res.length ? "success" : "error"} hc-res" role="${bien.length === res.length ? "status" : "alert"}">
       <p>${bien.length === res.length ? (bien.length === 1 ? "Se agregó 1 persona." : `Se agregaron ${bien.length} personas.`) : `Se agregaron ${bien.length} de ${res.length}.`}</p>
       <ul>${res.map(linea).join("")}</ul></div>`;
@@ -662,6 +666,10 @@ function abrirReservaCoach(r, horarios, main){
         <button type="button" class="btn-outline" data-asis="0" style="margin-top:0">✕ No asistió</button>` : ""}
       ${!empezo && ["confirmada", "espera"].includes(r.estado) ? `<button type="button" class="btn-danger" id="rcCancelar">Cancelar reserva</button>` : ""}
     </div>
+    ${esMaster() && ["confirmada", "asistio", "no_asistio"].includes(r.estado) ? `<div class="row rc-master">
+      <button type="button" class="btn-outline" id="rcMover" style="margin-top:0">Mover a otra hora</button>
+      ${empezo ? `<button type="button" class="btn-link danger" id="rcQuitar">Quitar de esta hora</button>` : ""}
+    </div>` : ""}
     <a class="btn-link" href="#/atleta/${encodeURIComponent(r.user_id)}" id="rcFicha" style="margin-top:10px">Abrir ficha →</a>
     <div id="rcMsg" aria-live="polite"></div>`);
   d.el.querySelector("#rcFicha").onclick = ()=> d.close();
@@ -672,6 +680,17 @@ function abrirReservaCoach(r, horarios, main){
       d.close(); alCambiarReserva(main);
     });
   });
+  const bq = d.el.querySelector("#rcQuitar");
+  if(bq) bq.onclick = ()=>{
+    if(!confirm(h.categoria === "terapia" ? "¿Quitar a esta persona de esta hora? Se le devuelve la sesión." : "¿Quitar a esta persona de esta hora? También se quita su asistencia de ese día.")) return;
+    withBusy(bq, "…", async ()=>{
+      const { error } = await sb.rpc("quitar_reserva_pasada", { p_reserva: r.id });
+      if(error){ showError(d.el.querySelector("#rcMsg"), error); return; }
+      d.close(); alCambiarReserva(main);
+    });
+  };
+  const bm = d.el.querySelector("#rcMover");
+  if(bm) bm.onclick = ()=>{ d.close(); abrirMoverReserva(r, h, p, horarios, main); };
   const bc = d.el.querySelector("#rcCancelar");
   if(bc) bc.onclick = ()=>{
     if(!confirm(h.categoria === "terapia" ? "¿Cancelar esta reserva? La sesión se devuelve al alumno y se le avisa." : "¿Cancelar este horario? Se le avisa al alumno.")) return;
@@ -683,6 +702,38 @@ function abrirReservaCoach(r, horarios, main){
   };
 }
 
+/* Mover una reserva a otra hora u otro día (master). La bitácora, si hay, se mueve con ella. */
+function abrirMoverReserva(r, h, p, horarios, main){
+  const opciones = (iso)=> (horarios || []).filter(x => x.categoria === h.categoria && x.dia_semana === isoDow(parseFecha(iso)) && (x.activo || x.id === r.horario_id))
+    .sort((a, b) => String(a.hora).localeCompare(String(b.hora)));
+  const marcada = r.estado !== "confirmada";
+  const d = openDialog(`Mover · ${primerNombre(p.nombre) || "alumno"}`, `
+    <p class="muted" style="margin-top:0">Ahora: ${esc(fechaLarga(r.fecha))} a las ${horaCorta(h.hora)} · ${esc(ESTADO_RESERVA[r.estado])}.${marcada ? " Como ya está marcada, solo se puede mover a una hora que ya empezó." : ""}</p>
+    <div class="inline-add">
+      <div><label for="mvFecha" style="margin-top:0">Día</label><input type="date" id="mvFecha" value="${esc(r.fecha)}"${marcada ? ` max="${todayStr()}"` : ""}></div>
+      <div><label for="mvHora" style="margin-top:0">Hora</label><select id="mvHora"></select></div>
+    </div>
+    <button type="button" class="btn-primary" id="mvOk">Mover</button>
+    <div id="mvMsg" aria-live="polite"></div>`);
+  const f = d.el.querySelector("#mvFecha"), sel = d.el.querySelector("#mvHora");
+  const pintar = ()=>{
+    const ops = f.value ? opciones(f.value) : [];
+    sel.innerHTML = ops.length ? ops.map(x => `<option value="${esc(x.id)}"${x.id === r.horario_id && f.value === r.fecha ? " disabled" : ""}>${horaCorta(x.hora)}${x.id === r.horario_id && f.value === r.fecha ? " (actual)" : ""}</option>`).join("")
+      : `<option value="">Sin horarios ese día</option>`;
+    const primera = [...sel.options].find(o => !o.disabled && o.value);
+    if(primera) sel.value = primera.value;
+  };
+  pintar();
+  f.onchange = pintar;
+  const ok = d.el.querySelector("#mvOk");
+  ok.onclick = ()=> withBusy(ok, "Moviendo…", async ()=>{
+    const msg = d.el.querySelector("#mvMsg");
+    if(!f.value || !sel.value){ showMsg(msg, "error", "Elige el día y la hora."); return; }
+    const { error } = await sb.rpc("mover_reserva", { p_reserva: r.id, p_horario: sel.value, p_fecha: f.value });
+    if(error){ showError(msg, error); return; }
+    d.close(); alCambiarReserva(main);
+  });
+}
 
 /* QR de recepción para imprimir */
 let qrLibPromise = null;

@@ -1119,3 +1119,4 @@ button.wk-cap:focus-visible{ outline:2px solid var(--accent); outline-offset:1px
 /* Gráficos de progreso: últimas 8 semanas o historial */
 .chart-rango{ margin:0 0 8px; }
 .ext-historial{ margin-top:12px; }
+.rc-master{ margin-top:10px; align-items:center; }
