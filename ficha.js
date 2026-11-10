@@ -73,6 +73,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     profile.objetivo ? `Objetivo: ${profile.objetivo}` : null
   ].filter(Boolean).map(t=>`<li class="chip">${esc(t)}</li>`);
   if(isCoach && tieneLesion(profile.lesiones)) chips.push(`<li class="chip warn">Lesión: ${esc(profile.lesiones)}</li>`);
+  if(isCoach && (state.maldita || {})[profile.id]) chips.push(`<li class="chip">${malditaChipHTML(profile.id)}</li>`);
   if(isCoach && profile.autorizacion_medica === false) chips.push(`<li class="chip warn">Sin autorización médica</li>`);
   if(isCoach && profile.tutor_id){
     const tutor = state.athleteList.find(a => a.id === profile.tutor_id);

@@ -1300,7 +1300,7 @@ async function refreshCoachAside(){
     sb.from("profiles").select("*").eq("role","atleta").order("nombre"),
     sb.from("solicitudes_nutricion").select("*").eq("atendida", false).order("fecha"),
     sb.from("profiles").select("id,nombre,role").neq("role", "atleta"),
-    sb.from("ficha_interna").select("user_id,color_riesgo"),
+    sb.from("ficha_interna").select("user_id,color_riesgo,zona_maldita"),
     cargarAlertas(),
     sb.from("membresias").select("user_id, inicio, fin").gte("fin", todayStr()),
     sb.from("congelamientos").select("user_id, desde, hasta").gte("hasta", todayStr())
@@ -1314,7 +1314,8 @@ async function refreshCoachAside(){
   state.athleteList = athletes || [];
   state.equipo = equipo || [];
   state.riesgo = {};
-  (interna || []).forEach(x => { state.riesgo[x.user_id] = x.color_riesgo; });
+  state.maldita = {};
+  (interna || []).forEach(x => { state.riesgo[x.user_id] = x.color_riesgo; if(x.zona_maldita) state.maldita[x.user_id] = x.zona_maldita; });
   const area = areaCoach();
   if(area) state.catFiltro = "";
   const est = macrocicloEstado();
@@ -1583,7 +1584,7 @@ if(esIOS()) setTimeout(()=> mostrarInstalar("ios"), 1500);
    En el teléfono la app puede quedar abierta días sin recargarse. Al volver a ella revisa si se publicó
    una versión nueva (cambia el ?v= de los archivos) y se actualiza sola; si la persona está escribiendo,
    muestra un aviso con el botón "Actualizar". También renueva la lista de atletas del equipo. */
-const firmaVersion = (html)=> (String(html).match(/\b(?:app|ficha|planes|rutinas|coach|bitacora|entrenos|estilos|calendario)\.(?:js|css)\?v=\d+/g) || []).sort().join("|");
+const firmaVersion = (html)=> (String(html).match(/\b(?:app|ficha|planes|rutinas|coach|bitacora|entrenos|silueta|estilos|calendario)\.(?:js|css)\?v=\d+/g) || []).sort().join("|");
 const VERSION_CARGADA = firmaVersion(document.head ? document.head.innerHTML : "");
 const versionUI = { revisada: 0, aside: Date.now() };
 function appOcupada(){

@@ -10,7 +10,7 @@ const BIT_CAMPOS = [
   ["que_ocurrio", "¿Qué ocurrió?"],
   ["pendiente", "¿Pendiente para la próxima?"]
 ];
-const miradorUI = { turno: null, pend: [], vistos: new Set(), cargando: false, borradores: {}, hist: {}, manuales: [] };
+const miradorUI = { turno: null, pend: [], vistos: new Set(), cargando: false, borradores: {}, hist: {}, manuales: [], timers: {}, enviado: {}, guardados: new Set() };
 const bitUI = { filtro: "", q: "" };
 
 function routeBitacoraId(){
@@ -22,11 +22,8 @@ const hayValor = (v)=> v !== null && v !== undefined && v !== "";
 const nivelDolor = (n)=> n >= 7 ? "alto" : n >= 4 ? "medio" : "bajo";
 
 /* ---------- Campos (los mismos en el Mirador y en «Nueva entrada») ---------- */
-const ZONAS_DOLOR = ["Cabeza", "Cuello", "Hombro derecho", "Hombro izquierdo", "Codo derecho", "Codo izquierdo",
-  "Muñeca o mano derecha", "Muñeca o mano izquierda", "Espalda alta", "Espalda media", "Zona lumbar", "Sacro o coxis",
-  "Cadera derecha", "Cadera izquierda", "Ingle derecha", "Ingle izquierda", "Muslo derecho", "Muslo izquierdo",
-  "Rodilla derecha", "Rodilla izquierda", "Pantorrilla derecha", "Pantorrilla izquierda",
-  "Tobillo derecho", "Tobillo izquierdo", "Pie derecho", "Pie izquierdo"];
+/* Las mismas zonas de la silueta 3D (silueta.js), de la cabeza a los pies */
+const ZONAS_DOLOR = SIL_ZONAS_LISTA;
 /* Zonas de una entrada; las entradas de antes (sin zonas) se leen como una zona general */
 function zonasDe(d){
   if(d && Array.isArray(d.zonas) && d.zonas.length) return d.zonas;
@@ -64,7 +61,8 @@ function camposBitacoraHTML(pre, d = {}){
   return `<div class="bit-campos" data-pre="${pre}" data-zn="${zonas.length}">
     <fieldset class="bit-zonas" data-lista="llegada"><legend>Dolor al llegar</legend>
       <div class="zonas-lista">${zonas.map((z, k) => zonaLlegadaHTML(pre, k, z)).join("")}</div>
-      <button type="button" class="btn-outline sm zona-add" data-zona-add>+ Agregar zona</button></fieldset>
+      <div class="zona-botones"><button type="button" class="btn-outline sm" data-zona-cuerpo>Marcar en el cuerpo</button>
+      <button type="button" class="btn-outline sm zona-add" data-zona-add>+ Agregar zona</button></div></fieldset>
     ${t("como_llego", "¿Cómo llegó?")}
     ${t("que_hizo", "¿Qué hizo hoy?")}
     ${t("que_ocurrio", "¿Qué ocurrió?")}
@@ -112,6 +110,8 @@ function enlazarCampos(box){
       campos.querySelector(`[data-lista="llegada"] .zona-row[data-z="${k}"] select`).focus();
       return;
     }
+    const cuerpoBtn = e.target.closest("[data-zona-cuerpo]");
+    if(cuerpoBtn){ abrirSiluetaCampos(cuerpoBtn.closest(".bit-campos")); return; }
     const quitar = e.target.closest("[data-zona-quitar]");
     if(quitar){
       const row = quitar.closest(".zona-row"), campos = row.closest(".bit-campos");
@@ -149,6 +149,76 @@ function enlazarCampos(box){
     else { const l = fotosUI.nuevas.get(campos) || []; l[Number(mini.dataset.nueva)] = null; }
     mini.remove();
   });
+}
+/* ---------- Silueta: marcar el dolor de llegada tocando el cuerpo ---------- */
+const nombreFila = (row)=>{
+  const sel = row.querySelector("[data-zona-sel]").value;
+  return sel === "__otra" ? (row.querySelector("[data-zona-otra]").value.trim() || null) : (sel || null);
+};
+function abrirSiluetaCampos(campos){
+  if(!campos) return;
+  const atleta = campos.closest("[data-atleta]")?.dataset.atleta || null;
+  const a = (state.athleteList || []).find(x => x.id === atleta);
+  const zonas = (leerCampos(campos, campos.dataset.pre).zonas || []).filter(z => z.zona && hayValor(z.inicio));
+  abrirSilueta({
+    titulo: a ? primerNombre(a.nombre) + " · ¿dónde le duele?" : "¿Dónde le duele?",
+    zonas, maldita: atleta ? (state.maldita || {})[atleta] || null : null,
+    onMaldita: atleta ? (nombre)=> guardarZonaMaldita(atleta, nombre) : null,
+    onListo: (zs)=> aplicarZonasSilueta(campos, zs)
+  });
+}
+async function guardarZonaMaldita(atleta, nombre){
+  const { error } = await sb.from("ficha_interna").upsert({ user_id: atleta, zona_maldita: nombre, zona_maldita_por: state.profile.id, zona_maldita_at: new Date().toISOString() });
+  if(error) return errorES(error);
+  state.maldita = state.maldita || {};
+  if(nombre) state.maldita[atleta] = nombre; else delete state.maldita[atleta];
+  document.querySelectorAll(`[data-maldita-de="${atleta}"]`).forEach(el => { el.outerHTML = malditaChipHTML(atleta); });
+  return null;
+}
+function malditaChipHTML(atleta){
+  const z = (state.maldita || {})[atleta];
+  return `<span data-maldita-de="${esc(atleta)}">${z ? `<span class="maldita-chip" title="Zona principal de dolor">Zona maldita: ${esc(z)}</span>` : ""}</span>`;
+}
+/* Pasa lo marcado en la silueta a las filas de «Dolor al llegar» (y su par en «¿Con cuánto dolor se va?») */
+function aplicarZonasSilueta(campos, zs){
+  const pre = campos.dataset.pre;
+  const lleg = campos.querySelector('[data-lista="llegada"] .zonas-lista'), sal = campos.querySelector('[data-lista="salida"] .zonas-lista');
+  const filas = ()=> [...lleg.querySelectorAll(".zona-row")];
+  const marcar = (row, n)=>{
+    row.querySelectorAll(`input[name="${pre}zi${row.dataset.z}"]`).forEach(i => { i.checked = Number(i.value) === n; });
+  };
+  const porNombre = new Map(filas().map(r => [nombreFila(r), r]));
+  /* Las de la silueta que ya no están marcadas: se quitan (si no tienen dolor de salida) */
+  const nuevos = new Set(zs.map(z => z.zona));
+  filas().forEach(r => {
+    const nom = nombreFila(r);
+    if(!nom || !silIdDeNombre(nom) || nuevos.has(nom)) return;
+    const k = r.dataset.z, tieneSalida = campos.querySelector(`input[name="${pre}zs${k}"]:checked`);
+    if(tieneSalida) marcar(r, -1);
+    else campos.querySelectorAll(`.zona-row[data-z="${k}"]`).forEach(f => f.remove());
+  });
+  zs.forEach(z => {
+    let row = porNombre.get(z.zona);
+    if(!row || !row.isConnected){
+      /* Reusar la fila vacía del inicio si no tiene nada */
+      const vacia = filas().find(r => !nombreFila(r) && !r.querySelector(`input[name="${pre}zi${r.dataset.z}"]:checked`) && !campos.querySelector(`input[name="${pre}zs${r.dataset.z}"]:checked`));
+      if(vacia){ vacia.querySelector("[data-zona-sel]").value = z.zona; row = vacia; }
+      else {
+        const k = Number(campos.dataset.zn || 0);
+        campos.dataset.zn = k + 1;
+        lleg.insertAdjacentHTML("beforeend", zonaLlegadaHTML(pre, k, { zona: z.zona }));
+        sal.insertAdjacentHTML("beforeend", zonaSalidaHTML(pre, k, { zona: z.zona }));
+        row = lleg.querySelector(`.zona-row[data-z="${k}"]`);
+      }
+      const n = sal.querySelector(`.zona-row[data-z="${row.dataset.z}"] .zona-nombre`); if(n) n.textContent = z.zona;
+    }
+    marcar(row, z.inicio);
+  });
+  if(!filas().length){
+    const k = Number(campos.dataset.zn || 0); campos.dataset.zn = k + 1;
+    lleg.insertAdjacentHTML("beforeend", zonaLlegadaHTML(pre, k)); sal.insertAdjacentHTML("beforeend", zonaSalidaHTML(pre, k));
+  }
+  campos.dispatchEvent(new Event("input", { bubbles: true }));
 }
 const fotosUI = { nuevas: new WeakMap(), borrar: new WeakMap() };
 function fotosDe(box){
@@ -234,7 +304,7 @@ async function cargarTurno(){
   miradorUI.turno = (data || [])[0] || null;
   /* Si quedó abierto de otro día, la base lo cierra sola: aquí tampoco cuenta */
   if(miradorUI.turno && String(new Date(miradorUI.turno.inicio).toLocaleDateString("en-CA", { timeZone: "America/Lima" })) !== todayStr()) miradorUI.turno = null;
-  miradorUI.manuales = leerManuales();
+  miradorUI.manuales = await cargarManuales();
   pintarTurno();
   if(miradorUI.turno) actualizarMirador();
 }
@@ -318,8 +388,13 @@ async function actualizarMirador(){
   if(!miradorUI.turno || miradorUI.cargando) return;
   miradorUI.cargando = true;
   try{
-    const { data, error } = await sb.rpc("mirador_pendientes");
+    const [{ data, error }, manuales, { data: bors }] = await Promise.all([
+      sb.rpc("mirador_pendientes"), cargarManuales(),
+      sb.from("mirador_borradores").select("clave, datos, autor_id, autor_nombre, updated_at").eq("fecha", todayStr())
+    ]);
     if(error){ console.error(error); return; }
+    miradorUI.manuales = manuales;
+    (bors || []).forEach(b => recibirBorrador(b, true));
     const lista = (data || []).concat(miradorUI.manuales.filter(m => !(data || []).some(x => x.reserva_id === m.reserva_id || (m.sinReserva && x.atleta_id === m.atleta_id))));
     await cargarReferencias(lista.map(p => p.atleta_id));
     const nuevos = lista.filter(p => !miradorUI.vistos.has(p.reserva_id));
@@ -360,11 +435,12 @@ function referenciasHTML(lista){
 function tarjetaMiradorHTML(p){
   const pre = "m" + p.reserva_id.replace(/[^a-z0-9]/gi, "").slice(0, 12) + "_";
   const cat = (CATEGORIAS[p.categoria] || {}).nombre || "";
-  return `<article class="mir-card" data-reserva="${esc(p.reserva_id)}" data-pre="${pre}" aria-label="${esc(p.nombre || "Alumno")}">
+  return `<article class="mir-card" data-reserva="${esc(p.reserva_id)}" data-atleta="${esc(p.atleta_id)}" data-pre="${pre}" aria-label="${esc(p.nombre || "Alumno")}">
     <header class="mir-head"><span class="avatar" aria-hidden="true">${esc(initials(p.nombre || ""))}</span>
       <div><h3>${esc(p.nombre || "Alumno")}</h3>
         <p class="muted">${esc(cat)}${p.sinReserva ? ` · sin reserva · agregado a las ${esc(horaDe(p.checkin_at))}` : ` · ${esc(horaDe(p.inicio))} · llegó ${esc(horaDe(p.checkin_at))}`}</p></div>
       <a class="link-inline mir-hist" href="#/bitacora/${encodeURIComponent(p.atleta_id)}" data-ir-bitacora>Historial</a></header>
+    ${malditaChipHTML(p.atleta_id)}<p class="mir-vivo" hidden></p>
     ${tieneLesion(p.lesiones) ? `<p class="mir-lesion"><strong>Lesión:</strong> ${esc(p.lesiones)}</p>` : ""}
     ${referenciasHTML(miradorUI.hist[p.atleta_id])}
     ${camposBitacoraHTML(pre, miradorUI.borradores[p.reserva_id] || {})}
@@ -392,6 +468,9 @@ function abrirMirador(irA){
     document.body.appendChild(dlg);
     const track = dlg.querySelector(".mir-track");
     enlazarCampos(track);
+    const alEscribir = (e)=>{ const card = e.target.closest && e.target.closest(".mir-card"); if(card) programarBorrador(card); };
+    track.addEventListener("input", alEscribir);
+    track.addEventListener("change", alEscribir);
     const cerrar = ()=>{ guardarBorradores(dlg); if(dlg.open) dlg.close(); pintarTurno(); };
     dlg.addEventListener("cancel", (e)=>{ e.preventDefault(); cerrar(); });
     dlg.addEventListener("click", (e)=>{
@@ -492,7 +571,9 @@ async function guardarTarjeta(dlg, card, btn){
     if(fallas) msg.textContent = `Se guardó, pero ${plural(fallas, "foto no se subió", "fotos no se subieron")}. Agrégalas desde la Bitácora.`;
     delete miradorUI.borradores[reserva];
     delete miradorUI.hist[p.atleta_id];
-    if(miradorUI.manuales.some(m => m.reserva_id === reserva)){ miradorUI.manuales = miradorUI.manuales.filter(m => m.reserva_id !== reserva); guardarManuales(); }
+    clearTimeout(miradorUI.timers[reserva]); miradorUI.guardados.add(reserva);
+    if(miradorUI.manuales.some(m => m.reserva_id === reserva)){ miradorUI.manuales = miradorUI.manuales.filter(m => m.reserva_id !== reserva); quitarManualDB(reserva); }
+    sb.from("mirador_borradores").delete().eq("clave", reserva).then(()=>{}, ()=>{});
     miradorUI.pend = miradorUI.pend.filter(x => x.reserva_id !== reserva);
     const i = tarjetas(dlg).indexOf(card);
     card.classList.add("saliendo");
@@ -566,6 +647,7 @@ async function renderBitacoraAtleta(main, id){
       <a class="back" href="#/bitacora">← Bitácora</a>
       <p class="eyebrow">Bitácora${a.categoria ? " · " + esc(CATEGORIAS[a.categoria].nombre) : ""}</p><h1>${esc(a.nombre || "(sin nombre)")}</h1>
       ${tieneLesion(a.lesiones) ? `<p class="lede"><strong>Lesión:</strong> ${esc(a.lesiones)}</p>` : ""}
+      <p class="bit-maldita">${malditaChipHTML(a.id)} <button type="button" class="btn-link" id="btnMaldita">${(state.maldita || {})[a.id] ? "Cambiar zona maldita" : "Marcar zona maldita"}</button></p>
       <div class="bit-head-acc"><button type="button" class="btn-primary" id="btnNuevaBit">+ Nueva entrada</button>
         <a class="btn-outline" href="#/atleta/${encodeURIComponent(a.id)}">Ver ficha</a></div></header>
     <div class="seg bit-tabs" role="tablist" aria-label="Secciones de la bitácora">
@@ -583,6 +665,12 @@ async function renderBitacoraAtleta(main, id){
     <section class="panel span-12" data-bit-panel="externos" hidden aria-labelledby="bitExt"><div class="panel-head"><h2 id="bitExt">Entrenamiento fuera de Gymnika</h2><span class="muted">Del reloj o anotado a mano</span></div>
       <div id="bitExternos"><div class="skel skel-block"></div></div></section></div>`;
   document.getElementById("btnNuevaBit").onclick = ()=> abrirEntradaBitacora(a);
+  document.getElementById("btnMaldita").onclick = ()=> abrirSilueta({ eyebrow: "Ficha · zona maldita", titulo: "Zona maldita de " + (primerNombre(a.nombre) || "este atleta"),
+    maldita: (state.maldita || {})[a.id] || null, onMaldita: async (nombre)=>{
+      const err = await guardarZonaMaldita(a.id, nombre);
+      const b = document.getElementById("btnMaldita"); if(b && !err) b.textContent = nombre ? "Cambiar zona maldita" : "Marcar zona maldita";
+      return err;
+    } });
   main.querySelectorAll("[data-bit-tab]").forEach(b => { b.onclick = ()=>{
     main.querySelectorAll("[data-bit-tab]").forEach(x => x.setAttribute("aria-selected", String(x === b)));
     main.querySelectorAll("[data-bit-panel]").forEach(p => { p.hidden = p.dataset.bitPanel !== b.dataset.bitTab; });
@@ -711,6 +799,7 @@ function abrirEntradaBitacora(a, previa){
     <div id="nbMsg" aria-live="polite"></div>
     <button type="button" class="btn-primary" id="btnGuardarBit">Guardar</button>`);
   dlg.el.classList.add("bit-dialog");
+  dlg.el.dataset.atleta = a ? a.id : (previa && previa.atleta_id) || "";
   enlazarCampos(dlg.el);
   const btn = dlg.el.querySelector("#btnGuardarBit");
   btn.onclick = ()=> withBusy(btn, "Guardando…", async ()=>{
@@ -824,17 +913,17 @@ async function completarDesdeHora(dlg, reservaId){
 /* ---------- Agregar personas al Mirador a mano (no escanearon el QR) ----------
    Con reserva hoy: se marca su llegada y entra como si hubiera escaneado.
    Sin reserva: tarjeta «sin reserva» que guarda la bitácora sin sesión; se recuerda en este navegador hasta guardarla. */
-function claveManuales(){ return miradorUI.turno ? "gymnika-mirador-manual-" + miradorUI.turno.id : ""; }
-function leerManuales(){
-  const k = claveManuales();
-  if(!k) return [];
-  try{ return JSON.parse(sessionStorage.getItem(k) || "[]") || []; } catch { return []; }
+/* Las personas agregadas a mano quedan en la base: todo el equipo en turno las ve al instante */
+async function cargarManuales(){
+  const { data, error } = await sb.from("mirador_manual").select("clave, atleta_id, datos").eq("fecha", todayStr());
+  if(error){ console.error(error); return miradorUI.manuales || []; }
+  return (data || []).map(r => ({ ...(r.datos || {}), reserva_id: r.clave, atleta_id: r.atleta_id }));
 }
-function guardarManuales(){
-  const k = claveManuales();
-  if(!k) return;
-  try{ sessionStorage.setItem(k, JSON.stringify(miradorUI.manuales)); } catch { /* sin almacenamiento: quedan solo en memoria */ }
+async function guardarManualDB(p){
+  const { error } = await sb.from("mirador_manual").upsert({ clave: p.reserva_id, atleta_id: p.atleta_id, fecha: todayStr(), datos: p });
+  if(error) console.error(error);
 }
+function quitarManualDB(clave){ sb.from("mirador_manual").delete().eq("clave", clave).then(()=>{}, (e)=> console.error(e)); }
 function abrirAgregarMirador(){
   if(!miradorUI.turno) return;
   const area = areaCoach();
@@ -900,7 +989,7 @@ async function agregarAlMirador(a, d, btn){
       /* Su sesión terminó antes de tu turno: igual se agrega con su reserva */
       const [h] = (await cargarHorarios()).filter(x => x.id === cand.horario_id);
       const p = { reserva_id: cand.id, atleta_id: a.id, nombre: a.nombre, categoria: (h || {}).categoria || a.categoria, inicio: cand.inicio, checkin_at: cand.checkin_at || new Date().toISOString(), lesiones: a.lesiones };
-      miradorUI.manuales.push(p); guardarManuales();
+      miradorUI.manuales.push(p); await guardarManualDB(p);
       miradorUI.pend.push(p);
       listo(p.reserva_id);
       return;
@@ -908,7 +997,7 @@ async function agregarAlMirador(a, d, btn){
     const ahoraISO = new Date().toISOString();
     const p = { reserva_id: "manual-" + a.id, atleta_id: a.id, nombre: a.nombre, categoria: a.categoria === "transicion" ? "fortalecimiento" : a.categoria,
       inicio: ahoraISO, checkin_at: ahoraISO, lesiones: a.lesiones, sinReserva: true };
-    miradorUI.manuales.push(p); guardarManuales();
+    miradorUI.manuales.push(p); await guardarManualDB(p);
     miradorUI.vistos.add(p.reserva_id);
     await cargarReferencias([a.id]);
     miradorUI.pend.push(p);
@@ -919,13 +1008,78 @@ async function agregarAlMirador(a, d, btn){
 function quitarManual(dlg, card){
   if(!card) return;
   const id = card.dataset.reserva;
-  miradorUI.manuales = miradorUI.manuales.filter(m => m.reserva_id !== id); guardarManuales();
+  miradorUI.manuales = miradorUI.manuales.filter(m => m.reserva_id !== id); quitarManualDB(id);
+  sb.from("mirador_borradores").delete().eq("clave", id).then(()=>{}, ()=>{});
   miradorUI.pend = miradorUI.pend.filter(p => p.reserva_id !== id);
   delete miradorUI.borradores[id];
   card.remove();
   sincronizarTarjetas(dlg);
   pintarTurno();
 }
+
+/* ---------- Mirador en vivo: lo que cada coach escribe se comparte con el equipo en turno ---------- */
+function programarBorrador(card){
+  const clave = card.dataset.reserva;
+  if(!clave || miradorUI.guardados.has(clave)) return;
+  clearTimeout(miradorUI.timers[clave]);
+  miradorUI.timers[clave] = setTimeout(()=> enviarBorrador(card), 700);
+}
+async function enviarBorrador(card){
+  const clave = card.dataset.reserva;
+  if(!card.isConnected || miradorUI.guardados.has(clave)) return;
+  const datos = leerCampos(card, card.dataset.pre);
+  miradorUI.borradores[clave] = datos;
+  miradorUI.enviado[clave] = Date.now();
+  const { error } = await sb.from("mirador_borradores").upsert({ clave, atleta_id: card.dataset.atleta, fecha: todayStr(), datos,
+    autor_id: state.profile.id, autor_nombre: state.profile.nombre || null, updated_at: new Date().toISOString() });
+  if(error) console.error(error);
+}
+function recibirBorrador(fila, inicial){
+  if(!fila || !fila.clave || miradorUI.guardados.has(fila.clave)) return;
+  const propio = fila.autor_id === state.profile.id;
+  /* Lo que acabo de enviar desde este teléfono vuelve como eco: se ignora */
+  if(propio && (inicial ? miradorUI.borradores[fila.clave] : Date.now() - (miradorUI.enviado[fila.clave] || 0) < 4000)) return;
+  const dlg = document.getElementById("modalMirador");
+  const card = dlg ? [...dlg.querySelectorAll(".mir-card")].find(c => c.dataset.reserva === fila.clave) : null;
+  const quien = propio ? "otro dispositivo tuyo" : primerNombre(fila.autor_nombre) || "otro coach";
+  if(card && card.contains(document.activeElement) && document.activeElement.matches("input, textarea, select")){
+    avisoVivo(card, `✎ ${quien} también está escribiendo aquí. Al soltar, verás sus cambios.`);
+    miradorUI.pendienteVivo = miradorUI.pendienteVivo || {};
+    miradorUI.pendienteVivo[fila.clave] = fila;
+    return;
+  }
+  miradorUI.borradores[fila.clave] = fila.datos || {};
+  if(card){ aplicarBorrador(card, fila.datos || {}); if(!inicial) avisoVivo(card, `✎ Actualizado por ${quien}`); }
+}
+function avisoVivo(card, texto){
+  const el = card.querySelector(".mir-vivo");
+  if(!el) return;
+  el.textContent = texto; el.hidden = false;
+  clearTimeout(el._t); el._t = setTimeout(()=>{ el.hidden = true; }, 5000);
+}
+/* Pone en la tarjeta lo que escribió otro coach, sin tocar las fotos que se están eligiendo */
+function aplicarBorrador(card, d){
+  const pre = card.dataset.pre, campos = card.querySelector(".bit-campos");
+  if(!campos) return;
+  BIT_CAMPOS.forEach(([c]) => { const t = campos.querySelector(`[data-campo="${c}"]`); if(t) t.value = d[c] || ""; });
+  campos.querySelectorAll(`input[name="${pre}estiramientos"]`).forEach(i => { i.checked = (i.value === "si" && d.estiramientos === true) || (i.value === "no" && d.estiramientos === false); });
+  const zs = zonasDe(d).length ? zonasDe(d) : [{}];
+  campos.querySelector('[data-lista="llegada"] .zonas-lista').innerHTML = zs.map((z, k) => zonaLlegadaHTML(pre, k, z)).join("");
+  campos.querySelector('[data-lista="salida"] .zonas-lista').innerHTML = zs.map((z, k) => zonaSalidaHTML(pre, k, z)).join("");
+  campos.dataset.zn = zs.length;
+}
+/* Al salir de un campo, si llegó un cambio de otro coach mientras se escribía, se aplica */
+document.addEventListener("focusout", (e)=>{
+  const card = e.target.closest && e.target.closest(".mir-card");
+  if(!card || !miradorUI.pendienteVivo) return;
+  const fila = miradorUI.pendienteVivo[card.dataset.reserva];
+  if(!fila) return;
+  setTimeout(()=>{
+    if(card.contains(document.activeElement)) return;
+    delete miradorUI.pendienteVivo[card.dataset.reserva];
+    recibirBorrador(fila);
+  }, 150);
+});
 
 /* ---------- Bitácora en vivo ----------
    Cualquier cambio del equipo (entradas, fotos, consejos, comentarios internos, turnos) llega al instante a todas las
@@ -934,8 +1088,9 @@ const vivoUI = { canal: null, espera: {} };
 function suscribirBitacoraEnVivo(){
   if(vivoUI.canal || typeof sb.channel !== "function" || !esEquipo()) return;
   const ch = sb.channel("bitacora-en-vivo");
-  ["bitacora", "bitacora_fotos", "comentarios_internos", "consejos_historial", "turnos_coach"].forEach(t => {
+  ["bitacora", "bitacora_fotos", "comentarios_internos", "consejos_historial", "turnos_coach", "mirador_borradores", "mirador_manual", "reservas"].forEach(t => {
     ch.on("postgres_changes", { event: "*", schema: "public", table: t }, (payload)=>{
+      if(t === "mirador_borradores"){ refrescarEnVivo(t, payload || {}); return; }
       clearTimeout(vivoUI.espera[t]);
       vivoUI.espera[t] = setTimeout(()=> refrescarEnVivo(t, payload || {}), 350);
     });
@@ -947,6 +1102,8 @@ function quitarBitacoraEnVivo(){
 }
 function refrescarEnVivo(tabla, payload){
   const fila = payload.new && Object.keys(payload.new).length ? payload.new : (payload.old || {});
+  if(tabla === "mirador_borradores"){ if(payload.eventType !== "DELETE" && payload.new) recibirBorrador(payload.new); return; }
+  if(tabla === "mirador_manual" || tabla === "reservas"){ if(miradorUI.turno) actualizarMirador(); return; }
   if(tabla === "turnos_coach"){
     if(!fila.coach_id || fila.coach_id === state.profile.id) cargarTurno();
     if(document.getElementById("eqLista")) pintarTurnosEquipo();
