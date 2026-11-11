@@ -402,11 +402,13 @@ async function actualizarMirador(){
   if(!miradorUI.turno || miradorUI.cargando) return;
   miradorUI.cargando = true;
   try{
-    const [{ data, error }, manuales, { data: bors }] = await Promise.all([
+    const [{ data: todos, error }, manuales, { data: bors }] = await Promise.all([
       sb.rpc("mirador_pendientes"), cargarManuales(),
       sb.from("mirador_borradores").select("clave, datos, autor_id, autor_nombre, updated_at").eq("fecha", todayStr())
     ]);
     if(error){ console.error(error); return; }
+    /* Fortalecimiento no entra como tarjeta: se lleva en la vista «Asistencia» */
+    const data = (todos || []).filter(x => x.categoria !== "fortalecimiento");
     miradorUI.manuales = manuales;
     (bors || []).forEach(b => recibirBorrador(b, true));
     const lista = (data || []).concat(miradorUI.manuales.filter(m => !(data || []).some(x => x.reserva_id === m.reserva_id || (m.sinReserva && x.atleta_id === m.atleta_id))));
@@ -416,7 +418,7 @@ async function actualizarMirador(){
     miradorUI.pend = lista;
     pintarTurno();
     const dlg = document.getElementById("modalMirador");
-    if(dlg && dlg.open) sincronizarTarjetas(dlg);
+    if(dlg && dlg.open){ sincronizarTarjetas(dlg); if(miradorUI.vista === "asis") verAsistenciaFort(dlg, true); }
     else if(nuevos.length) abrirMirador(nuevos[0].reserva_id);
   } finally { miradorUI.cargando = false; }
 }
@@ -500,7 +502,13 @@ function abrirMirador(irA){
       const p = e.target.closest(".mir-puntos button");
       if(p){ irATarjeta(dlg, Number(p.dataset.i)); return; }
       const hb = e.target.closest("[data-mir-vista]");
-      if(hb){ verHoraMirador(dlg, hb.dataset.mirVista === "pend" ? "pend" : Number(hb.dataset.mirVista)); return; }
+      if(hb){ if(hb.dataset.mirVista === "asis") verAsistenciaFort(dlg); else verHoraMirador(dlg, hb.dataset.mirVista === "pend" ? "pend" : Number(hb.dataset.mirVista)); return; }
+      const ac = e.target.closest("[data-asis-clase]");
+      if(ac){ miradorUI.asisClase = ac.dataset.asisClase; verAsistenciaFort(dlg, true); return; }
+      const am = e.target.closest("[data-asis-marca]");
+      if(am){ marcarAsistenciaFort(dlg, am); return; }
+      const ab = e.target.closest("[data-asis-bit]");
+      if(ab){ abrirBitacoraFort(dlg, ab.dataset.asisBit); return; }
       const comp = e.target.closest("[data-mir-completar]");
       if(comp){ completarDesdeHora(dlg, comp.dataset.mirCompletar); return; }
       const g = e.target.closest("[data-guardar-mir]");
@@ -517,6 +525,7 @@ function abrirMirador(irA){
   pintarHorasMirador(dlg);
   if(!dlg.open){ try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); } }
   pintarTurno();
+  if(!irA && !miradorUI.pend.length && veFortalecimiento() && miradorUI.vista === "pend") verAsistenciaFort(dlg);
   if(irA){
     const cards = [...dlg.querySelectorAll(".mir-card")];
     const i = cards.findIndex(c => c.dataset.reserva === irA);
@@ -891,8 +900,9 @@ function pintarHorasMirador(dlg){
   const vista = miradorUI.vista || "pend";
   const hs = horasDelTurno();
   box.innerHTML = `<button type="button" data-mir-vista="pend" aria-pressed="${vista === "pend"}">Pendientes${miradorUI.pend.length ? ` <span class="num">(${miradorUI.pend.length})</span>` : ""}</button>
+    ${veFortalecimiento() ? `<button type="button" data-mir-vista="asis" aria-pressed="${vista === "asis"}">Asistencia</button>` : ""}
     ${hs.map(x => `<button type="button" data-mir-vista="${x}" aria-pressed="${vista === x}" class="num">${x}:00</button>`).join("")}`;
-  box.hidden = !hs.length;
+  box.hidden = !hs.length && !veFortalecimiento();
   const sel = box.querySelector('[aria-pressed="true"]');
   if(sel && vista !== "pend") sel.scrollIntoView({ block: "nearest", inline: "center" });
 }
@@ -936,7 +946,7 @@ function filaHoraHTML(r){
         ${dolor ? `<p class="mir-ult-meta">${dolor}</p>` : ""}
         ${linea("Llegó:", b.como_llego)}${linea("Hizo:", b.que_hizo)}${linea("Ocurrió:", b.que_ocurrio)}${linea("Pendiente:", b.pendiente)}
         <a class="btn-link" href="#/bitacora/${encodeURIComponent(r.user_id)}" data-ir-bitacora>Abrir su bitácora</a></details>`
-      : `<div class="mir-hora-pend"><span>Sin bitácora</span><button type="button" class="btn-primary sm" data-mir-completar="${esc(r.id)}">Completar ahora</button></div>`}
+      : `<div class="mir-hora-pend"><span>Sin bitácora</span><button type="button" class="btn-primary sm" ${r.categoria === "fortalecimiento" ? `data-asis-bit="${esc(r.id)}"` : `data-mir-completar="${esc(r.id)}"`}>Completar ahora</button></div>`}
   </li>`;
 }
 async function completarDesdeHora(dlg, reservaId){
@@ -1213,4 +1223,137 @@ function refrescarEnVivo(tabla, payload){
     const a = (state.athleteList || []).find(x => x.id === id);
     if(a) pintarNotasHistorial(a, tabla === "consejos_historial" ? "consejos" : "internos");
   }
+}
+
+/* ====================== Mirador de fortalecimiento: tomar asistencia ======================
+   Lista de la clase: quien escaneó el QR ya sale «Asistió»; a los demás se les marca a mano.
+   De cada presente solo se abre una bitácora corta: dolor al llegar, comentario de la clase y dolor al irse. */
+function veFortalecimiento(){ const a = areaCoach(); return !a || a === "fortalecimiento"; }
+async function cargarAsistenciaFort(){
+  const horarios = (await cargarHorarios()).filter(h => h.categoria === "fortalecimiento");
+  const { data, error } = await sb.from("reservas").select("id, user_id, horario_id, inicio, estado, checkin_at, asistencia_por")
+    .eq("fecha", todayStr()).in("horario_id", horarios.map(h => h.id)).in("estado", ["confirmada", "asistio", "no_asistio"]).order("inicio");
+  if(error) throw error;
+  const ids = (data || []).map(r => r.id);
+  const { data: bits, error: e2 } = ids.length ? await sb.from("bitacora").select("id, reserva_id").in("reserva_id", ids) : { data: [], error: null };
+  if(e2) throw e2;
+  const clases = [];
+  (data || []).forEach(r => {
+    let c = clases.find(x => x.inicio === r.inicio);
+    if(!c){ c = { inicio: r.inicio, dur: (horarios.find(h => h.id === r.horario_id) || {}).duracion_min || 60, lista: [] }; clases.push(c); }
+    c.lista.push({ ...r, bit: (bits || []).some(b => b.reserva_id === r.id) });
+  });
+  const nombre = (r)=> ((state.athleteList || []).find(a => a.id === r.user_id) || {}).nombre || "";
+  clases.forEach(c => c.lista.sort((x, y) => nombre(x).localeCompare(nombre(y), "es")));
+  return clases;
+}
+async function verAsistenciaFort(dlg, silencioso){
+  if(miradorUI.vista !== "asis") guardarBorradores(dlg);
+  miradorUI.vista = "asis";
+  dlg.querySelector(".mir-track").hidden = true;
+  dlg.querySelector(".mir-puntos").hidden = true;
+  dlg.querySelector(".mir-nav").hidden = true;
+  const caja = dlg.querySelector(".mir-hora");
+  caja.hidden = false;
+  pintarHorasMirador(dlg);
+  if(!silencioso || !miradorUI.asis){
+    dlg.querySelector("#mirTitulo").textContent = "Asistencia · Fortalecimiento";
+    if(!miradorUI.asis) caja.innerHTML = `<div class="skel skel-block"></div>`;
+  }
+  let clases;
+  try{ clases = await cargarAsistenciaFort(); }
+  catch(err){ caja.innerHTML = `<div class="error" role="alert">${esc(errorES(err))}</div>`; return; }
+  if(miradorUI.vista !== "asis") return;
+  miradorUI.asis = clases;
+  if(!clases.length){
+    dlg.querySelector("#mirTitulo").textContent = "Asistencia · Fortalecimiento";
+    caja.innerHTML = `<div class="mir-vacio"><p class="empty-title">Nadie reservó hoy</p><p class="muted">Cuando alguien reserve una clase de fortalecimiento de hoy, aparecerá aquí.</p></div>`;
+    return;
+  }
+  /* Por defecto, la clase en curso; si no, la más cercana a esta hora */
+  const ahora = Date.now();
+  let c = clases.find(x => x.inicio === miradorUI.asisClase);
+  if(!c){
+    c = clases.find(x => ahora >= new Date(x.inicio).getTime() - 25 * 60000 && ahora <= new Date(x.inicio).getTime() + x.dur * 60000)
+      || clases.slice().sort((x, y) => Math.abs(new Date(x.inicio) - ahora) - Math.abs(new Date(y.inicio) - ahora))[0];
+    miradorUI.asisClase = c.inicio;
+  }
+  const vino = c.lista.filter(r => r.estado === "asistio").length;
+  dlg.querySelector("#mirTitulo").textContent = `Asistencia · ${horaDe(c.inicio)}`;
+  caja.innerHTML = `
+    <div class="asis-clases" role="group" aria-label="Clase de fortalecimiento">${clases.map(x =>
+      `<button type="button" class="num" data-asis-clase="${esc(x.inicio)}" aria-pressed="${x === c}">${esc(horaDe(x.inicio))} <span class="muted">${x.lista.filter(r => r.estado === "asistio").length}/${x.lista.length}</span></button>`).join("")}</div>
+    <p class="mir-hora-res muted">${vino} de ${plural(c.lista.length, "reservado", "reservados")} ${vino === 1 ? "asistió" : "asistieron"}.</p>
+    <ul class="asis-lista">${c.lista.map(filaAsistenciaHTML).join("")}</ul>
+    <p class="asis-msg" aria-live="polite"></p>`;
+}
+function filaAsistenciaHTML(r){
+  const a = (state.athleteList || []).find(x => x.id === r.user_id) || {};
+  const escaneo = r.estado === "asistio" && (!r.asistencia_por || r.asistencia_por === r.user_id || r.asistencia_por === a.tutor_id);
+  const estado = r.estado === "asistio"
+    ? `<span class="asis-estado ok">✓ Asistió</span><span class="muted">${escaneo ? "escaneó el QR" + (r.checkin_at ? " · " + esc(horaDe(r.checkin_at)) : "") : "marcado a mano"}</span>`
+    : r.estado === "no_asistio" ? `<span class="asis-estado no">No vino</span>` : `<span class="asis-estado">Sin marcar</span>`;
+  const acc = r.estado === "asistio"
+    ? `${r.bit ? `<span class="asis-bit-ok">✓ Bitácora</span><a class="btn-link" href="#/bitacora/${encodeURIComponent(r.user_id)}" data-ir-bitacora>Ver</a>` : `<button type="button" class="btn-outline sm" data-asis-bit="${esc(r.id)}">Bitácora</button>`}
+       ${escaneo || r.bit ? "" : `<button type="button" class="btn-link" data-asis-marca="no" data-reserva="${esc(r.id)}">No vino</button>`}`
+    : `<button type="button" class="btn-primary sm" data-asis-marca="si" data-reserva="${esc(r.id)}">Asistió</button>
+       ${r.estado === "no_asistio" ? "" : `<button type="button" class="btn-outline sm" data-asis-marca="no" data-reserva="${esc(r.id)}">No vino</button>`}`;
+  return `<li class="asis-fila ${r.estado === "asistio" ? "ok" : r.estado === "no_asistio" ? "no" : ""}">
+    <span class="avatar" aria-hidden="true">${esc(initials(a.nombre || ""))}</span>
+    <div class="asis-quien"><strong>${esc(a.nombre || "Alumno")}</strong><div class="asis-linea">${estado}</div></div>
+    <div class="asis-acc">${acc}</div>
+  </li>`;
+}
+async function marcarAsistenciaFort(dlg, btn){
+  const msg = dlg.querySelector(".asis-msg");
+  btn.disabled = true;
+  const { error } = await sb.rpc("marcar_asistencia", { p_reserva: btn.dataset.reserva, p_asistio: btn.dataset.asisMarca === "si" });
+  if(error){ btn.disabled = false; if(msg) msg.textContent = errorES(error); return; }
+  await verAsistenciaFort(dlg, true);
+}
+/* Bitácora corta de fortalecimiento (encima del Mirador) */
+function camposFortHTML(pre){
+  return `<div class="bit-campos" data-pre="${pre}" data-zn="1">
+    <fieldset class="bit-zonas" data-lista="llegada"><legend>¿Llegó con dolor?</legend>
+      <div class="zonas-lista">${zonaLlegadaHTML(pre, 0, {})}</div>
+      <div class="zona-botones"><button type="button" class="btn-outline sm" data-zona-cuerpo>Marcar en el cuerpo</button>
+      <button type="button" class="btn-outline sm zona-add" data-zona-add>+ Agregar zona</button></div></fieldset>
+    <div class="bit-campo"><label for="${pre}que_ocurrio">Comentario de la clase</label>
+      <textarea id="${pre}que_ocurrio" data-campo="que_ocurrio" rows="3"></textarea></div>
+    <fieldset class="bit-zonas" data-lista="salida"><legend>¿Con cuánto dolor se va?</legend>
+      <div class="zonas-lista">${zonaSalidaHTML(pre, 0, {})}</div></fieldset>
+  </div>`;
+}
+function abrirBitacoraFort(mir, reservaId){
+  const r = (miradorUI.asis || []).flatMap(c => c.lista).find(x => x.id === reservaId) || (miradorUI.horas || []).find(x => x.id === reservaId);
+  if(!r) return;
+  const a = (state.athleteList || []).find(x => x.id === r.user_id) || {};
+  const pre = "fb_";
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-pago asis-bit";
+  dlg.dataset.atleta = r.user_id;
+  dlg.setAttribute("aria-labelledby", "asisBitT");
+  dlg.innerHTML = `
+    <div class="asis-bit-top"><div><p class="eyebrow">Fortalecimiento · ${esc(horaDe(r.inicio))}</p><h2 id="asisBitT">${esc(a.nombre || "Alumno")}</h2></div>
+      <button type="button" class="icon-btn" data-asis-cerrar aria-label="Cerrar sin guardar">✕</button></div>
+    <div class="asis-bit-cuerpo">
+      ${malditaChipHTML(r.user_id)}
+      ${tieneLesion(a.lesiones) ? `<p class="mir-lesion"><strong>Lesión:</strong> ${esc(a.lesiones)}</p>` : ""}
+      ${camposFortHTML(pre)}
+    </div>
+    <div class="asis-bit-pie"><span class="mir-msg" aria-live="polite"></span><button type="button" class="btn-primary" data-asis-guardar>Guardar</button></div>`;
+  document.body.appendChild(dlg);
+  enlazarCampos(dlg);
+  const cerrar = ()=>{ if(dlg.open) dlg.close(); dlg.remove(); };
+  dlg.addEventListener("cancel", (e)=>{ e.preventDefault(); cerrar(); });
+  dlg.querySelector("[data-asis-cerrar]").onclick = cerrar;
+  const btn = dlg.querySelector("[data-asis-guardar]"), msg = dlg.querySelector(".mir-msg");
+  btn.onclick = ()=> withBusy(btn, "Guardando…", async ()=>{
+    const d = leerCampos(dlg, pre);
+    const { error } = await sb.from("bitacora").insert({ atleta_id: r.user_id, reserva_id: r.id, zonas: d.zonas, dolor_inicio: d.dolor_inicio, dolor_salida: d.dolor_salida, que_ocurrio: d.que_ocurrio });
+    if(error && !/23505|duplicate|unique/i.test((error.code || "") + " " + (error.message || ""))){ msg.textContent = errorES(error); return; }
+    cerrar();
+    if(mir.isConnected && mir.open){ if(miradorUI.vista === "asis") verAsistenciaFort(mir, true); else if(miradorUI.vista !== "pend") verHoraMirador(mir, miradorUI.vista); }
+  });
+  try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
 }
