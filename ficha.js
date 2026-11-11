@@ -103,7 +103,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     /* Tu reloj: pasos y sueño + atajo a «Entrenamiento fuera de Gymnika» (vive en Progreso) */
     /* Mi ficha empieza con el carnet (logros.js) */
     /* El podio del mes es solo de fortalecimiento (y transición) */
-    const carnet = `<div class="span-12">${carnetHTML(profile)}</div>` + (cat === "terapia" ? "" : panelHTML("mejoresCard", "Mejores fichas del mes", 12, { eyebrow: "Fortalecimiento · carnets compartidos" }));
+    const carnet = `<div class="span-12">${carnetHTML(profile)}</div>` + (cat === "terapia" ? "" : panelHTML("mejoresCard", "Los más aplicados del mes", 12, { eyebrow: "Fortalecimiento · Podio" }));
     const reloj = panelHTML("relojCard", "Tu reloj", 12, { eyebrow: "Pasos, sueño y entrenamientos" });
     tabsAlumno = esTerapia ? {
       inicio: `

@@ -1089,11 +1089,11 @@ async function renderCoachHoy(main){
       <section class="panel span-12" aria-labelledby="hCl"><div class="panel-head"><h2 id="hCl">Clases de hoy</h2><span class="muted" id="hoyResumen"></span></div>
         <div id="hoyBody"><div class="skel skel-block"></div></div>
         <p class="muted wk-nota">Toca un nombre para marcar asistencia, cancelar o abrir su ficha. Se actualiza solo cada 30 segundos.</p></section>
-      ${area === "terapia" ? "" : `<section class="panel span-12" aria-labelledby="hMf"><div class="panel-head"><h2 id="hMf">Mejores fichas del mes</h2><span class="muted">Fortalecimiento · carnets que compartieron los alumnos</span></div>
+      ${area === "terapia" ? "" : `<section class="panel span-12" aria-labelledby="hMf"><p class="eyebrow">Fortalecimiento · Podio</p><div class="panel-head"><h2 id="hMf">Los más aplicados del mes</h2></div>
         <div id="mejoresCoach"><div class="skel skel-block"></div></div></section>`}
     </div></div>`;
   pintarTurno();
-  pintarMejoresCoach(document.getElementById("mejoresCoach"));
+  pintarPodio(document.getElementById("mejoresCoach"), true);
   enlazarFormsTareas();
   suscribirTareas();
   main.querySelectorAll("[data-ir-equipo]").forEach(l => { l.onclick = (e)=>{ e.preventDefault(); document.getElementById("tareasEquipo").scrollIntoView({ behavior: "smooth", block: "start" }); document.getElementById("tt_equipo")?.focus({ preventScroll: true }); }; });

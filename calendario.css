@@ -1608,3 +1608,4 @@ body:has(.instalar) .chat-fab{ display:none; }
 .mejores-mes{ margin:0 0 12px; font-size:13.5px; }
 .mc-ver{ display:inline-block; margin:6px 2px 0; font-size:13.5px; }
 .mini-carnet.p1 .mc-top, .mini-carnet.p2 .mc-top, .mini-carnet.p3 .mc-top{ padding-right:48px; }
+.mir-nav .mir-todos{ flex:none; width:auto; margin:0 0 0 10px; }

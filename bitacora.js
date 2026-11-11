@@ -493,7 +493,8 @@ function abrirMirador(irA){
       <div class="mir-hora" hidden aria-live="polite"></div>
       <div class="mir-nav"><button type="button" class="icon-btn" data-mir-prev aria-label="Anterior">‹</button>
         <span class="mir-pos num" aria-live="polite"></span>
-        <button type="button" class="icon-btn" data-mir-next aria-label="Siguiente">›</button></div>
+        <button type="button" class="icon-btn" data-mir-next aria-label="Siguiente">›</button>
+        <button type="button" class="btn-primary sm mir-todos" data-mir-todos hidden>Guardar todos</button></div>
       <div class="mir-track" tabindex="-1"></div>
       <div class="mir-puntos" aria-hidden="true"></div>
       <div class="mir-pie"><button type="button" class="btn-link" data-mir-fin>Fin de turno</button><button type="button" class="btn-outline sm" data-mir-cerrar>Cerrar por ahora</button></div>`;
@@ -526,6 +527,8 @@ function abrirMirador(irA){
       if(ab){ abrirBitacoraFort(dlg, ab.dataset.asisBit); return; }
       const comp = e.target.closest("[data-mir-completar]");
       if(comp){ completarDesdeHora(dlg, comp.dataset.mirCompletar); return; }
+      const gt = e.target.closest("[data-mir-todos]");
+      if(gt){ guardarTodas(dlg, gt); return; }
       const g = e.target.closest("[data-guardar-mir]");
       if(g) guardarTarjeta(dlg, g.closest(".mir-card"), g);
     });
@@ -587,13 +590,29 @@ function marcarPosicion(dlg){
   const cards = tarjetas(dlg), n = cards.length, i = indiceActual(dlg);
   const btnPend = dlg.querySelector('[data-mir-vista="pend"]');
   if(btnPend) btnPend.innerHTML = `Pendientes${miradorUI.pend.length ? ` <span class="num">(${miradorUI.pend.length})</span>` : ""}`;
-  if((miradorUI.vista || "pend") !== "pend") return;
+  if((miradorUI.vista || "pend") !== "pend"){ const gt = dlg.querySelector("[data-mir-todos]"); if(gt) gt.hidden = true; return; }
   dlg.querySelector("#mirTitulo").textContent = n === 0 ? "Sin pendientes" : n === 1 ? "1 persona presente" : `${n} personas presentes`;
   dlg.querySelector(".mir-pos").textContent = n ? `${i + 1} de ${n}` : "";
   dlg.querySelector(".mir-nav").hidden = n < 2;
+  const todos = dlg.querySelector("[data-mir-todos]");
+  if(todos && !todos.disabled){ todos.hidden = n < 2; todos.textContent = `Guardar todos (${n})`; }
   dlg.querySelector("[data-mir-prev]").disabled = i <= 0;
   dlg.querySelector("[data-mir-next]").disabled = i >= n - 1;
   dlg.querySelector(".mir-puntos").innerHTML = n > 1 ? cards.map((c, k) => `<button type="button" tabindex="-1" data-i="${k}" class="${k === i ? "on" : ""}"></button>`).join("") : "";
+}
+/* Guarda de una vez la bitácora de todos los presentes, tal como está escrita cada tarjeta */
+async function guardarTodas(dlg, btn){
+  const cards = tarjetas(dlg);
+  if(!cards.length) return;
+  if(!confirm(`¿Guardar la bitácora de las ${cards.length} personas presentes? Se guarda lo que esté escrito en cada tarjeta; las que estén en blanco también.`)) return;
+  await withBusy(btn, "Guardando…", async ()=>{
+    for(const card of cards){
+      if(!card.isConnected) continue;
+      const b = card.querySelector("[data-guardar-mir]");
+      if(b) await guardarTarjeta(dlg, card, b);
+    }
+  });
+  btn.hidden = tarjetas(dlg).length < 2;
 }
 async function guardarTarjeta(dlg, card, btn){
   const reserva = card.dataset.reserva;
@@ -650,9 +669,9 @@ async function renderCoachBitacora(main){
   const resumen = {};
   (data || []).forEach(b => { const r = resumen[b.atleta_id] = resumen[b.atleta_id] || { n: 0, ultima: b.fecha }; r.n++; });
   const pintar = ()=>{
-    const q = bitUI.q.trim().toLowerCase();
+    const q = normalizar(bitUI.q);
     const lista = (state.athleteList || []).filter(a =>
-      (!bitUI.filtro || catsDe(a.categoria).includes(bitUI.filtro)) && (!q || (a.nombre || "").toLowerCase().includes(q)));
+      (!bitUI.filtro || catsDe(a.categoria).includes(bitUI.filtro)) && (!q || normalizar(a.nombre).includes(q)));
     const box = document.getElementById("bitClientes");
     if(!box) return;
     if(error){ box.innerHTML = `<div class="error" role="alert">${esc(errorES(error))}</div>`; return; }

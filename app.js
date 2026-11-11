@@ -1405,10 +1405,10 @@ async function refreshCoachAside(){
 }
 
 function filterAthletes(q){
-  q = (q || "").toLowerCase().trim();
+  q = normalizar(q);
   const base = state.catFiltro ? state.athleteList.filter(a => catsDe(a.categoria).includes(state.catFiltro)) : state.athleteList;
   if(!q) return base;
-  return base.filter(a => (a.nombre||"").toLowerCase().includes(q) || (a.deporte||"").toLowerCase().includes(q));
+  return base.filter(a => normalizar(a.nombre).includes(q) || normalizar(a.deporte).includes(q));
 }
 function marcarNavCoach(){
   const sec = routeCoachSeccion();
