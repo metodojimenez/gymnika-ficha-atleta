@@ -1449,3 +1449,10 @@ body:has(.instalar) .chat-fab{ display:none; }
 .calif-extremos{ display:flex; justify-content:space-between; width:100%; font-size:12.5px; color:var(--ink-soft); margin-top:4px; }
 .aviso-calif .aviso-cara{ width:120px; }
 .asis-nota{ font-weight:800; color:#8A5A0F; }
+
+/* Rangos de la escala de dolor */
+.rangos-dolor{ display:flex; flex-wrap:wrap; gap:4px 10px; margin:0 0 8px; font-size:12.5px; color:var(--ink-soft); }
+.rangos-dolor b{ color:var(--ink); }
+.rango-elegido{ margin:4px 0 0; min-height:1.3em; font-size:13.5px; font-weight:700; color:var(--ink-soft); }
+.rango-elegido strong{ color:var(--ink); }
+.ses-n.total.debe .num{ color:var(--danger, #B42318); }

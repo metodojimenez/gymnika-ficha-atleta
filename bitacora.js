@@ -20,6 +20,10 @@ function routeBitacoraId(){
 const mayuscula = (t)=> String(t || "").charAt(0).toUpperCase() + String(t || "").slice(1);
 const hayValor = (v)=> v !== null && v !== undefined && v !== "";
 const nivelDolor = (n)=> n >= 7 ? "alto" : n >= 4 ? "medio" : "bajo";
+/* Rangos de la escala de dolor */
+const RANGOS_DOLOR = [[0, 0, "Sin dolor"], [1, 2, "Sombra"], [3, 4, "Molestia"], [5, 6, "Dolor moderado"], [7, 9, "Dolor fuerte"], [10, 10, "No puedo mover"]];
+const rangoDolor = (n)=> hayValor(n) ? (RANGOS_DOLOR.find(r => Number(n) >= r[0] && Number(n) <= r[1]) || [])[2] || "" : "";
+const rangosLeyendaHTML = ()=> `<p class="rangos-dolor">${RANGOS_DOLOR.map(r => `<span><b class="num">${r[0] === r[1] ? r[0] : r[0] + "–" + r[1]}</b> ${r[2]}</span>`).join("")}</p>`;
 
 /* ---------- Campos (los mismos en el Mirador y en «Nueva entrada») ---------- */
 /* Las mismas zonas de la silueta 3D (silueta.js), de la cabeza a los pies */
@@ -33,7 +37,8 @@ function zonasDe(d){
 const nombreZona = (z)=> (z && z.zona) || "Zona general";
 function burbujasFila(name, valor, etiqueta){
   return `<div class="burbujas" role="radiogroup" aria-label="${esc(etiqueta)}">${[0,1,2,3,4,5,6,7,8,9,10].map(n => `
-    <label class="burbuja b-${nivelDolor(n)}"><input type="radio" name="${name}" value="${n}"${hayValor(valor) && Number(valor) === n ? " checked" : ""}><span>${n}</span></label>`).join("")}</div>`;
+    <label class="burbuja b-${nivelDolor(n)}" title="${rangoDolor(n)}"><input type="radio" name="${name}" value="${n}"${hayValor(valor) && Number(valor) === n ? " checked" : ""}><span>${n}</span></label>`).join("")}</div>
+    <p class="rango-elegido" data-rango-de="${name}" aria-live="polite">${hayValor(valor) ? `<strong class="num">${Number(valor)}</strong> · ${rangoDolor(valor)}` : ""}</p>`;
 }
 function zonaLlegadaHTML(pre, k, z = {}){
   const otra = z.zona && !ZONAS_DOLOR.includes(z.zona);
@@ -62,6 +67,7 @@ function camposBitacoraHTML(pre, d = {}){
   const zonas = zonasDe(d).length ? zonasDe(d) : [{}];
   return `<div class="bit-campos" data-pre="${pre}" data-zn="${zonas.length}">
     <fieldset class="bit-zonas" data-lista="llegada"><legend>Dolor al llegar</legend>
+      ${rangosLeyendaHTML()}
       <div class="zonas-lista">${zonas.map((z, k) => zonaLlegadaHTML(pre, k, z)).join("")}</div>
       <div class="zona-botones"><button type="button" class="btn-outline sm" data-zona-cuerpo>Marcar en el cuerpo</button>
       <button type="button" class="btn-outline sm zona-add" data-zona-add>+ Agregar zona</button></div></fieldset>
@@ -87,7 +93,15 @@ function camposBitacoraHTML(pre, d = {}){
   </div>`;
 }
 /* Tocar la burbuja o la opción marcada la desmarca (ningún campo es obligatorio) + agregar, quitar y nombrar zonas */
+/* Debajo de cada fila de burbujas: el número elegido y su rango («4 · Molestia») */
+function refrescarRangos(box){
+  box.querySelectorAll("[data-rango-de]").forEach(p => {
+    const inp = box.querySelector(`input[name="${p.dataset.rangoDe}"]:checked`);
+    p.innerHTML = inp ? `<strong class="num">${Number(inp.value)}</strong> · ${rangoDolor(inp.value)}` : "";
+  });
+}
 function enlazarCampos(box){
+  box.addEventListener("change", (e)=>{ if(e.target.closest && e.target.closest(".burbujas")) refrescarRangos(box); });
   box.addEventListener("pointerdown", (e)=>{
     const inp = e.target.closest("label")?.querySelector("input[type=radio]");
     if(inp) inp.dataset.estaba = inp.checked ? "1" : "";
@@ -230,6 +244,7 @@ function aplicarZonasSilueta(campos, zs){
     lleg.insertAdjacentHTML("beforeend", zonaLlegadaHTML(pre, k)); sal.insertAdjacentHTML("beforeend", zonaSalidaHTML(pre, k));
   }
   campos.dispatchEvent(new Event("input", { bubbles: true }));
+  refrescarRangos(campos);
 }
 const fotosUI = { nuevas: new WeakMap(), borrar: new WeakMap() };
 function fotosDe(box){
@@ -304,9 +319,9 @@ function dolorZonasHTML(b){
   const zonas = zonasDe(b).filter(z => hayValor(z.inicio) || hayValor(z.salida) || z.nota);
   if(!zonas.length) return "";
   return `<div class="bit-dolores">${zonas.map(z => `<div class="dolor-zona"><span class="dz-nombre">${esc(nombreZona(z))}</span>
-    ${hayValor(z.inicio) ? `<span class="dolor-pill b-${nivelDolor(z.inicio)}">Llegó <strong>${z.inicio}</strong></span>` : ""}
+    ${hayValor(z.inicio) ? `<span class="dolor-pill b-${nivelDolor(z.inicio)}" title="${rangoDolor(z.inicio)}">Llegó <strong>${z.inicio}</strong> · ${rangoDolor(z.inicio).toLowerCase()}</span>` : ""}
     ${hayValor(z.inicio) && hayValor(z.salida) ? `<span aria-hidden="true">→</span>` : ""}
-    ${hayValor(z.salida) ? `<span class="dolor-pill b-${nivelDolor(z.salida)}">Se fue <strong>${z.salida}</strong></span>` : ""}
+    ${hayValor(z.salida) ? `<span class="dolor-pill b-${nivelDolor(z.salida)}" title="${rangoDolor(z.salida)}">Se fue <strong>${z.salida}</strong> · ${rangoDolor(z.salida).toLowerCase()}</span>` : ""}
     ${z.nota ? `<span class="dz-nota">«${esc(z.nota)}»</span>` : ""}</div>`).join("")}</div>`;
 }
 
@@ -1168,6 +1183,7 @@ function aplicarBorrador(card, d, activo){
     marcar("zi", z.inicio); marcar("zs", z.salida);
     const nom = sal.querySelector(`.zona-row[data-z="${k}"] .zona-nombre`); if(nom) nom.textContent = nombreZona(z);
   });
+  refrescarRangos(card);
   return false;
 }
 /* Al salir de un campo, si quedó algo pendiente de otro coach, se aplica */
@@ -1317,6 +1333,7 @@ async function marcarAsistenciaFort(dlg, btn){
 function camposFortHTML(pre){
   return `<div class="bit-campos" data-pre="${pre}" data-zn="1">
     <fieldset class="bit-zonas" data-lista="llegada"><legend>¿Llegó con dolor?</legend>
+      ${rangosLeyendaHTML()}
       <div class="zonas-lista">${zonaLlegadaHTML(pre, 0, {})}</div>
       <div class="zona-botones"><button type="button" class="btn-outline sm" data-zona-cuerpo>Marcar en el cuerpo</button>
       <button type="button" class="btn-outline sm zona-add" data-zona-add>+ Agregar zona</button></div></fieldset>

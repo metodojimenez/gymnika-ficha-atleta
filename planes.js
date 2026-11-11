@@ -326,7 +326,10 @@ function proximaReserva(plan){
     .sort((a, b) => String(a.inicio).localeCompare(String(b.inicio)))[0] || null;
 }
 
-/* Sesiones de terapia: disponibles (sin agendar), agendadas (todavía no pasan) y total.
+/* Sesiones de terapia: disponibles (sin agendar), reservas (agendadas que todavía no pasan) y total.
+   Con sesiones compradas: Disponibles = saldo; Total = disponibles + reservas.
+   A crédito (ej.: 6 a crédito, 1 hecha y 5 agendadas): Disponibles = las que aún no usa para reservar, en negativo (0);
+   Reservas = las agendadas (5); Total = el balance completo a crédito (−6).
    Una sesión agendada se consume cuando su hora ya pasó o cuando se escaneó el QR. */
 function resumenSesiones(plan, cat){
   const hs = planes.horarios || [];
@@ -361,10 +364,10 @@ function sesionesHTML(rs, opts = {}){
   const prox = rs.agendadas.slice(0, 4);
   return `
     <div class="ses-cuenta" role="group" aria-label="Sesiones de terapia">
-      ${rs.debe ? `<div class="ses-n disp debe"><span class="num${baja ? " baja" : ""}"${opts.idSaldo ? ` id="${opts.idSaldo}"` : ""}>−${rs.debe}</span><span class="ses-l">Disponibles</span><span class="ses-s">a crédito</span></div>`
+      ${rs.debe ? `<div class="ses-n disp debe"><span class="num${baja ? " baja" : ""}"${opts.idSaldo ? ` id="${opts.idSaldo}"` : ""}>${rs.credito ? (rs.puede ? "−" + rs.puede : "0") : "−" + rs.debe}</span><span class="ses-l">Disponibles</span><span class="ses-s">${rs.credito ? "a crédito, sin reservar" : "a crédito"}</span></div>`
         : `<div class="ses-n disp"><span class="num${baja ? " baja" : ""}"${opts.idSaldo ? ` id="${opts.idSaldo}"` : ""}>${rs.disponibles}</span><span class="ses-l">Disponibles</span><span class="ses-s">por agendar</span></div>`}
-      <div class="ses-n agen"><span class="num">${rs.agendadas.length}</span><span class="ses-l">Agendadas</span><span class="ses-s">por hacer</span></div>
-      <div class="ses-n total"><span class="num">${rs.total}</span><span class="ses-l">Total</span><span class="ses-s">${rs.consumidas ? plural(rs.consumidas, "realizada", "realizadas") : "&nbsp;"}</span></div>
+      <div class="ses-n agen"><span class="num">${rs.agendadas.length}</span><span class="ses-l">Reservas</span><span class="ses-s">por hacer</span></div>
+      <div class="ses-n total${rs.debe ? " debe" : ""}"><span class="num">${rs.debe ? "−" + rs.debe : rs.total}</span><span class="ses-l">Total</span><span class="ses-s">${rs.debe ? "balance a crédito" : rs.consumidas ? plural(rs.consumidas, "realizada", "realizadas") : "&nbsp;"}</span></div>
     </div>
     ${prox.length ? `<div class="ses-prox"><p class="ses-prox-t">${propio ? "Tus próximas sesiones" : "Próximas sesiones"}</p>
       <ul>${prox.map(r => `<li><span class="num">${fmtFechaHora(r.inicio)}</span></li>`).join("")}${rs.agendadas.length > prox.length ? `<li class="muted">y ${rs.agendadas.length - prox.length} más</li>` : ""}</ul></div>` : ""}
