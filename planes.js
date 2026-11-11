@@ -1409,12 +1409,12 @@ function bateriaMesHTML(n){
 
 /* Fortalecimiento sin reserva a esta hora: se pide ingreso a los coaches en turno y se espera su respuesta aquí mismo */
 function esperarIngreso(res){
-  const dlg = openDialog("Pidiendo ingreso", `
+  const dlg = openDialog("Solicitando acceso", `
     <div class="checkin-res ingreso-espera">
       <div class="bat-cara">${avatarMarianIA("serio")}</div>
       <div class="globo-comic bat-globo"><span class="chat-quien">MarianI.A.</span>
-        <p class="bat-titulo">No estás apuntado a esta clase</p>
-        <p class="bat-n">Le pedí a tu coach que te deje entrar a la de las ${esc(fmtFechaHora(res.inicio).split("· ")[1] || "")}.</p></div>
+        <p class="bat-titulo">Se está solicitando el acceso a tu coach</p>
+        <p class="bat-n">No estás apuntado a esta hora, así que le pedí que te deje entrar.</p></div>
       <p class="ingreso-estado" role="status"><span class="puntos-espera" aria-hidden="true"><i></i><i></i><i></i></span> Esperando la respuesta del coach…</p>
       <p class="muted">No cierres esta ventana. La próxima vez, reserva tu horario antes de venir.</p>
     </div>`);
