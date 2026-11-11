@@ -1078,8 +1078,16 @@ function renderEstiramientos(profile, uid, isCoach){
 
   const grupos = ESTIRAMIENTO_DIARIO_GRUPOS;
   const predet = grupos.flatMap(g => g.items);
-  let customList = actuales.filter(e => !predet.includes(e));
-  let marcados = new Set(actuales.filter(e => predet.includes(e)));
+  /* La rutina se guarda y se muestra en el orden en que el coach va eligiendo (1, 2, 3…) */
+  let orden = [...actuales];
+  const numDe = (ej)=> orden.indexOf(ej) + 1;
+  const numerar = ()=>{
+    box.querySelectorAll("[data-orden-de]").forEach(n => { const k = numDe(n.dataset.ordenDe); n.textContent = k || ""; n.hidden = !k; });
+    const res = box.querySelector("#estOrden");
+    if(res) res.innerHTML = orden.length
+      ? `<p class="est-orden-t">Así la verá, en este orden:</p><ol>${orden.map(e => `<li>${esc(e)}${reps[e] ? ` <span class="muted">· ${reps[e]} reps</span>` : ""}</li>`).join("")}</ol>`
+      : `<p class="muted" style="margin:0">Marca los ejercicios en el orden en que quieres que los haga.</p>`;
+  };
 
   function paint(){
     box.innerHTML = `
@@ -1093,29 +1101,32 @@ function renderEstiramientos(profile, uid, isCoach){
               return `
               <div class="est-item">
                 <label class="checkline" for="est_${i}">
-                  <input type="checkbox" id="est_${i}" data-preset-idx="${i}" ${marcados.has(ej)?"checked":""}>
+                  <input type="checkbox" id="est_${i}" data-preset-idx="${i}" ${orden.includes(ej)?"checked":""}>
+                  <span class="est-num num" data-orden-de="${esc(ej)}" aria-label="Orden en la rutina" hidden></span>
                   <span>${esc(ej)}</span>
                 </label>
-                <label class="est-reps"${marcados.has(ej) ? "" : " hidden"}><input type="number" inputmode="numeric" min="1" max="99" data-reps-idx="${i}" value="${reps[ej] || ""}" placeholder="–" aria-label="Repeticiones de ${esc(ej)}"><span>reps</span></label>
+                <label class="est-reps"${orden.includes(ej) ? "" : " hidden"}><input type="number" inputmode="numeric" min="1" max="99" data-reps-idx="${i}" value="${reps[ej] || ""}" placeholder="–" aria-label="Repeticiones de ${esc(ej)}"><span>reps</span></label>
               </div>`;
             }).join("")}
           </div>
         </fieldset>`).join("")}
-      ${customList.length ? `<p class="muted" style="margin:16px 0 0">Otros asignados:</p><div class="chip-list" style="margin-top:6px">${customList.map((c,i)=>`
-        <span class="badge soft">${esc(c)} <button type="button" data-rmchip="${i}" aria-label="Quitar ${esc(c)}">✕</button></span>
+      ${orden.some(e => !predet.includes(e)) ? `<p class="muted" style="margin:16px 0 0">Otros asignados:</p><div class="chip-list" style="margin-top:6px">${orden.filter(e => !predet.includes(e)).map(c => `
+        <span class="badge soft"><span class="est-num num" data-orden-de="${esc(c)}" hidden></span> ${esc(c)} <button type="button" data-rmchip="${esc(c)}" aria-label="Quitar ${esc(c)}">✕</button></span>
       `).join("")}</div>` : ""}
       <label for="estOtro">Otros <span class="muted">(escribe y agrega)</span></label>
       <div class="inline-add">
         <input id="estOtro" placeholder="Ej: Estiramiento de isquiotibiales">
         <button type="button" class="btn-outline" id="btnAddOtro">+ Agregar</button>
       </div>
+      <div class="est-orden" id="estOrden" aria-live="polite"></div>
       <button type="button" class="btn-primary" id="btnSaveEstiramientos">Guardar rutina</button>
       <div id="estMsg" aria-live="polite"></div>
     `;
     box.querySelectorAll("[data-preset-idx]").forEach(cb=>{
       cb.onchange = ()=>{
         const ej = predet[parseInt(cb.dataset.presetIdx,10)];
-        if(cb.checked) marcados.add(ej); else marcados.delete(ej);
+        if(cb.checked){ if(!orden.includes(ej)) orden.push(ej); } else orden = orden.filter(e => e !== ej);
+        numerar();
         const r = box.querySelector(`[data-reps-idx="${cb.dataset.presetIdx}"]`);
         if(r){ r.closest(".est-reps").hidden = !cb.checked; if(cb.checked && !r.value) r.focus(); }
       };
@@ -1125,31 +1136,32 @@ function renderEstiramientos(profile, uid, isCoach){
         const ej = predet[parseInt(r.dataset.repsIdx, 10)];
         const n = parseInt(r.value, 10);
         if(n > 0 && n < 100) reps[ej] = n; else delete reps[ej];
+        numerar();
       };
     });
     box.querySelectorAll("[data-rmchip]").forEach(x=>{
-      x.onclick = ()=>{ customList.splice(parseInt(x.dataset.rmchip,10),1); paint(); };
+      x.onclick = ()=>{ orden = orden.filter(e => e !== x.dataset.rmchip); paint(); };
     });
     const input = document.getElementById("estOtro");
     const agregar = ()=>{
       const val = input.value.trim();
-      if(val && !customList.includes(val) && !predet.includes(val)){ customList.push(val); }
+      if(val && !orden.includes(val) && !predet.includes(val)){ orden.push(val); }
       if(val){ paint(); document.getElementById("estOtro").focus(); }
     };
     document.getElementById("btnAddOtro").onclick = agregar;
     input.onkeydown = (e)=>{ if(e.key === "Enter"){ e.preventDefault(); agregar(); } };
     const saveBtn = document.getElementById("btnSaveEstiramientos");
     saveBtn.onclick = ()=> withBusy(saveBtn, "Guardando…", async ()=>{
-      const seleccionados = predet.filter(ej => marcados.has(ej));
-      const final = [...seleccionados, ...customList];
+      const final = [...orden];
       const repsFinal = {};
-      seleccionados.forEach(ej => { if(reps[ej]) repsFinal[ej] = reps[ej]; });
+      final.forEach(ej => { if(predet.includes(ej) && reps[ej]) repsFinal[ej] = reps[ej]; });
       const { error } = await sb.from("profiles").update({ estiramientos: final, estiramientos_reps: repsFinal }).eq("id", uid);
       const msg = document.getElementById("estMsg");
       if(error){ showError(msg, error); return; }
       showMsg(msg, "ok", "Rutina guardada.");
       profile.estiramientos = final; profile.estiramientos_reps = repsFinal;
     });
+    numerar();
   }
   paint();
 }

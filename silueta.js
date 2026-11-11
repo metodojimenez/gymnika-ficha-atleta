@@ -232,7 +232,7 @@ async function abrirSilueta(opts = {}){
         <canvas class="sil-lienzo" aria-label="Silueta del cuerpo en 3D. Arrastra para girar y toca una zona."></canvas>
         <div class="sil-vistas" role="group" aria-label="Girar a">
           <button type="button" data-vista="0">Frente</button><button type="button" data-vista="3.1416">Espalda</button>
-          <button type="button" data-vista="1.5708">Lado izq.</button><button type="button" data-vista="-1.5708">Lado der.</button></div>
+          <button type="button" data-vista="-1.5708">Lado izq.</button><button type="button" data-vista="1.5708">Lado der.</button></div>
         <div class="sil-etq" hidden aria-hidden="true"><span>Zona maldita</span><i></i><b></b></div>
         <p class="sil-ayuda">Cargando la silueta…</p>
       </div>
@@ -275,7 +275,7 @@ async function abrirSilueta(opts = {}){
   const scene = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 60);
   const MIRA = new THREE.Vector3(0, 2.22, 0);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xd8d0ca, 1.0));
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xc4bbb4, .92));
   const key = new THREE.DirectionalLight(0xfff6ee, .75); key.position.set(3.5, 6, 6); scene.add(key);
   const rim = new THREE.DirectionalLight(0xcfe9ff, .45); rim.position.set(-5, 4, -6); scene.add(rim);
   const rim2 = new THREE.DirectionalLight(0xffffff, .2); rim2.position.set(5, 2, -4); scene.add(rim2);
@@ -283,7 +283,7 @@ async function abrirSilueta(opts = {}){
   const cuerpo = new THREE.Group(); scene.add(cuerpo);
 
   const nv = G.nv, IDS = G.IDS;
-  const BASE = new THREE.Color("#F7F6F3");
+  const BASE = new THREE.Color("#F6F4F0");
   const col = new Float32Array(nv * 3), crudo = new Float32Array(nv * 3), aux = new Float32Array(nv * 3), liso = new Float32Array(nv * 3);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(G.pos, 3));
@@ -307,7 +307,14 @@ async function abrirSilueta(opts = {}){
   const c2 = sc.getContext("2d"); const gr = c2.createRadialGradient(64, 64, 4, 64, 64, 62); gr.addColorStop(0, "rgba(40,30,30,.32)"); gr.addColorStop(1, "rgba(40,30,30,0)");
   c2.fillStyle = gr; c2.fillRect(0, 0, 128, 128);
   const sombra = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), transparent: true, depthWrite: false }));
-  sombra.rotation.x = -Math.PI / 2; sombra.position.y = .005; scene.add(sombra);
+  sombra.rotation.x = -Math.PI / 2; sombra.position.y = .012; scene.add(sombra);
+  /* Tarima: un disco claro con aro turquesa, para que la silueta no flote en el vacío */
+  const tarima = new THREE.Mesh(new THREE.CircleGeometry(1.25, 64), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55, depthWrite: false }));
+  tarima.rotation.x = -Math.PI / 2; tarima.position.y = .002; scene.add(tarima);
+  const aro = new THREE.Mesh(new THREE.RingGeometry(1.25, 1.31, 96), new THREE.MeshBasicMaterial({ color: 0x0E7C86, transparent: true, opacity: .55, depthWrite: false, side: THREE.DoubleSide }));
+  aro.rotation.x = -Math.PI / 2; aro.position.y = .004; scene.add(aro);
+  const aro2 = new THREE.Mesh(new THREE.RingGeometry(1.45, 1.47, 96), new THREE.MeshBasicMaterial({ color: 0x0E7C86, transparent: true, opacity: .22, depthWrite: false, side: THREE.DoubleSide }));
+  aro2.rotation.x = -Math.PI / 2; aro2.position.y = .003; scene.add(aro2);
 
   /* ---------- Estado ---------- */
   const zonas = {};
@@ -340,9 +347,20 @@ async function abrirSilueta(opts = {}){
     }
     liso.set(src); col.set(src); colAttr.needsUpdate = true;
   }
-  function brillar(ids, k){
+  /* La zona elegida se queda marcada: turquesa si aún no tiene dolor; si ya tiene color, late con su mismo color.
+     pulso va de 0 a 1 (latido suave); flash es el destello al tocarla. */
+  const SELEC = new THREE.Color("#12A0AB");
+  function brillar(ids, pulso, flash){
     col.set(liso);
-    if(k > .001) ids.forEach(id => { for(const q of G.verticesDe[zonas[id].i]){ tmp.setRGB(liso[q * 3], liso[q * 3 + 1], liso[q * 3 + 2]).lerp(BLANCO, k); col[q * 3] = tmp.r; col[q * 3 + 1] = tmp.g; col[q * 3 + 2] = tmp.b; } });
+    ids.forEach(id => {
+      const pintada = zonas[id].dolor > 0;
+      for(const q of G.verticesDe[zonas[id].i]){
+        tmp.setRGB(liso[q * 3], liso[q * 3 + 1], liso[q * 3 + 2]);
+        if(pintada) tmp.lerp(BLANCO, .08 + .2 * pulso); else tmp.lerp(SELEC, .68 + .16 * pulso);
+        if(flash > .001) tmp.lerp(BLANCO, flash);
+        col[q * 3] = tmp.r; col[q * 3 + 1] = tmp.g; col[q * 3 + 2] = tmp.b;
+      }
+    });
     colAttr.needsUpdate = true;
   }
 
@@ -518,7 +536,10 @@ async function abrirSilueta(opts = {}){
     }
     cuerpo.rotation.y = rotY; cuerpo.rotation.x = rotX;
     if(!quieto) cuerpo.position.y = Math.sin(t / 900) * .006;
-    if(sel && destello > 0){ destello = Math.max(0, destello - .018); brillar(idsSel(), quieto ? 0 : Math.max(0, Math.sin(t / 110)) * .45 * destello); }
+    if(sel){
+      destello = Math.max(0, destello - .03);
+      brillar(idsSel(), quieto ? .5 : .5 + .5 * Math.sin(t / 380), quieto ? 0 : Math.max(0, Math.sin(t / 110)) * .4 * destello);
+    }
     renderer.render(scene, cam);
     ponerEtiqueta();
     raf = requestAnimationFrame(loop);

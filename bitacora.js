@@ -452,8 +452,9 @@ function tarjetaMiradorHTML(p){
   return `<article class="mir-card" data-reserva="${esc(p.reserva_id)}" data-atleta="${esc(p.atleta_id)}" data-pre="${pre}" aria-label="${esc(p.nombre || "Alumno")}">
     <header class="mir-head"><span class="avatar" aria-hidden="true">${esc(initials(p.nombre || ""))}</span>
       <div><h3>${esc(p.nombre || "Alumno")}</h3>
-        <p class="muted">${esc(cat)}${p.sinReserva ? ` · sin reserva · agregado a las ${esc(horaDe(p.checkin_at))}` : ` · ${esc(horaDe(p.inicio))} · llegó ${esc(horaDe(p.checkin_at))}`}</p></div>
+        <p class="muted">${esc(cat)}${p.sinReserva ? ` · sin reserva · agregado a las ${esc(horaDe(p.checkin_at))}` : p.diaSesion && p.diaSesion !== todayStr() ? ` · ${esc(horaDe(p.inicio))}` : ` · ${esc(horaDe(p.inicio))} · llegó ${esc(horaDe(p.checkin_at))}`}</p></div>
       <a class="link-inline mir-hist" href="#/bitacora/${encodeURIComponent(p.atleta_id)}" data-ir-bitacora>Historial</a></header>
+    ${p.diaSesion && p.diaSesion !== todayStr() ? `<p class="mir-otro-dia">Sesión del ${esc(fechaLarga(p.diaSesion).toLowerCase())} · se sube hoy</p>` : ""}
     ${malditaChipHTML(p.atleta_id)}<p class="mir-vivo" hidden></p>
     ${tieneLesion(p.lesiones) ? `<p class="mir-lesion"><strong>Lesión:</strong> ${esc(p.lesiones)}</p>` : ""}
     ${referenciasHTML(miradorUI.hist[p.atleta_id])}
@@ -576,7 +577,7 @@ async function guardarTarjeta(dlg, card, btn){
   if(!p) return;
   const msg = card.querySelector(".mir-msg");
   await withBusy(btn, "Guardando…", async ()=>{
-    const { data: nueva, error } = await sb.from("bitacora").insert({ atleta_id: p.atleta_id, reserva_id: p.sinReserva ? null : reserva, ...leerCampos(card, card.dataset.pre) }).select("id").single();
+    const { data: nueva, error } = await sb.from("bitacora").insert({ atleta_id: p.atleta_id, reserva_id: p.sinReserva ? null : reserva, ...(p.sinReserva && p.diaSesion ? { fecha: p.diaSesion } : {}), ...leerCampos(card, card.dataset.pre) }).select("id").single();
     if(error && !/23505|duplicate|unique/i.test((error.code || "") + " " + (error.message || ""))){ msg.textContent = errorES(error); return; }
     if(error) msg.textContent = "Otro coach ya guardó la bitácora de esta sesión.";
     let fallas = 0;
@@ -759,7 +760,8 @@ async function pintarHistorial(id){
     if(b.estiramientos !== null && b.estiramientos !== undefined) filas.splice(2, 0, `<div class="bit-fila"><dt>¿Hizo sus estiramientos?</dt><dd>${b.estiramientos ? "Sí" : "No"}</dd></div>`);
     return `<li class="bit-entrada">
       <div class="bit-meta"><strong>${esc(mayuscula(fechaLarga(b.fecha)))}${b.fecha.slice(0, 4) !== todayStr().slice(0, 4) ? " " + b.fecha.slice(0, 4) : ""}</strong>
-        <span class="muted">por ${esc(b.autor_nombre || "el equipo")} · ${esc(horaDe(b.created_at))}${b.reserva_id ? " · sesión" : ""}</span></div>
+        <span class="muted">por ${esc(b.autor_nombre || "el equipo")} · ${esc(horaDe(b.created_at))}${b.reserva_id ? " · sesión" : ""}</span>
+        ${b.created_at && fechaLima(b.created_at) !== b.fecha ? `<span class="bit-subida">Subida el ${esc(fechaLarga(fechaLima(b.created_at)).toLowerCase())}</span>` : ""}</div>
       ${dolor}
       ${filas.length ? `<dl class="bit-datos">${filas.join("")}</dl>` : (dolor || b._fotos.length ? "" : `<p class="muted">Sin notas.</p>`)}
       ${b._fotos.length ? `<div class="bit-fotos">${b._fotos.map(f => f.url ? `<button type="button" class="foto-mini" data-ver-foto="${esc(f.url)}" aria-label="Ver foto"><img src="${esc(f.url)}" alt="" loading="lazy"></button>` : "").join("")}</div>` : ""}
@@ -808,7 +810,10 @@ async function pintarHistorial(id){
 function abrirEntradaBitacora(a, previa){
   const pre = "nb_";
   const dlg = openDialog(previa ? "Editar entrada" : "Nueva entrada · " + primerNombre(a.nombre), `
-    <p class="muted" style="margin-top:0">${previa ? esc(fechaLarga(previa.fecha)) + " · por " + esc(previa.autor_nombre || "el equipo") : "Hoy, " + esc(fechaLarga(todayStr())) + ". Ningún campo es obligatorio."}</p>
+    <p class="muted" style="margin-top:0">${previa ? esc(fechaLarga(previa.fecha)) + " · por " + esc(previa.autor_nombre || "el equipo") : "Ningún campo es obligatorio."}</p>
+    ${previa ? "" : `<label for="nbDia">Día de la sesión</label>
+    <input type="date" id="nbDia" value="${todayStr()}" max="${todayStr()}" min="${fechaISO(sumarDias(parseFecha(todayStr()), -60))}">
+    <p class="mir-otro-dia" id="nbDiaTxt" hidden></p>`}
     ${camposBitacoraHTML(pre, previa || {})}
     <div id="nbMsg" aria-live="polite"></div>
     <button type="button" class="btn-primary" id="btnGuardarBit">Guardar</button>`);
@@ -816,12 +821,30 @@ function abrirEntradaBitacora(a, previa){
   dlg.el.dataset.atleta = a ? a.id : (previa && previa.atleta_id) || "";
   enlazarCampos(dlg.el);
   const btn = dlg.el.querySelector("#btnGuardarBit");
+  const inpDia = dlg.el.querySelector("#nbDia");
+  const diaElegido = ()=> inpDia && inpDia.value && inpDia.value <= todayStr() && inpDia.value >= inpDia.min ? inpDia.value : todayStr();
+  if(inpDia) inpDia.onchange = ()=>{
+    const t = dlg.el.querySelector("#nbDiaTxt"), f = diaElegido();
+    inpDia.value = f;
+    t.hidden = f === todayStr();
+    t.textContent = f === todayStr() ? "" : `Sesión del ${fechaLarga(f).toLowerCase()}. Se guarda con ese día y figura que se subió hoy.`;
+  };
   btn.onclick = ()=> withBusy(btn, "Guardando…", async ()=>{
     const datos = leerCampos(dlg.el, pre);
     const msg = dlg.el.querySelector("#nbMsg");
+    /* Día anterior: si ese día vino a una sesión que quedó sin bitácora, la entrada se une a esa sesión */
+    const extra = {};
+    if(!previa && diaElegido() !== todayStr()){
+      extra.fecha = diaElegido();
+      const { data: rs } = await sb.from("reservas").select("id").eq("user_id", a.id).eq("fecha", extra.fecha).eq("estado", "asistio").order("inicio");
+      const ids = (rs || []).map(r => r.id);
+      const { data: hechas } = ids.length ? await sb.from("bitacora").select("reserva_id").in("reserva_id", ids) : { data: [] };
+      const libre = ids.find(x => !(hechas || []).some(h => h.reserva_id === x));
+      if(libre) extra.reserva_id = libre;
+    }
     const { data: fila, error } = previa
       ? await sb.from("bitacora").update(datos).eq("id", previa.id).select("id").single()
-      : await sb.from("bitacora").insert({ atleta_id: a.id, ...datos }).select("id").single();
+      : await sb.from("bitacora").insert({ atleta_id: a.id, ...extra, ...datos }).select("id").single();
     if(error){ showError(msg, error); return; }
     const { nuevas, borrar } = fotosDe(dlg.el);
     if(borrar.length) await borrarFotos((previa._fotos || []).filter(f => borrar.includes(f.id)));
@@ -944,17 +967,41 @@ function abrirAgregarMirador(){
   const alumnos = (state.athleteList || []).filter(a => !area || catsDe(a.categoria).includes(area))
     .sort((x, y) => String(x.nombre || "").localeCompare(String(y.nombre || ""), "es"));
   const d = openDialog("Agregar al Mirador", `
-    <p class="muted" style="margin-top:0">Para quien llegó y no escaneó el QR. Si tiene reserva hoy, se marca su llegada; si no, entra «sin reserva».</p>
+    <p class="muted" style="margin-top:0">Para quien llegó y no escaneó el QR, o para completar la bitácora de un día anterior. Si tiene reserva ese día, se marca su llegada; si no, entra «sin reserva».</p>
+    <div class="mir-dia" role="group" aria-label="¿De qué día es la sesión?">
+      <button type="button" data-mir-dia="hoy" aria-pressed="true">Hoy</button>
+      <button type="button" data-mir-dia="ayer" aria-pressed="false">Ayer</button>
+      <label class="sr-only" for="mirAddDia">Otro día</label>
+      <input type="date" id="mirAddDia" max="${fechaISO(sumarDias(parseFecha(todayStr()), -1))}" min="${fechaISO(sumarDias(parseFecha(todayStr()), -30))}" aria-label="Otro día">
+    </div>
+    <p class="mir-otro-dia" id="mirAddDiaTxt" hidden></p>
     <label class="sr-only" for="mirAddQ">Buscar por nombre</label>
     <input type="search" id="mirAddQ" placeholder="Buscar por nombre" autocomplete="off">
     <div id="mirAddMsg" aria-live="polite"></div>
     <ul class="mir-add-lista" id="mirAddLista"></ul>`);
   const lista = d.el.querySelector("#mirAddLista"), q = d.el.querySelector("#mirAddQ");
+  /* Día de la sesión: hoy, ayer u otro día (hasta 30 días atrás). La bitácora queda con ese día y con la fecha en que se subió. */
+  const hoy = todayStr(), ayer = fechaISO(sumarDias(parseFecha(hoy), -1));
+  let dia = hoy;
+  const inpDia = d.el.querySelector("#mirAddDia"), txtDia = d.el.querySelector("#mirAddDiaTxt");
+  const ponerDia = (f)=>{
+    dia = f || hoy;
+    d.el.querySelector('[data-mir-dia="hoy"]').setAttribute("aria-pressed", String(dia === hoy));
+    d.el.querySelector('[data-mir-dia="ayer"]').setAttribute("aria-pressed", String(dia === ayer));
+    inpDia.value = dia !== hoy && dia !== ayer ? dia : "";
+    txtDia.hidden = dia === hoy;
+    txtDia.textContent = dia === hoy ? "" : `Sesión del ${fechaLarga(dia).toLowerCase()}. Se guarda con ese día y figura que se subió hoy.`;
+    d.el.querySelector("#mirAddMsg").innerHTML = "";
+    pintar();
+  };
+  d.el.querySelector('[data-mir-dia="hoy"]').onclick = ()=> ponerDia(hoy);
+  d.el.querySelector('[data-mir-dia="ayer"]').onclick = ()=> ponerDia(ayer);
+  inpDia.onchange = ()=> ponerDia(inpDia.value && inpDia.value < hoy && inpDia.value >= inpDia.min ? inpDia.value : hoy);
   const pintar = ()=>{
     const t = normalizar(q.value || "");
     const vis = alumnos.filter(a => !t || normalizar(a.nombre || "").includes(t)).slice(0, 40);
     lista.innerHTML = vis.length ? vis.map(a => {
-      const ya = miradorUI.pend.some(p => p.atleta_id === a.id);
+      const ya = dia === hoy && miradorUI.pend.some(p => p.atleta_id === a.id);
       return `<li><button type="button" class="mir-add-item" data-mir-add="${esc(a.id)}">
         <span class="avatar" aria-hidden="true">${esc(initials(a.nombre || ""))}</span>
         <span class="mir-add-txt"><strong>${esc(a.nombre || "(sin nombre)")}</strong><span class="muted">${esc((CATEGORIAS[a.categoria] || {}).nombre || "")}${ya ? " · ya está en el Mirador" : ""}</span></span>
@@ -966,19 +1013,21 @@ function abrirAgregarMirador(){
   setTimeout(()=> q.focus(), 30);
   lista.onclick = (e)=>{
     const b = e.target.closest("[data-mir-add]");
-    if(b) agregarAlMirador(alumnos.find(a => a.id === b.dataset.mirAdd), d, b);
+    if(b) agregarAlMirador(alumnos.find(a => a.id === b.dataset.mirAdd), d, b, dia);
   };
 }
-async function agregarAlMirador(a, d, btn){
+async function agregarAlMirador(a, d, btn, dia){
   if(!a) return;
   const msg = d.el.querySelector("#mirAddMsg");
-  const ya = miradorUI.pend.find(p => p.atleta_id === a.id);
+  dia = dia || todayStr();
+  const pasado = dia !== todayStr();
+  const ya = miradorUI.pend.find(p => p.atleta_id === a.id && (pasado ? p.diaSesion === dia : !p.diaSesion || p.diaSesion === dia));
   if(ya){ d.close(); abrirMirador(ya.reserva_id); return; }
   btn.disabled = true;
   const listo = (id)=>{ d.close(); abrirMirador(id); };
   try{
     const { data: rs, error } = await sb.from("reservas").select("id, horario_id, inicio, estado, checkin_at")
-      .eq("user_id", a.id).eq("fecha", todayStr()).in("estado", ["confirmada", "asistio", "no_asistio"]).order("inicio");
+      .eq("user_id", a.id).eq("fecha", dia).in("estado", ["confirmada", "asistio", "no_asistio"]).order("inicio");
     if(error){ showError(msg, error); return; }
     const ahora = Date.now();
     const ids = (rs || []).map(r => r.id);
@@ -987,7 +1036,7 @@ async function agregarAlMirador(a, d, btn){
     /* La sesión de hoy más cercana a esta hora que todavía no tiene bitácora */
     const libres = (rs || []).filter(r => !conBit.has(r.id)).sort((x, y) => Math.abs(new Date(x.inicio) - ahora) - Math.abs(new Date(y.inicio) - ahora));
     if((rs || []).length && !libres.length){
-      showMsg(msg, "error", `${primerNombre(a.nombre) || "Esta persona"} ya tiene bitácora de ${rs.length === 1 ? "su sesión de las " + horaDe(rs[0].inicio) : "sus sesiones de hoy"}.`);
+      showMsg(msg, "error", `${primerNombre(a.nombre) || "Esta persona"} ya tiene bitácora de ${rs.length === 1 ? "su sesión de las " + horaDe(rs[0].inicio) : "sus sesiones"} ${pasado ? "del " + fechaLarga(dia).toLowerCase() : "de hoy"}.`);
       return;
     }
     const cand = libres[0];
@@ -997,20 +1046,26 @@ async function agregarAlMirador(a, d, btn){
         if(e2){ showError(msg, e2); return; }
       }
       miradorUI.vistos.add(cand.id);
-      miradorUI.cargando = false;
-      await actualizarMirador();
+      if(!pasado){
+        miradorUI.cargando = false;
+        await actualizarMirador();
+      } else await cargarReferencias([a.id]);
       if(miradorUI.pend.some(p => p.reserva_id === cand.id)){ listo(cand.id); return; }
       /* Su sesión terminó antes de tu turno: igual se agrega con su reserva */
       const [h] = (await cargarHorarios()).filter(x => x.id === cand.horario_id);
-      const p = { reserva_id: cand.id, atleta_id: a.id, nombre: a.nombre, categoria: (h || {}).categoria || a.categoria, inicio: cand.inicio, checkin_at: cand.checkin_at || new Date().toISOString(), lesiones: a.lesiones };
+      const p = { reserva_id: cand.id, atleta_id: a.id, nombre: a.nombre, categoria: (h || {}).categoria || a.categoria, inicio: cand.inicio, checkin_at: cand.checkin_at || new Date().toISOString(), lesiones: a.lesiones, ...(pasado ? { diaSesion: dia } : {}) };
       miradorUI.manuales.push(p); await guardarManualDB(p);
       miradorUI.pend.push(p);
+      pintarTurno();
       listo(p.reserva_id);
       return;
     }
     const ahoraISO = new Date().toISOString();
     const p = { reserva_id: "manual-" + a.id, atleta_id: a.id, nombre: a.nombre, categoria: a.categoria === "transicion" ? "fortalecimiento" : a.categoria,
-      inicio: ahoraISO, checkin_at: ahoraISO, lesiones: a.lesiones, sinReserva: true };
+      inicio: ahoraISO, checkin_at: ahoraISO, lesiones: a.lesiones, sinReserva: true, ...(pasado ? { diaSesion: dia } : {}) };
+    /* Si ya había una tarjeta «sin reserva» de esta persona, se reemplaza por la del día elegido */
+    miradorUI.manuales = miradorUI.manuales.filter(m => m.reserva_id !== p.reserva_id);
+    miradorUI.pend = miradorUI.pend.filter(m => m.reserva_id !== p.reserva_id);
     miradorUI.manuales.push(p); await guardarManualDB(p);
     miradorUI.vistos.add(p.reserva_id);
     await cargarReferencias([a.id]);
