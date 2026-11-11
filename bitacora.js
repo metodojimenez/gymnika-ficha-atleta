@@ -335,7 +335,7 @@ async function cargarTurno(){
   if(miradorUI.turno && String(new Date(miradorUI.turno.inicio).toLocaleDateString("en-CA", { timeZone: "America/Lima" })) !== todayStr()) miradorUI.turno = null;
   miradorUI.manuales = await cargarManuales();
   pintarTurno();
-  if(miradorUI.turno) actualizarMirador();
+  if(miradorUI.turno){ actualizarMirador(); revisarIngresos(); }
 }
 async function iniciarTurnoConQR(codigo){
   const { data, error } = await sb.rpc("iniciar_turno", { p_codigo: codigo });
@@ -1205,9 +1205,10 @@ const vivoUI = { canal: null, espera: {} };
 function suscribirBitacoraEnVivo(){
   if(vivoUI.canal || typeof sb.channel !== "function" || !esEquipo()) return;
   const ch = sb.channel("bitacora-en-vivo");
-  ["bitacora", "bitacora_fotos", "comentarios_internos", "consejos_historial", "turnos_coach", "mirador_borradores", "mirador_manual", "reservas"].forEach(t => {
+  ["bitacora", "bitacora_fotos", "comentarios_internos", "consejos_historial", "turnos_coach", "mirador_borradores", "mirador_manual", "reservas", "solicitudes_ingreso"].forEach(t => {
     ch.on("postgres_changes", { event: "*", schema: "public", table: t }, (payload)=>{
       if(t === "mirador_borradores"){ refrescarEnVivo(t, payload || {}); return; }
+      if(t === "solicitudes_ingreso"){ revisarIngresos(); return; }
       clearTimeout(vivoUI.espera[t]);
       vivoUI.espera[t] = setTimeout(()=> refrescarEnVivo(t, payload || {}), 350);
     });
@@ -1375,4 +1376,54 @@ function abrirBitacoraFort(mir, reservaId){
     if(mir.isConnected && mir.open){ if(miradorUI.vista === "asis") verAsistenciaFort(mir, true); else if(miradorUI.vista !== "pend") verHoraMirador(mir, miradorUI.vista); }
   });
   try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
+}
+
+/* ====================== Ingreso sin reserva (fortalecimiento) ======================
+   Alguien escaneó el QR sin estar apuntado a la clase en curso: a los coaches en turno les sale una ventana para aceptarlo o no.
+   Si lo acepta uno, a los demás se les cierra sola. */
+const ingresoUI = { abiertos: {}, timer: null };
+function revisarIngresos(avisado){
+  clearTimeout(ingresoUI.timer);
+  ingresoUI.timer = setTimeout(async ()=>{
+    /* En turno siempre; fuera de turno solo si la base le avisó (pasa cuando no hay nadie en turno) */
+    if(!esEquipo() || !veFortalecimiento() || !(miradorUI.turno || avisado)) return;
+    const desde = new Date(Date.now() - 30 * 60000).toISOString();
+    const { data, error } = await sb.from("solicitudes_ingreso").select("id, user_id, inicio, estado, created_at").gte("created_at", desde).order("created_at");
+    if(error){ console.error(error); return; }
+    const pend = (data || []).filter(s => s.estado === "pendiente");
+    /* Las que ya resolvió otro coach se cierran */
+    Object.keys(ingresoUI.abiertos).forEach(id => { if(!pend.some(s => s.id === id)){ const d = ingresoUI.abiertos[id]; delete ingresoUI.abiertos[id]; if(d.open) d.close(); d.remove(); } });
+    pend.forEach(s => { if(!ingresoUI.abiertos[s.id]) abrirIngreso(s); });
+  }, 250);
+}
+function abrirIngreso(s){
+  const a = (state.athleteList || []).find(x => x.id === s.user_id) || {};
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-pago ingreso-dlg";
+  dlg.setAttribute("aria-labelledby", "ing_" + s.id);
+  dlg.innerHTML = `
+    <p class="eyebrow">Fortalecimiento · clase de las ${esc(horaDe(s.inicio))}</p>
+    <span class="avatar ingreso-av" aria-hidden="true">${esc(initials(a.nombre || ""))}</span>
+    <h2 id="ing_${esc(s.id)}">${esc(a.nombre || "Un alumno")} quiere entrar</h2>
+    <p>Escaneó el QR a las ${esc(horaDe(s.created_at))}, pero <strong>no está apuntado</strong> a esta clase.</p>
+    ${a.horario_especial ? `<p><span class="flag especial">Horario especial</span></p>` : ""}
+    <p class="ingreso-msg" aria-live="polite"></p>
+    <div class="sheet-actions"><button type="button" class="btn-outline" data-ing="no">No aceptar</button><button type="button" class="btn-primary" data-ing="si">Aceptar ingreso</button></div>
+    <button type="button" class="btn-link" data-ing="luego">Que decida otro coach</button>`;
+  document.body.appendChild(dlg);
+  ingresoUI.abiertos[s.id] = dlg;
+  const quitar = ()=>{ delete ingresoUI.abiertos[s.id]; if(dlg.open) dlg.close(); dlg.remove(); };
+  dlg.addEventListener("cancel", (e)=> e.preventDefault());
+  dlg.querySelector('[data-ing="luego"]').onclick = ()=>{ if(dlg.open) dlg.close(); dlg.remove(); };   // se queda anotada para no volver a abrirse aquí
+  dlg.querySelectorAll('[data-ing="si"], [data-ing="no"]').forEach(b => { b.onclick = ()=> withBusy(b, "…", async ()=>{
+    const { data, error } = await sb.rpc("resolver_ingreso", { p_id: s.id, p_aceptar: b.dataset.ing === "si" });
+    if(error){ dlg.querySelector(".ingreso-msg").textContent = errorES(error); return; }
+    const r = typeof data === "string" ? JSON.parse(data) : (data || {});
+    if(r.ya){ dlg.querySelector(".ingreso-msg").textContent = r.estado === "aceptada" ? "Otro coach ya lo aceptó." : "Otro coach ya respondió."; setTimeout(quitar, 1400); return; }
+    quitar();
+    const mir = document.getElementById("modalMirador");
+    if(mir && mir.open && miradorUI.vista === "asis") verAsistenciaFort(mir, true);
+  }); });
+  try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
+  try{ if(navigator.vibrate) navigator.vibrate(120); } catch { /* sin vibración */ }
 }

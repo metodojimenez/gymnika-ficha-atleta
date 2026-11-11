@@ -994,6 +994,8 @@ function avisarNuevas(items){
   if(!miradorUI.turno) sinLeer.filter(n => n.tipo === "checkin").forEach(n => mostrarLlegadas(n));
   /* Tareas asignadas: aviso para cualquier coach del equipo */
   sinLeer.filter(n => n.tipo === "tarea").forEach(n => mostrarEmergente(n));
+  /* Alguien de fortalecimiento pide entrar sin reserva: ventana para aceptarlo o no */
+  if(sinLeer.some(n => n.tipo === "ingreso")) revisarIngresos(true);
   if(!esMaster()) return;
   sinLeer.forEach(n => {
     if(n.tipo === "pago" || n.tipo === "pago_aprobado") notificarSistema(n, "#/pagos");

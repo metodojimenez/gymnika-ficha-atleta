@@ -1407,6 +1407,53 @@ function bateriaMesHTML(n){
     </div>`;
 }
 
+/* Fortalecimiento sin reserva a esta hora: se pide ingreso a los coaches en turno y se espera su respuesta aquí mismo */
+function esperarIngreso(res){
+  const dlg = openDialog("Pidiendo ingreso", `
+    <div class="checkin-res ingreso-espera">
+      <div class="bat-cara">${avatarMarianIA("serio")}</div>
+      <div class="globo-comic bat-globo"><span class="chat-quien">MarianI.A.</span>
+        <p class="bat-titulo">No estás apuntado a esta clase</p>
+        <p class="bat-n">Le pedí a tu coach que te deje entrar a la de las ${esc(fmtFechaHora(res.inicio).split("· ")[1] || "")}.</p></div>
+      <p class="ingreso-estado" role="status"><span class="puntos-espera" aria-hidden="true"><i></i><i></i><i></i></span> Esperando la respuesta del coach…</p>
+      <p class="muted">No cierres esta ventana. La próxima vez, reserva tu horario antes de venir.</p>
+    </div>`);
+  let vivo = true, intentos = 0;
+  const revisar = async ()=>{
+    if(!vivo || !dlg.el.isConnected) return;
+    intentos++;
+    const { data } = await sb.from("solicitudes_ingreso").select("estado").eq("id", res.solicitud).maybeSingle();
+    const estado = data && data.estado;
+    if(estado === "aceptada"){
+      vivo = false;
+      let bateria = "";
+      try{ bateria = bateriaMesHTML(await clasesDelMes(state.profile.id)); } catch(e){ console.error(e); }
+      dlg.el.querySelector(".sheet-title").textContent = "¡Puedes entrar!";
+      dlg.el.querySelector(".sheet-body").innerHTML = `<div class="checkin-res ok"><p class="ck-name">${esc(res.nombre || state.profile.nombre || "")}</p>
+        <p><strong>Tu coach aceptó tu ingreso.</strong> Tu asistencia quedó registrada.</p>${bateria}</div>`;
+      if(document.getElementById("planCard")) refrescarReservas((state.detail && state.detail.profile) || state.profile);
+      loadInbox();
+      return;
+    }
+    if(estado === "rechazada"){
+      vivo = false;
+      dlg.el.querySelector(".sheet-title").textContent = "No se aceptó tu ingreso";
+      dlg.el.querySelector(".sheet-body").innerHTML = `<div class="checkin-res bad"><span class="ck-icon" aria-hidden="true">!</span>
+        <p class="ck-name">Esta vez no se pudo</p><p>No estabas apuntado a esta clase. Reserva tu horario en la app antes de venir.</p></div>`;
+      loadInbox();
+      return;
+    }
+    if(intentos > 100){
+      vivo = false;
+      const e = dlg.el.querySelector(".ingreso-estado");
+      if(e) e.textContent = "Todavía no responden. Acércate a recepción para que te ayuden.";
+      return;
+    }
+    setTimeout(revisar, 3000);
+  };
+  setTimeout(revisar, 2000);
+}
+
 async function procesarCheckin(codigo){
   if(!codigo || !state.profile) return;
   if(esEquipo()){ iniciarTurnoConQR(codigo); return; }
@@ -1419,6 +1466,7 @@ async function procesarCheckin(codigo){
   }
   const res = typeof data === "string" ? JSON.parse(data) : (data || {});
   const esFort = (res.categoria || state.profile.categoria) === "fortalecimiento";
+  if(res.ok === false && res.motivo === "solicitud"){ esperarIngreso(res); return; }
   if(res.ok === false){
     /* Horario equivocado: la base ya avisó al alumno y a los master */
     openDialog("Horario equivocado", `
