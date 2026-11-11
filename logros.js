@@ -359,10 +359,26 @@ async function pintarMejoresCoach(box){
   if(!box.isConnected) return;
   const l = r.carnets || [];
   if(!l.length){ box.innerHTML = `<p class="muted" style="margin:0">Todavía nadie compartió su carnet. Los alumnos pueden compartirlo los últimos 6 días de cada mes.</p>`; return; }
-  const item = (x, i) => `<li>${miniCarnetHTML(x, i < 3 ? i + 1 : 0)}<a class="link-inline mc-ver" href="#/atleta/${x.user_id}">Ver su ficha</a></li>`;
+  const item = (x) => `<li>${miniCarnetHTML(x, 0)}<a class="link-inline mc-ver" href="#/atleta/${encodeURIComponent(x.user_id)}">Ver su ficha</a></li>`;
   box.innerHTML = `<p class="muted mejores-mes">Podio de ${esc(nombreMes(r.mes))}${r.actual ? "" : " (mes pasado)"} · puntos = asistencias + días de estiramiento</p>
-    <ol class="podio">${l.slice(0, 3).map(item).join("")}</ol>
-    ${l.length > 3 ? `<details class="records"><summary>Las demás fichas compartidas (${l.length - 3})</summary><ol class="podio" start="4" style="margin-top:12px">${l.slice(3).map((x, i) => item(x, i + 3)).join("")}</ol></details>` : ""}`;
+    ${podioHTML(l, true)}
+    ${l.length > 3 ? `<details class="records"><summary>Las demás fichas compartidas (${l.length - 3})</summary><ol class="fichas-lista" start="4">${l.slice(3).map(item).join("")}</ol></details>` : ""}`;
+}
+/* Podio de verdad: el 1.º al centro y más alto, el 2.º a la izquierda y el 3.º a la derecha, un poco más bajo */
+function podioHTML(lista, conEnlace){
+  const medallas = (x) => (Array.isArray(x.medallas) ? x.medallas : []).map(m => { const l = LOGROS.find(y => y.id === m.id); return l && l.niveles[m.i] !== undefined ? medallaSVG(l, m.i, true) : ""; }).join("");
+  return `<ol class="podio">${lista.slice(0, 3).map((x, i) => { const meds = medallas(x); return `
+    <li class="pod p${i + 1}">
+      <div class="pod-card">
+        <span class="mc-foto" aria-hidden="true">${esc(initials(x.nombre || ""))}</span>
+        <strong>${esc(x.nombre || "Atleta")}</strong>
+        <span class="pod-pts"><b class="num">${x.puntos}</b> puntos</span>
+        <span class="pod-det">${x.asistencias} ${x.asistencias === 1 ? "asistencia" : "asistencias"} · ${x.estiro_dias} ${x.estiro_dias === 1 ? "día" : "días"} estirando</span>
+        ${meds ? `<div class="mc-meds" aria-label="Sus medallas">${meds}</div>` : ""}
+        ${conEnlace ? `<a class="link-inline mc-ver" href="#/atleta/${encodeURIComponent(x.user_id)}">Ver su ficha</a>` : ""}
+      </div>
+      <div class="pod-base"><span aria-label="Puesto ${i + 1}">${i + 1}</span></div>
+    </li>`; }).join("")}</ol>`;
 }
 function miniCarnetHTML(x, puesto){
   const meds = (Array.isArray(x.medallas) ? x.medallas : []).map(m => { const l = LOGROS.find(y => y.id === m.id); return l && l.niveles[m.i] !== undefined ? medallaSVG(l, m.i, true) : ""; }).join("");
@@ -387,7 +403,7 @@ function pintarMejores(r){
   const top = (r.carnets || []).slice(0, 3);
   box.innerHTML = top.length
     ? `<p class="muted mejores-mes">Podio de ${esc(nombreMes(r.mes))}${r.actual ? "" : " (mes pasado)"} · puntos = asistencias + días de estiramiento</p>
-       <ol class="podio">${top.map((x, i) => `<li>${miniCarnetHTML(x, i + 1)}</li>`).join("")}</ol>`
+       ${podioHTML(top, false)}`
     : `<p class="muted" style="margin:0">Todavía nadie compartió su carnet. Los últimos 6 días de cada mes podrás compartir el tuyo y entrar al podio.</p>`;
 }
 /* A los demás les aparece una sola vez cada carnet compartido este mes */
