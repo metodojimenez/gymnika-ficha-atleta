@@ -101,11 +101,11 @@ async function renderAthleteDetail(profile, isCoach, container){
     const hoyAlumno = `<section class="panel span-12 hoy-alumno" id="inicioHoyCard" aria-label="${esHijo ? "Su próxima sesión" : "Tu próxima sesión"}"><div class="skel skel-block"></div></section>`;
     const consejoCoach = panelHTML("notasCard", "Consejo de tu coach", 12, { cls: "coach-voice", eyebrow: "Tu coach" });
     /* Tu reloj: pasos y sueño + atajo a «Entrenamiento fuera de Gymnika» (vive en Progreso) */
+    /* Mi ficha empieza con el carnet (logros.js) */
+    const carnet = `<div class="span-12">${carnetHTML(profile)}</div>` + panelHTML("mejoresCard", "Mejores fichas del mes", 12, { eyebrow: "Carnets compartidos" });
     const reloj = panelHTML("relojCard", "Tu reloj", 12, { eyebrow: "Pasos, sueño y entrenamientos" });
     tabsAlumno = esTerapia ? {
       inicio: `
-    ${consejoCoach}
-    ${estirar}
     ${hoyAlumno}
     ${panelHTML("planCard", esHijo ? "Sus sesiones" : "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
     ${reloj}
@@ -119,14 +119,17 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("externosCard", "Entrenamiento fuera de Gymnika", 12, { eyebrow: "Tu reloj o a mano" })}
     ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}`,
       ficha: `
+    ${carnet}
+    ${consejoCoach}
+    ${estirar}
     ${panelHTML("fichaCard", "Datos personales", 12)}`
     } : {
       inicio: `
-    ${consejoCoach}
     ${hoyAlumno}
-    ${panelHTML("planCard", cat === "transicion" ? (esHijo ? "Su plan" : "Mi plan") : (esHijo ? "Su acceso" : "Mi acceso"), 12, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}
+    ${panelHTML("planCard", cat === "transicion" ? (esHijo ? "Su plan" : "Mi plan") : (esHijo ? "Su acceso" : "Mi acceso"), 8, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}
+    ${panelHTML("constanciaCard", "Tu rueda de constancia", 4, { eyebrow: "Desde tu último entrenamiento" })}
     ${reloj}
-    ${panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 12, { eyebrow: "Todas las mañanas" })}`,
+    ${estirar}`,
       reservar: `
     ${panelHTML("reservarCard", "Reservar horario", 8, { note: "Obligatorio para entrar" })}
     ${panelHTML("misReservasCard", esHijo ? "Sus horarios" : "Mis horarios", 4)}`,
@@ -139,6 +142,8 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("medidasCard", "Medidas corporales", 12, { plegable: true })}
     ${panelHTML("externosCard", "Entrenamiento fuera de Gymnika", 12, { eyebrow: "Tu reloj o a mano" })}`,
       ficha: `
+    ${carnet}
+    ${consejoCoach}
     ${familia}
     ${panelHTML("agendaCard", "Agenda: viajes y competencias", 6)}
     ${panelHTML("nutricionCard", "Plan nutricional", 6)}
@@ -1310,8 +1315,11 @@ function detalleAlumnoHTML(profile, chips, tabs, fallo){
       <div id="detailMsg">${fallo ? `<div class="error" role="alert">${esc("Parte de la ficha no cargó. " + errorES(fallo.error))}</div>` : ""}</div>
       <section class="tab-alumno" data-tab="inicio" aria-label="Inicio">
         <header class="detail-head perfil-head">
-          <p class="eyebrow carnet-saludo">${saludoDelDia()}</p>
-          ${carnetHTML(profile)}
+          <div class="perfil-id">
+            <span class="avatar perfil-avatar" aria-hidden="true">${esc(initials(profile.nombre || ""))}</span>
+            <div><p class="eyebrow">${saludoDelDia()}</p><h1>${esc(profile.nombre || "Mi ficha")}</h1></div>
+          </div>
+          ${chips.length ? `<ul class="chips">${chips.join("")}</ul>` : ""}
           ${semanaHTML}
         </header>
         <div class="grid">${tabs.inicio}</div>
@@ -1362,10 +1370,10 @@ function pintarEstiramientosAlumno(box, lista, uid, nota, reps){
           <span class="estiro-txt"><strong>${esc(e)}</strong>${reps[e] ? `<span class="estiro-reps">${reps[e]} reps</span>` : ""}</span></li>`).join("")}</ol>
       <div class="estiro-hoy${hecho === true ? " si" : ""}" role="group" aria-labelledby="estiroHoyT">
         <p id="estiroHoyT" class="estiro-hoy-t">${hecho === true ? "¡Rutina de hoy hecha!" : "¿Hiciste tu rutina hoy?"}</p>
-        <div class="estiro-hoy-btns">
-          <button type="button" class="${hecho === true ? "btn-primary" : "btn-outline"}" data-estiro-hoy="si" aria-pressed="${hecho === true}">Sí, la hice</button>
+        ${hecho === true ? "" : `<div class="estiro-hoy-btns">
+          <button type="button" class="btn-outline" data-estiro-hoy="si" aria-pressed="false">Sí, la hice</button>
           <button type="button" class="${hecho === false ? "btn-primary" : "btn-outline"}" data-estiro-hoy="no" aria-pressed="${hecho === false}">Todavía no</button>
-        </div>
+        </div>`}
         <p class="estiro-hoy-msg" aria-live="polite"></p>
       </div>`;
     box.querySelectorAll("[data-estiro-hoy]").forEach(b => { b.onclick = ()=> withBusy(b, "…", async ()=>{
@@ -1548,6 +1556,7 @@ async function renderDisciplina(uid){
   const box = document.getElementById("disciplinaCard");
   if(!box){ if(document.getElementById("cmDisc")) datosDisciplina(uid).then(pintarDiscCarnet, ()=>{}); return; }
   const d = await datosDisciplina(uid);
+  pintarDiscCarnet(d);
   if(!box.isConnected) return;
   const nivel = d.pct === null ? "d0" : d.pct >= 80 ? "d1" : d.pct >= 50 ? "d2" : "d3";
   const txt = d.pct === null ? "Empieza hoy tu racha del mes." : d.pct >= 80 ? "¡Muy disciplinado!" : d.pct >= 50 ? "Vas bien, no la sueltes." : "Hay que retomarla.";
