@@ -237,7 +237,8 @@ async function renderAthleteDetail(profile, isCoach, container){
   enlazarIrExternos(container);
   if(isCoach){
     await renderPlanCoach(profile);
-    if(token === state.renderToken && hay("reservarCard")) await renderReservasAlumno(profile);
+    /* Siempre con sus reservas recién leídas: pudo cambiarlas otro coach o el propio coach desde el Horario */
+    if(token === state.renderToken && hay("reservarCard")){ state.plan = null; await renderReservasAlumno(profile); }
   } else {
     await renderPlanAlumno(profile);
     if(token === state.renderToken) pintarCarnet(profile, state.plan);

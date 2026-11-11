@@ -1239,10 +1239,25 @@ function suscribirBitacoraEnVivo(){
 function quitarBitacoraEnVivo(){
   if(vivoUI.canal){ try { sb.removeChannel(vivoUI.canal); } catch { /* ya cerrado */ } vivoUI.canal = null; }
 }
+/* Ficha de un alumno abierta por el coach: si su reserva cambió en otra pantalla (Horario, otro coach, el propio alumno),
+   «Agendar a …» y sus sesiones se vuelven a cargar. */
+async function refrescarAgendaAlumno(uid){
+  if(!document.getElementById("reservarCard") || !reservaUI.perfil || document.querySelector(".overlay")) return;
+  if(uid && uid !== reservaUI.uid) return;
+  const perfil = reservaUI.perfil;
+  state.plan = null;
+  const plan = document.getElementById("planCard");
+  if(plan && document.getElementById("coachMain") && !plan.contains(document.activeElement)) await renderPlanCoach(perfilReal(perfil));
+  if(document.getElementById("reservarCard") && reservaUI.perfil === perfil){ state.plan = null; await renderReservasAlumno(perfil); }
+}
 function refrescarEnVivo(tabla, payload){
   const fila = payload.new && Object.keys(payload.new).length ? payload.new : (payload.old || {});
   if(tabla === "mirador_borradores"){ if(payload.eventType !== "DELETE" && payload.new) recibirBorrador(payload.new); return; }
-  if(tabla === "mirador_manual" || tabla === "reservas"){ if(miradorUI.turno) actualizarMirador(); return; }
+  if(tabla === "mirador_manual" || tabla === "reservas"){
+    if(miradorUI.turno) actualizarMirador();
+    if(tabla === "reservas") refrescarAgendaAlumno(fila.user_id);
+    return;
+  }
   if(tabla === "turnos_coach"){
     if(!fila.coach_id || fila.coach_id === state.profile.id) cargarTurno();
     if(document.getElementById("eqLista")) pintarTurnosEquipo();
