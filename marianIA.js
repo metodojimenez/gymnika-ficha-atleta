@@ -1,5 +1,5 @@
 /* ====================== MarianI.A. ======================
-   Avatar de Gymnika (ilustración a partir de fotos de Danilo): busto con dos caras, «feliz» y «molesto».
+   Avatar de Gymnika (ilustración a partir de fotos de Danilo): busto con cuatro caras: «molesto», «serio», «feliz» y «pulgar» (feliz con el pulgar arriba).
    Habla en el chat, dice el consejo del día y avisa si ayer no estiraste. Devuelve un SVG en texto. */
 function avatarMarianIA(cara = "feliz", opts = {}){
   const id = "av" + Math.random().toString(36).slice(2, 8);
@@ -8,12 +8,15 @@ function avatarMarianIA(cara = "feliz", opts = {}){
               pelo:"#8E8984", peloOsc:"#5F5B57", peloClaro:"#D3CFCA",
               barba:"#BDB8B1", barbaOsc:"#8C8781", barbaClaro:"#ECE9E4",
               ceja:"#4A4542", ojo:"#3B2A22", camisa:"#173F43", camisaOsc:"#0F2D30", logo:"#2BA3A8", boca:"#5A1F1A", lengua:"#C9605A" };
-  const molesto = cara === "molesto";
+  const molesto = cara === "molesto", serio = cara === "serio", pulgar = cara === "pulgar";
   /* Cejas */
   const cejas = molesto
     ? `<path d="M64 78 Q76 75 92 87" stroke="${P.ceja}" stroke-width="7" stroke-linecap="round" fill="none"/>
        <path d="M136 80 Q124 78 108 88" stroke="${P.ceja}" stroke-width="7" stroke-linecap="round" fill="none"/>
        <path d="M97 84 v8 M103 84 v8" stroke="${P.sombra}" stroke-width="1.8" stroke-linecap="round"/>`
+    : serio
+    ? `<path d="M65 80 Q77 77 92 80" stroke="${P.ceja}" stroke-width="6.5" stroke-linecap="round" fill="none"/>
+       <path d="M135 80 Q123 77 108 80" stroke="${P.ceja}" stroke-width="6.5" stroke-linecap="round" fill="none"/>`
     : `<path d="M64 78 Q76 69 91 75" stroke="${P.ceja}" stroke-width="6.5" stroke-linecap="round" fill="none"/>
        <path d="M136 78 Q124 69 109 75" stroke="${P.ceja}" stroke-width="6.5" stroke-linecap="round" fill="none"/>`;
   /* Ojos */
@@ -22,6 +25,12 @@ function avatarMarianIA(cara = "feliz", opts = {}){
        <circle cx="${cx + (cx < 100 ? 1.5 : -1.5)}" cy="97" r="4.2" fill="${P.ojo}"/>
        <path d="M${cx - 10} 92 L${cx + 10} ${cx < 100 ? 95 : 89}" stroke="${P.piel}" stroke-width="6" stroke-linecap="round"/>
        <path d="M${cx - 9} 93.5 L${cx + 9} ${cx < 100 ? 96.5 : 90.5}" stroke="${P.sombra}" stroke-width="1.6" stroke-linecap="round"/>`
+    : serio
+    ? `<ellipse cx="${cx}" cy="95" rx="8" ry="6.5" fill="#fff"/>
+       <circle cx="${cx}" cy="95.5" r="4.6" fill="${P.ojo}"/>
+       <circle cx="${cx + 1.6}" cy="93.8" r="1.4" fill="#fff"/>
+       <path d="M${cx - 9} 89.5 Q${cx} 87.5 ${cx + 9} 89.5" stroke="${P.piel}" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+       <path d="M${cx - 8.5} 90.5 Q${cx} 88.8 ${cx + 8.5} 90.5" stroke="${P.sombra}" stroke-width="1.3" stroke-linecap="round" fill="none"/>`
     : `<ellipse cx="${cx}" cy="94" rx="8" ry="7.5" fill="#fff"/>
        <circle cx="${cx}" cy="95" r="4.8" fill="${P.ojo}"/>
        <circle cx="${cx + 1.6}" cy="93.2" r="1.5" fill="#fff"/>
@@ -32,11 +41,13 @@ function avatarMarianIA(cara = "feliz", opts = {}){
   const boca = molesto
     ? `<path d="M90 135 Q100 128 111 134 Q112 142 101 143 Q90 143 90 135 Z" fill="${P.boca}"/>
        <path d="M92 140.5 Q101 138 109 140 Q106 142.6 101 142.8 Q95 142.6 92 140.5 Z" fill="#fff"/>`
+    : serio
+    ? `<path d="M88 134 Q100 133 112 134" stroke="${P.boca}" stroke-width="3" stroke-linecap="round" fill="none"/>`
     : `<path d="M83 129 Q100 132 117 129 Q113 141 100 142 Q87 141 83 129 Z" fill="${P.boca}"/>
        <path d="M85 130 Q100 133 115 130 L114 134 Q100 136.5 86 134 Z" fill="#fff"/>
        <path d="M92 139 Q100 135.5 108 139 Q104 141.6 100 141.7 Q96 141.6 92 139 Z" fill="${P.lengua}"/>`;
   /* Bigote */
-  const bigote = molesto
+  const bigote = molesto || serio
     ? `<path d="M80 128 Q90 119 100 123 Q110 119 120 128 Q110 126 100 128 Q90 126 80 128 Z" fill="${P.barba}" stroke="${P.barbaOsc}" stroke-width="1"/>`
     : `<path d="M78 126 Q89 116 100 121 Q111 116 122 126 Q111 123 100 125 Q89 123 78 126 Z" fill="${P.barba}" stroke="${P.barbaOsc}" stroke-width="1"/>`;
   /* Textura de canas (pelo y barba) */
@@ -81,7 +92,7 @@ function avatarMarianIA(cara = "feliz", opts = {}){
       <path d="M100 92 C97 102 92 110 92 115 C92 120 97 121 100 120 C103 121 108 120 108 115 C108 110 103 102 100 92 Z" fill="${P.sombra}" opacity=".55"/>
       <path d="M93 116 Q100 122 107 116" stroke="${P.sombra}" stroke-width="2" stroke-linecap="round" fill="none"/>
       <ellipse cx="96" cy="108" rx="2.2" ry="5" fill="${P.luz}" opacity=".6"/>
-      ${molesto ? "" : `<ellipse cx="72" cy="110" rx="7" ry="4" fill="#E0796A" opacity=".28"/><ellipse cx="128" cy="110" rx="7" ry="4" fill="#E0796A" opacity=".28"/>`}
+      ${molesto || serio ? "" : `<ellipse cx="72" cy="110" rx="7" ry="4" fill="#E0796A" opacity=".28"/><ellipse cx="128" cy="110" rx="7" ry="4" fill="#E0796A" opacity=".28"/>`}
       <!-- barba corta canosa -->
       <path d="M62 104 C64 116 68 124 72 118 C76 128 84 125 92 126 L108 126 C116 125 124 128 128 118 C132 124 136 116 138 104 C140 130 128 156 100 160 C72 156 60 130 62 104 Z" fill="${P.barba}"/>
       <g clip-path="url(#${id}b)" opacity=".7">${texturaBarba}</g>
@@ -97,6 +108,16 @@ function avatarMarianIA(cara = "feliz", opts = {}){
         <ellipse cx="140" cy="168" rx="11" ry="12.5" fill="${P.piel}" stroke="${P.sombra}" stroke-width="1.5"/>
         <ellipse cx="139" cy="164.5" rx="6.5" ry="5.5" fill="${P.luz}" stroke="${P.sombra}" stroke-width="1"/>
         <path d="M131 175 Q140 181 149 175" stroke="${P.sombra}" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+      </g>` : ""}
+      ${pulgar ? `<g transform="translate(-20 -16)">
+        <path d="M140 234 C142 204 148 196 158 194 L224 204 L226 234 Z" fill="${P.camisa}"/>
+        <!-- pulgar arriba -->
+        <path d="M150 168 C147 156 148 144 152 134 C154 129 161 129 163 134 C165 142 164 154 165 166 Z" fill="${P.piel}" stroke="${P.sombra}" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M153.5 136 C154.5 132.5 160.5 132.5 161.5 136 L161 142 L154 142 Z" fill="${P.luz}" stroke="${P.sombra}" stroke-width=".9"/>
+        <!-- puño -->
+        <path d="M136 172 C136 165 141 162 148 162 L172 163 C180 164 183 170 183 178 L182 190 C181 198 175 202 166 202 L148 201 C140 200 136 195 136 188 Z" fill="${P.piel}" stroke="${P.sombra}" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M160 172 H182 M160 181 H182.5 M160 190 H181" stroke="${P.sombra}" stroke-width="1.3" stroke-linecap="round"/>
+        <path d="M160 165 V199" stroke="${P.sombra}" stroke-width="1.2" stroke-linecap="round" opacity=".7"/>
       </g>` : ""}
     </g>
   </svg>`;

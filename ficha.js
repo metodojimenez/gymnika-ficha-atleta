@@ -1378,7 +1378,7 @@ function pintarEstiramientosAlumno(box, lista, uid, nota, reps){
     }); });
   };
   pintar(null);
-  avisoEstiroAyer(uid, ()=>{ if(box.isConnected){ pintar(true); renderDisciplina(uid); } });
+  avisoEstiroAyer(uid, ()=>{ if(box.isConnected){ pintar(true); renderDisciplina(uid); } }).then(()=> avisoQRAyer(uid), ()=>{});
   sb.from("bienestar_diario").select("estiro").eq("user_id", uid).eq("fecha", todayStr()).maybeSingle()
     .then(({ data })=>{ if(box.isConnected && data && data.estiro !== null && data.estiro !== undefined) pintar(data.estiro); }, ()=>{});
   renderDisciplina(uid);
@@ -1430,7 +1430,8 @@ async function avisoEstiroAyer(uid, alHacerla){
     </div>
     <p class="aviso-msg" aria-live="polite"></p>`;
   document.body.appendChild(dlg);
-  const cerrar = ()=>{ if(dlg.open) dlg.close(); dlg.remove(); };
+  let fin = null;
+  const cerrar = ()=>{ if(dlg.open) dlg.close(); dlg.remove(); if(fin) fin(); };
   dlg.addEventListener("cancel", (e)=>{ e.preventDefault(); cerrar(); });
   dlg.querySelector("[data-av='ok']").onclick = cerrar;
   const bh = dlg.querySelector("[data-av='hice']");
@@ -1440,6 +1441,44 @@ async function avisoEstiroAyer(uid, alHacerla){
     cerrar();
     if(alHacerla) alHacerla();
   });
+  try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
+  await new Promise(r => { fin = r; });
+}
+
+/* Si ayer vino a fortalecimiento y no escaneó el QR (el equipo tuvo que marcarlo a mano), MarianI.A. se lo recuerda una vez. */
+let avisoQRVisto = "";
+async function avisoQRAyer(uid){
+  const hoy = todayStr();
+  if(uid !== state.profile.id || esEquipo() || avisoQRVisto === hoy) return;
+  if(!["fortalecimiento", "transicion"].includes(state.profile.categoria)) return;
+  const clave = "gymQRAviso:" + uid;
+  try{ if(localStorage.getItem(clave) === hoy) return; } catch { /* sin almacenamiento */ }
+  const ayer = fechaISO(sumarDias(parseFecha(hoy), -1));
+  const [horarios, { data, error }] = await Promise.all([
+    cargarHorarios(),
+    sb.from("reservas").select("id, horario_id, asistencia_por").eq("user_id", uid).eq("fecha", ayer).eq("estado", "asistio")
+  ]);
+  if(error) return;
+  const fort = new Set(horarios.filter(h => h.categoria === "fortalecimiento").map(h => h.id));
+  const propios = [uid, state.profile.tutor_id].filter(Boolean);
+  const aMano = (data || []).some(r => fort.has(r.horario_id) && r.asistencia_por && !propios.includes(r.asistencia_por));
+  if(!aMano || document.querySelector("dialog[open], .overlay") || avisoQRVisto === hoy) return;
+  avisoQRVisto = hoy;
+  try{ localStorage.setItem(clave, hoy); } catch { /* sin almacenamiento */ }
+  const dlg = document.createElement("dialog");
+  dlg.className = "aviso-estiro aviso-qr";
+  dlg.setAttribute("aria-labelledby", "avQrT");
+  dlg.innerHTML = `
+    <span class="aviso-grito" aria-hidden="true">¡OYE!</span>
+    <div class="aviso-cara">${avatarMarianIA("molesto")}</div>
+    <div class="globo-comic aviso-globo"><span class="chat-quien">MarianI.A.</span>
+      <h2 id="avQrT">Ayer viniste y no escaneaste el QR.</h2>
+      <p>Escanéalo siempre al llegar: así se llena tu batería del mes.</p></div>
+    <div class="aviso-btns"><button type="button" class="btn-primary" data-av="ok">Entendido</button></div>`;
+  document.body.appendChild(dlg);
+  const cerrar = ()=>{ if(dlg.open) dlg.close(); dlg.remove(); };
+  dlg.addEventListener("cancel", (e)=>{ e.preventDefault(); cerrar(); });
+  dlg.querySelector("[data-av='ok']").onclick = cerrar;
   try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
 }
 

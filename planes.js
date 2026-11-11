@@ -1305,6 +1305,43 @@ async function elegirQuienLlego(){
   });
 }
 
+/* Batería del mes (fortalecimiento): se llena con cada clase a la que vino este mes. Cuatro zonas, cada una con su cara de MarianI.A. */
+const BATERIA = [
+  { desde: 0,  cls: "b1", cara: "molesto", titulo: "Puedes mejorar",  txt: "Todavía puedes llenar la batería este mes." },
+  { desde: 8,  cls: "b2", cara: "serio",   titulo: "¡Cumpliste!", corto: "Cumpliste", txt: "Llegaste al mínimo del mes." },
+  { desde: 12, cls: "b3", cara: "feliz",   titulo: "¡Buen mes! Sigue así", corto: "Buen mes", txt: "Vas a buen ritmo." },
+  { desde: 16, cls: "b4", cara: "pulgar",  titulo: "¡Excelente! Vas a cumplir tus metas", corto: "Excelente", txt: "Cuatro veces por semana: así se logra." }
+];
+const BATERIA_TOPE = 16;
+function zonaBateria(n){ return BATERIA.filter(z => n >= z.desde).pop(); }
+async function clasesDelMes(uid){
+  const hoy = todayStr();
+  const [horarios, { data, error }] = await Promise.all([
+    cargarHorarios(),
+    sb.from("reservas").select("id, horario_id").eq("user_id", uid).eq("estado", "asistio").gte("fecha", hoy.slice(0, 8) + "01").lte("fecha", hoy)
+  ]);
+  if(error) throw error;
+  const fort = new Set(horarios.filter(h => h.categoria === "fortalecimiento").map(h => h.id));
+  return (data || []).filter(r => fort.has(r.horario_id)).length;
+}
+function bateriaMesHTML(n){
+  const z = zonaBateria(n), i = BATERIA.indexOf(z), sig = BATERIA[i + 1];
+  const mes = MESES_LARGOS[parseFecha(todayStr()).getMonth()];
+  const celdas = Array.from({ length: BATERIA_TOPE }, (_, k) => `<i class="${k < n ? "on " + zonaBateria(k + 1).cls : ""}" style="--k:${k}"></i>`).join("");
+  return `
+    <div class="bateria-mes ${z.cls}">
+      <div class="bat-cara">${avatarMarianIA(z.cara)}</div>
+      <div class="globo-comic bat-globo"><span class="chat-quien">MarianI.A.</span>
+        <p class="bat-titulo">${esc(z.titulo)}</p>
+        <p class="bat-n"><strong class="num">${n}</strong> ${n === 1 ? "clase" : "clases"} en ${esc(mes)}</p></div>
+      <div class="bat" role="img" aria-label="Batería del mes: ${n} de ${BATERIA_TOPE} clases">
+        <div class="bat-cuerpo">${celdas}</div><span class="bat-polo" aria-hidden="true"></span>
+      </div>
+      <div class="bat-marcas num" aria-hidden="true"><span style="left:0">0</span><span style="left:50%">8</span><span style="left:75%">12</span><span style="left:100%">16+</span></div>
+      <p class="bat-sig">${sig ? `Te ${sig.desde - n === 1 ? "falta 1 clase" : `faltan ${sig.desde - n} clases`} para «${esc(sig.corto)}».` : esc(z.txt)}</p>
+    </div>`;
+}
+
 async function procesarCheckin(codigo){
   if(!codigo || !state.profile) return;
   if(esEquipo()){ iniciarTurnoConQR(codigo); return; }
@@ -1330,10 +1367,16 @@ async function procesarCheckin(codigo){
   }
   const otros = Array.isArray(res.otros) ? res.otros : [];
   const propio = res.propio !== false;
+  /* Fortalecimiento: al escanear ve su batería del mes llenándose */
+  let bateria = "";
+  if(esFort && propio){
+    try{ bateria = bateriaMesHTML(await clasesDelMes(state.profile.id)); } catch(e){ console.error(e); }
+  }
   openDialog("Asistencia registrada", `
-    <div class="checkin-res ok"><span class="ck-icon" aria-hidden="true">✓</span>
+    <div class="checkin-res ok">${bateria ? "" : `<span class="ck-icon" aria-hidden="true">✓</span>`}
       <p class="ck-name">${esc(res.nombre || state.profile.nombre || "")}</p>
-      <p>${res.repetido ? (propio ? "Ya habías registrado tu llegada." : "Su llegada ya estaba registrada.") : esFort && propio ? esc(MEDIDOR[0].txt) : "¡Bienvenido a Gymnika!"}</p>
+      ${bateria}
+      <p>${res.repetido ? (propio ? "Ya habías registrado tu llegada." : "Su llegada ya estaba registrada.") : bateria ? "" : esFort && propio ? esc(MEDIDOR[0].txt) : "¡Bienvenido a Gymnika!"}</p>
       ${otros.length ? `<p>También registramos a <strong>${esc(listaNombres(otros))}</strong>.</p>` : ""}
       ${(res.sin_reserva || []).length ? `<p class="muted">No registramos a <strong>${esc(listaNombres(res.sin_reserva))}</strong>: no tiene reserva a esta hora o su acceso no está activo.</p>` : ""}
       <p class="muted">${res.inicio ? (esFort ? "Horario de las " : "Sesión de las ") + fmtFechaHora(res.inicio).split("· ")[1] : ""}${res.vence ? " · tu acceso vence el " + fmtFecha(res.vence, true) : ""}</p>

@@ -830,6 +830,7 @@ function appbarHTML(tag){
             </button>
             <div class="inbox-panel" id="inboxPanel" role="dialog" aria-label="Notificaciones" hidden></div>
           </div>
+          ${esMaster() ? `<a class="top-chat" id="topChat" href="#/chat" aria-label="Chat de MarianI.A. con los atletas" title="Chat de MarianI.A.">${avatarMarianIA("feliz")}<span class="chat-badge" id="topChatBadge" hidden></span></a>` : ""}
           <span class="user-name">${esc(state.profile?.nombre || "")}</span>
           <button type="button" class="btn-link" id="btnLogout">Salir</button>
         </div>

@@ -178,7 +178,9 @@ function refrescarConversaciones(){
     chatUI.convs = data || [];
     const total = chatUI.convs.reduce((s, c) => s + (c.sin_leer || 0), 0);
     const b = document.getElementById("navChatBadge");
-    if(b){ b.hidden = !total; b.textContent = total > 9 ? "9+" : String(total); }
+    [b, document.getElementById("topChatBadge")].forEach(x => { if(x){ x.hidden = !total; x.textContent = total > 9 ? "9+" : String(total); } });
+    const tc = document.getElementById("topChat");
+    if(tc) tc.setAttribute("aria-label", total ? `Chat de MarianI.A.: ${plural(total, "mensaje nuevo", "mensajes nuevos")}` : "Chat de MarianI.A. con los atletas");
     if(document.getElementById("chatConvs")) pintarConversaciones();
   }, 150);
 }

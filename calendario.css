@@ -1366,3 +1366,35 @@ body:has(.instalar) .chat-fab{ display:none; }
 .mir-dia input[type="date"]{ width:auto; min-height:34px; padding:4px 8px; margin:0; }
 .mir-otro-dia{ display:inline-block; margin:6px 0 0; padding:3px 10px; border-radius:999px; background:#FFF1CC; color:#6B4A00; border:1px solid #E6C76A; font-size:13px; font-weight:700; }
 .bit-subida{ display:inline-block; padding:1px 8px; border-radius:999px; background:#FFF1CC; color:#6B4A00; border:1px solid #E6C76A; font-size:12.5px; font-weight:700; }
+
+/* ---------- Batería del mes al escanear el QR ---------- */
+.bateria-mes{ display:grid; justify-items:center; gap:6px; margin:6px 0 4px; --bat:#D8432F; }
+.bateria-mes.b2{ --bat:#E0A21B; } .bateria-mes.b3{ --bat:#0E7C86; } .bateria-mes.b4{ --bat:#2E7D4F; }
+.bat-cara{ width:132px; }
+.bat-cara svg{ width:100%; height:auto; display:block; animation:bat-cara .6s cubic-bezier(.2,.9,.3,1.3) both; }
+.bat-globo{ margin-top:-4px; padding:8px 16px; text-align:center; }
+.bat-globo::before{ content:""; position:absolute; left:calc(50% - 7px); top:-14px; border:7px solid transparent; border-bottom:13px solid var(--comic-ink); border-top:0; }
+.bat-globo::after{ content:""; position:absolute; left:calc(50% - 4px); top:-8px; border:4px solid transparent; border-bottom:9px solid #FFFFFF; border-top:0; }
+.checkin-res .bat-titulo{ margin:2px 0 0; font-family:var(--font-display); font-weight:800; font-size:20px; line-height:1.15; color:#2B2326; text-wrap:balance; }
+.checkin-res .bat-n{ margin:2px 0 0; font-size:15px; color:#3B3236; }
+.bat-n strong{ font-size:22px; color:var(--bat); }
+.bat{ display:flex; align-items:center; width:min(100%, 340px); margin-top:8px; }
+.bat-cuerpo{ flex:1; display:grid; grid-template-columns:repeat(16, 1fr); gap:3px; padding:5px; height:46px; border:3px solid var(--comic-ink); border-radius:12px; background:#fff; box-shadow:3px 3px 0 var(--comic-ink); }
+.bat-cuerpo i{ border-radius:3px; background:rgba(53,41,47,.08); }
+.bat-cuerpo i.on{ animation:bat-llena .28s ease-out both; animation-delay:calc(.35s + var(--k) * 70ms); }
+.bat-cuerpo i.on.b1{ background:#D8432F; } .bat-cuerpo i.on.b2{ background:#E0A21B; } .bat-cuerpo i.on.b3{ background:#0E7C86; } .bat-cuerpo i.on.b4{ background:#2E7D4F; }
+.bat-cuerpo i:nth-child(8), .bat-cuerpo i:nth-child(12){ margin-right:3px; }
+.bat-polo{ width:8px; height:20px; background:var(--comic-ink); border-radius:0 5px 5px 0; margin-left:2px; }
+.bat-marcas{ position:relative; width:min(100%, 340px); height:18px; padding-right:10px; font-size:12px; font-weight:700; color:var(--ink-soft); }
+.bat-marcas span{ position:absolute; top:2px; transform:translateX(-50%); }
+.bat-marcas span:first-child{ transform:none; } .bat-marcas span:last-child{ transform:translateX(-100%); }
+.checkin-res .bat-sig{ margin:2px 0 0; font-weight:700; color:var(--ink); }
+@keyframes bat-llena{ from{ transform:scaleY(.1); opacity:0; } }
+@keyframes bat-cara{ from{ transform:scale(.6) rotate(-8deg); opacity:0; } }
+@media (prefers-reduced-motion: reduce){ .bat-cuerpo i.on, .bat-cara svg{ animation:none; } }
+
+/* Chat de MarianI.A. en la cabecera (masters) */
+.top-chat{ position:relative; display:inline-block; width:38px; height:38px; flex:none; border-radius:50%; border:2px solid var(--accent); line-height:0; }
+.top-chat svg{ width:100%; height:100%; display:block; border-radius:50%; }
+.top-chat .chat-badge{ position:absolute; top:-6px; right:-6px; border:2px solid var(--surface); }
+.top-chat:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
