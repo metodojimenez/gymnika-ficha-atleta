@@ -1,7 +1,7 @@
 /* ============ Calendario, ficha de sesiones, medidor y horario semanal ============ */
 :root{
   --r-rojo:#C62828; --r-anaranjado:#F97316; --r-amarillo:#FACC15; --r-verde:#15803D; --r-azul:#1D4ED8; --r-sin:#E4DDD3;
-  --fort-a:#334155; --fort-b:#7B8A9E;
+  --fort-a:#334155; --fort-b:#7B8A9E; --verde-gym:#12A0AB;
   --fort-bg:linear-gradient(118deg, var(--fort-a) 0%, #4B5A6E 50%, var(--fort-b) 100%);
   --m1:#22C55E; --m2:#166534; --m3:#EAB308; --m4:#EA580C; --m5:#C62828;
 }
@@ -193,7 +193,10 @@
 .wk-people li{ min-width:0; }
 .wk-chip{ display:block; width:100%; text-align:left; font-size:11px; font-weight:700; line-height:1.2; padding:2px 4px; border-radius:4px; letter-spacing:-.01em;
   background:var(--bg); color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
-.wk-chip.fort{ background:var(--fort-bg); color:#fff; box-shadow:inset 0 1px 0 rgba(255,255,255,.25); }
+.wk-chip.fort{ background:var(--fort-bg); color:#fff; border:2px solid var(--verde-gym); padding:1px 3px; }
+.wk-sw.fort{ border:2px solid var(--verde-gym); }
+.wk-slot.bloq{ background:repeating-linear-gradient(135deg, #EEF0F3 0 8px, #E2E6EB 8px 16px); box-shadow:inset 0 0 0 1.5px #9AA5B4; }
+.wk-bloq{ color:var(--fg); font-weight:800; }
 .wk-chip:hover{ filter:brightness(1.06); }
 .wk-chip.st-asistio{ box-shadow:inset 0 0 0 2px rgba(255,255,255,.85), 0 0 0 2px var(--ok); }
 .wk-chip.st-no_asistio{ opacity:.45; text-decoration:line-through; }

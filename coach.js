@@ -521,8 +521,8 @@ async function pintarSemana(main){
       const llegaron = rs.filter(r => r.estado === "asistio").length;
       const pasado = inicioLocal(iso, h.hora) < ahora;
       return `
-        <div class="wk-slot ${h.categoria === "terapia" ? "ter" : "fort"}${pasado ? " pasado" : ""}">
-          <button type="button" class="wk-cap" data-slot="${esc(h.id)}|${iso}" aria-label="Abrir ${esc(CATEGORIAS[h.categoria].nombre)} del ${esc(fechaLarga(iso))} a las ${horaCorta(h.hora)}: ${conf.length} de ${h.aforo}${esMaster() ? (pasado ? ". Registrar quienes vinieron" : ". Agregar personas") : ""}"><span aria-hidden="true">${h.categoria === "terapia" ? "Terapia" : "Fortalecimiento"} · <span class="num">${conf.length}/${h.aforo}</span>${llegaron ? ` · <span class="num">${llegaron}</span> ✓` : ""}</span>${esMaster() ? `<span class="wk-mas" aria-hidden="true">+</span>` : ""}</button>
+        <div class="wk-slot ${h.categoria === "terapia" ? "ter" : "fort"}${h.bloqueo ? " bloq" : ""}${pasado ? " pasado" : ""}">
+          <button type="button" class="wk-cap" data-slot="${esc(h.id)}|${iso}" aria-label="Abrir ${esc(h.bloqueo ? `${h.bloqueo} (bloqueado)` : CATEGORIAS[h.categoria].nombre)} del ${esc(fechaLarga(iso))} a las ${horaCorta(h.hora)}: ${conf.length} de ${h.aforo}${esMaster() ? (pasado ? ". Registrar quienes vinieron" : ". Agregar personas") : ""}"><span aria-hidden="true">${h.categoria === "terapia" ? "Terapia" : h.bloqueo ? `<span class="wk-bloq">🔒 ${esc(h.bloqueo)}</span>` : "Fortalecimiento"} · <span class="num">${conf.length}/${h.aforo}</span>${llegaron ? ` · <span class="num">${llegaron}</span> ✓` : ""}</span>${esMaster() ? `<span class="wk-mas" aria-hidden="true">+</span>` : ""}</button>
           ${rs.length ? `<ul class="wk-people">${rs.map(r => {
             const p = perfil(r.user_id);
             const tono = h.categoria === "terapia" ? `r-${(state.riesgo || {})[r.user_id] || "sin"}` : "fort";
@@ -565,7 +565,7 @@ async function abrirHoraCoach(h, iso, horarios, main){
   const pasado = inicioLocal(iso, h.hora) <= new Date();
   const puedeAgregar = esMaster();
   const ter = h.categoria === "terapia";
-  const d = openDialog(`${horaCorta(h.hora)} · ${CATEGORIAS[h.categoria].nombre}`, `
+  const d = openDialog(`${horaCorta(h.hora)} · ${h.bloqueo ? "🔒 " + h.bloqueo : CATEGORIAS[h.categoria].nombre}`, `
     <div class="confirm-slot">
       <span class="cs-day">${fechaLarga(iso)}</span>
       <span class="cs-time num">${horaCorta(h.hora)}</span>
