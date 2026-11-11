@@ -350,6 +350,20 @@ function carnetHTML(profile){
 /* ---------- Carnet compartido y «Mejores fichas del mes» ----------
    Los últimos 6 días del mes el atleta comparte su carnet: a los demás les aparece una vez y entra al podio del mes.
    Los números los calcula la base (rpc compartir_carnet): puntos = asistencias del mes + días de estiramiento. */
+/* Equipo (panel Hoy): podio y todas las fichas compartidas, con enlace a la ficha de cada atleta */
+async function pintarMejoresCoach(box){
+  if(!box) return;
+  let r;
+  try{ r = await cargarCarnetsMes(); }
+  catch(e){ console.error(e); if(box.isConnected) box.innerHTML = `<p class="muted" style="margin:0">No pudimos cargar las fichas compartidas.</p>`; return; }
+  if(!box.isConnected) return;
+  const l = r.carnets || [];
+  if(!l.length){ box.innerHTML = `<p class="muted" style="margin:0">Todavía nadie compartió su carnet. Los alumnos pueden compartirlo los últimos 6 días de cada mes.</p>`; return; }
+  const item = (x, i) => `<li>${miniCarnetHTML(x, i < 3 ? i + 1 : 0)}<a class="link-inline mc-ver" href="#/atleta/${x.user_id}">Ver su ficha</a></li>`;
+  box.innerHTML = `<p class="muted mejores-mes">Podio de ${esc(nombreMes(r.mes))}${r.actual ? "" : " (mes pasado)"} · puntos = asistencias + días de estiramiento</p>
+    <ol class="podio">${l.slice(0, 3).map(item).join("")}</ol>
+    ${l.length > 3 ? `<details class="records"><summary>Las demás fichas compartidas (${l.length - 3})</summary><ol class="podio" start="4" style="margin-top:12px">${l.slice(3).map((x, i) => item(x, i + 3)).join("")}</ol></details>` : ""}`;
+}
 function miniCarnetHTML(x, puesto){
   const meds = (Array.isArray(x.medallas) ? x.medallas : []).map(m => { const l = LOGROS.find(y => y.id === m.id); return l && l.niveles[m.i] !== undefined ? medallaSVG(l, m.i, true) : ""; }).join("");
   return `<article class="mini-carnet${puesto ? " p" + puesto : ""}">
@@ -464,18 +478,19 @@ async function pintarCarnet(profile, plan){
     : `<p class="muted carnet-vacio">Todavía no tienes medallas. La primera está cerca.</p>`;
   fila.querySelectorAll("[data-logro]").forEach(b => { b.onclick = ()=>{ const l = lista.find(x => x.id === b.dataset.logro); abrirMedalla(l, ganadas(l) - 1, false); }; });
   const propio = !!state.profile && uid === state.profile.id && !esEquipo();
+  const conPodio = cat === "fortalecimiento" || cat === "transicion";   // terapia no comparte ni tiene podio
   const vt = el("carnetVerTodas");
   if(vt){ vt.hidden = false; vt.onclick = ()=> abrirMedallero(lista); }
   /* Los últimos 6 días del mes puede compartir cómo le fue */
   const hoyD = parseFecha(todayStr()), finMes = new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 0).getDate();
   const cc = el("carnetCompartir");
-  if(cc && hoyD.getDate() > finMes - 6){
+  if(cc && conPodio && hoyD.getDate() > finMes - 6){
     cc.hidden = false;
     const bc = el("btnCompartirCarnet");
     bc.onclick = ()=> confirmarCompartir(profile, mias, compartidoYa);
   }
   if(!propio && cc) cc.hidden = true;
-  try{
+  if(conPodio) try{
     const r = await cargarCarnetsMes();
     compartidoYa = !!r.yo;
     if(compartidoYa && el("btnCompartirCarnet")) el("btnCompartirCarnet").textContent = "Actualizar mi carnet compartido";
@@ -526,9 +541,10 @@ async function pintarHitosCoach(box, atletaId){
   }); });
 }
 
-return { carnetHTML, pintarCarnet, pintarDiscCarnet, pintarHitosCoach, calcularLogros, abrirMedalla, medallaSVG };
+return { pintarMejoresCoach, carnetHTML, pintarCarnet, pintarDiscCarnet, pintarHitosCoach, calcularLogros, abrirMedalla, medallaSVG };
 })();
 function carnetHTML(profile){ return Logros.carnetHTML(profile); }
+function pintarMejoresCoach(box){ return Logros.pintarMejoresCoach(box); }
 function pintarCarnet(profile, plan){ return Logros.pintarCarnet(profile, plan); }
 function pintarDiscCarnet(d){ return Logros.pintarDiscCarnet(d); }
 function pintarHitosCoach(box, atletaId){ return Logros.pintarHitosCoach(box, atletaId); }
