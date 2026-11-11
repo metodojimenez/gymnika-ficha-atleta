@@ -104,11 +104,11 @@ async function renderAthleteDetail(profile, isCoach, container){
     const reloj = panelHTML("relojCard", "Tu reloj", 12, { eyebrow: "Pasos, sueño y entrenamientos" });
     tabsAlumno = esTerapia ? {
       inicio: `
+    ${consejoCoach}
+    ${estirar}
     ${hoyAlumno}
     ${panelHTML("planCard", esHijo ? "Sus sesiones" : "Mis sesiones", 12, { cls: "plan-panel", eyebrow: "Terapia" })}
     ${reloj}
-    ${estirar}
-    ${consejoCoach}
     ${consejoVinetaHTML(tip)}
     ${familia}`,
       reservar: `
@@ -122,12 +122,11 @@ async function renderAthleteDetail(profile, isCoach, container){
     ${panelHTML("fichaCard", "Datos personales", 12)}`
     } : {
       inicio: `
+    ${consejoCoach}
     ${hoyAlumno}
-    ${panelHTML("planCard", cat === "transicion" ? (esHijo ? "Su plan" : "Mi plan") : (esHijo ? "Su acceso" : "Mi acceso"), 8, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}
-    ${panelHTML("constanciaCard", "Tu rueda de constancia", 4, { eyebrow: "Desde tu último entrenamiento" })}
+    ${panelHTML("planCard", cat === "transicion" ? (esHijo ? "Su plan" : "Mi plan") : (esHijo ? "Su acceso" : "Mi acceso"), 12, { cls: "plan-panel", eyebrow: cat === "transicion" ? "Transición · terapia y fortalecimiento" : "Fortalecimiento" })}
     ${reloj}
-    ${estirar}
-    ${consejoCoach}`,
+    ${panelHTML("estiramientosCard", "Rutina de estiramiento diaria", 12, { eyebrow: "Todas las mañanas" })}`,
       reservar: `
     ${panelHTML("reservarCard", "Reservar horario", 8, { note: "Obligatorio para entrar" })}
     ${panelHTML("misReservasCard", esHijo ? "Sus horarios" : "Mis horarios", 4)}`,
@@ -234,7 +233,9 @@ async function renderAthleteDetail(profile, isCoach, container){
     await renderPlanCoach(profile);
     if(token === state.renderToken && hay("reservarCard")) await renderReservasAlumno(profile);
   } else {
-    await renderPlanAlumno(profile); await renderReservasAlumno(profile);
+    await renderPlanAlumno(profile);
+    if(token === state.renderToken) pintarCarnet(profile, state.plan);
+    await renderReservasAlumno(profile);
     if(hay("familiaCard")) renderFamilia();
   }
 }
@@ -1309,11 +1310,8 @@ function detalleAlumnoHTML(profile, chips, tabs, fallo){
       <div id="detailMsg">${fallo ? `<div class="error" role="alert">${esc("Parte de la ficha no cargó. " + errorES(fallo.error))}</div>` : ""}</div>
       <section class="tab-alumno" data-tab="inicio" aria-label="Inicio">
         <header class="detail-head perfil-head">
-          <div class="perfil-id">
-            <span class="avatar perfil-avatar" aria-hidden="true">${esc(initials(profile.nombre || ""))}</span>
-            <div><p class="eyebrow">${saludoDelDia()}</p><h1>${esc(profile.nombre || "Mi ficha")}</h1></div>
-          </div>
-          ${chips.length ? `<ul class="chips">${chips.join("")}</ul>` : ""}
+          <p class="eyebrow carnet-saludo">${saludoDelDia()}</p>
+          ${carnetHTML(profile)}
           ${semanaHTML}
         </header>
         <div class="grid">${tabs.inicio}</div>
@@ -1548,7 +1546,7 @@ function disciplinaSVG(pct, tam){
 }
 async function renderDisciplina(uid){
   const box = document.getElementById("disciplinaCard");
-  if(!box) return;
+  if(!box){ if(document.getElementById("cmDisc")) datosDisciplina(uid).then(pintarDiscCarnet, ()=>{}); return; }
   const d = await datosDisciplina(uid);
   if(!box.isConnected) return;
   const nivel = d.pct === null ? "d0" : d.pct >= 80 ? "d1" : d.pct >= 50 ? "d2" : "d3";

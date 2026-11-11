@@ -687,6 +687,7 @@ async function renderBitacoraAtleta(main, id){
       <p class="eyebrow">Bitácora${a.categoria ? " · " + esc(CATEGORIAS[a.categoria].nombre) : ""}</p><h1>${esc(a.nombre || "(sin nombre)")}</h1>
       ${tieneLesion(a.lesiones) ? `<p class="lede"><strong>Lesión:</strong> ${esc(a.lesiones)}</p>` : ""}
       <p class="bit-maldita">${malditaChipHTML(a.id)} <button type="button" class="btn-link" id="btnMaldita">${(state.maldita || {})[a.id] ? "Cambiar zona maldita" : "Marcar zona maldita"}</button></p>
+      ${a.categoria === "fortalecimiento" ? "" : `<div class="bit-hitos" id="bitHitos"></div>`}
       <div class="bit-head-acc"><button type="button" class="btn-primary" id="btnNuevaBit">+ Nueva entrada</button>
         <a class="btn-outline" href="#/atleta/${encodeURIComponent(a.id)}">Ver ficha</a></div></header>
     <div class="seg bit-tabs" role="tablist" aria-label="Secciones de la bitácora">
@@ -704,6 +705,7 @@ async function renderBitacoraAtleta(main, id){
     <section class="panel span-12" data-bit-panel="externos" hidden aria-labelledby="bitExt"><div class="panel-head"><h2 id="bitExt">Entrenamiento fuera de Gymnika</h2><span class="muted">Del reloj o anotado a mano</span></div>
       <div id="bitExternos"><div class="skel skel-block"></div></div></section></div>`;
   document.getElementById("btnNuevaBit").onclick = ()=> abrirEntradaBitacora(a);
+  pintarHitosCoach(document.getElementById("bitHitos"), a.id);
   document.getElementById("btnMaldita").onclick = ()=> abrirSilueta({ eyebrow: "Ficha · zona maldita", titulo: "Zona maldita de " + (primerNombre(a.nombre) || "este atleta"),
     maldita: (state.maldita || {})[a.id] || null, onMaldita: async (nombre)=>{
       const err = await guardarZonaMaldita(a.id, nombre);
