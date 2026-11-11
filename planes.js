@@ -42,15 +42,21 @@ Cada sesión de terapia usa 1 token. Los tokens se compran en paquetes y se acre
 Puedes cancelar sin costo hasta 24 horas antes del inicio de tu sesión y el token vuelve a tu saldo. Si cancelas con menos de 24 horas o no asistes, el token se pierde.
 
 5. Fortalecimiento: acceso mensual
-El acceso mensual te permite asistir en los horarios de fortalecimiento durante el periodo pagado. Debes reservar tu horario en la app antes de venir; sin reserva no se registra tu entrada. Si no puedes asistir, cancela para liberar el cupo. El congelamiento del acceso es a criterio del centro y extiende la fecha de vencimiento por los días congelados.
+El acceso mensual te permite asistir en los horarios de fortalecimiento durante el periodo pagado. Debes reservar tu horario en la app antes de venir; sin reserva no se registra tu entrada. Si no puedes asistir, cancela para liberar el cupo.
 
-6. Asistencia
+6. Suscripciones
+Las suscripciones se pagan por autodébito mensual durante el plazo que contrataste (por ejemplo, 6 o 12 meses).
+
+7. Congelamiento
+Si te lesionas, puedes congelar tu acceso hasta 15 días. Si tratas esa lesión en Gymnika, el congelamiento dura el tiempo que tome tu recuperación. Los días congelados se suman a tu fecha de vencimiento.
+
+8. Asistencia
 Registras tu asistencia escaneando el código QR de recepción desde la app, en el horario que reservaste.
 
-7. Salud
+9. Salud
 Debes informar cualquier lesión, condición o cambio en tu salud. Si no cuentas con autorización médica para entrenamiento intenso, el coach adaptará o suspenderá la actividad.
 
-8. Cambios
+10. Cambios
 Gymnika puede actualizar estas condiciones; te avisaremos dentro de la app.`;
 
 const planes = { ajustes: null, horarios: null, paquetes: null };
