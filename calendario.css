@@ -1423,3 +1423,12 @@ body:has(.instalar) .chat-fab{ display:none; }
 .asis-bit-top h2{ font-size:22px; line-height:1.15; }
 .asis-bit-cuerpo{ flex:1; min-height:0; overflow:auto; padding:4px 18px 12px; }
 .asis-bit-pie{ display:flex; justify-content:flex-end; align-items:center; gap:12px; padding:10px 18px 16px; border-top:1px solid var(--line); }
+.checkin-res .bat-meta{ margin:0; font-size:12.5px; }
+
+/* ---------- Horarios bloqueados y «Horario especial» ---------- */
+.slot.bloqueado{ background:repeating-linear-gradient(135deg, transparent 0 10px, rgba(53,41,47,.035) 10px 20px); }
+.slot-bloqueo{ font-weight:800; color:var(--ink-soft); }
+.flag.especial{ background:#EFE7FB; color:#4B2E83; border-color:#CDB8F0; }
+.especial-linea{ margin-top:12px; }
+.hour-chip.bloq{ background:#EFE7FB; color:#4B2E83; }
+.chip-bloqueo{ font-size:12px; font-weight:700; margin-left:4px; }

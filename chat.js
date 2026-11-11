@@ -187,7 +187,7 @@ function refrescarConversaciones(){
 async function renderCoachChat(main){
   main.innerHTML = `<div class="detail"><header class="detail-head">
       <a class="back" href="#/">← Atletas</a>
-      <p class="eyebrow">Master coach</p><h1>Chat con atletas</h1>
+      <p class="eyebrow">Master coach</p><h1>MarianI.A. · chat con atletas</h1>
       <p class="lede">Lo que escriben los atletas a Gymnika. Cualquier master coach puede responder.</p></header>
     <div class="chat-panel">
       <aside class="chat-convs-box">

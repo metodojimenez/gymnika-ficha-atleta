@@ -138,6 +138,10 @@ async function renderPlanCoach(profile){
         : `<span class="plan-num plan-word off">${est.ultima ? "Vencido" : "Sin acceso"}</span><span class="plan-unit">${est.ultima ? "venció el " + fmtFecha(est.ultima.fin, true) : ""}</span>`}
     </div></div>
     ${bienvenidaHTML || alertaAccesoHTML(profile.id)}
+    ${master ? `<label class="checkline especial-linea"><input type="checkbox" id="chkHorarioEspecial"${profile.horario_especial ? " checked" : ""}>
+        <span><strong>Horario especial</strong> · puede reservar los horarios bloqueados (por ejemplo «Específico de jiu-jitsu»).</span></label>
+      <div id="especialMsg" aria-live="polite"></div>`
+      : profile.horario_especial ? `<p style="margin:10px 0 0"><span class="flag especial">Horario especial</span></p>` : ""}
     ${master ? `
     ${conAcceso ? `<details class="acceso-ext"${bienvenida ? " open" : ""}><summary>Extender acceso</summary>` : ""}
     <div class="acceso-adj">
@@ -172,6 +176,18 @@ async function renderPlanCoach(profile){
     if(document.getElementById("reservarCard")){ state.plan = null; await renderReservasAlumno(profile); }
     showMsg(document.getElementById("accOk"), "ok", `Acceso habilitado hasta el ${fmtFecha(data, true)}. Ya puede escoger su horario.`);
   });
+  const chkEsp = document.getElementById("chkHorarioEspecial");
+  if(chkEsp) chkEsp.onchange = async ()=>{
+    const v = chkEsp.checked, msg = document.getElementById("especialMsg");
+    chkEsp.disabled = true;
+    const { error } = await sb.from("profiles").update({ horario_especial: v }).eq("id", profile.id);
+    chkEsp.disabled = false;
+    if(error){ chkEsp.checked = !v; showError(msg, error); return; }
+    profile.horario_especial = v;
+    const enLista = (state.athleteList || []).find(a => a.id === profile.id);
+    if(enLista) enLista.horario_especial = v;
+    showMsg(msg, "ok", v ? "Listo: ya puede reservar los horarios bloqueados." : "Listo: ya no puede reservar los horarios bloqueados.");
+  };
   const breg = document.getElementById("btnRegularizar");
   if(breg) breg.onclick = ()=> withBusy(breg, "…", async ()=>{
     const { error } = await sb.rpc("regularizar_acceso", { p_user: profile.id });
@@ -878,7 +894,8 @@ async function renderCoachAjustes(main){
         <ul class="sched-list">${[1,2,3,4,5,6,7].map(dw => {
           const hs = horarios.filter(h => h.categoria === cat && h.dia_semana === dw);
           return hs.length ? `<li><span class="wl-day">${DIAS_SEMANA[dw]}</span><span class="wl-hours">${hs.map(h => `
-            <span class="hour-chip edit${h.activo ? "" : " off"}"><span class="num">${horaCorta(h.hora)}</span><span class="muted">·${h.aforo}</span>
+            <span class="hour-chip edit${h.activo ? "" : " off"}${h.bloqueo ? " bloq" : ""}"${h.bloqueo ? ` title="Bloqueado: ${esc(h.bloqueo)}"` : ""}><span class="num">${horaCorta(h.hora)}</span><span class="muted">·${h.aforo}</span>${h.bloqueo ? `<span class="chip-bloqueo">🔒 ${esc(h.bloqueo)}</span>` : ""}
+              ${cat === "fortalecimiento" ? `<button type="button" data-bloq-h="${esc(h.id)}" aria-label="${h.bloqueo ? "Cambiar o quitar el bloqueo de" : "Bloquear"} ${horaCorta(h.hora)}">${h.bloqueo ? "🔓" : "🔒"}</button>` : ""}
               <button type="button" data-toggle-h="${esc(h.id)}" aria-label="${h.activo ? "Pausar" : "Activar"} ${horaCorta(h.hora)}">${h.activo ? "⏸" : "▶"}</button>
               <button type="button" data-del-h="${esc(h.id)}" aria-label="Borrar ${horaCorta(h.hora)}">✕</button></span>`).join("")}</span></li>` : "";
         }).join("")}</ul>
@@ -978,6 +995,30 @@ async function renderCoachAjustes(main){
       if(error){ showError(msg, error); return; }
       planes.horarios = null; renderCoachAjustes(main);
     });
+  });
+  /* Bloquear un horario: los clientes lo ven con ese nombre y solo lo reserva quien tiene «Horario especial» */
+  main.querySelectorAll("[data-bloq-h]").forEach(b => {
+    b.onclick = ()=>{
+      const h = horarios.find(x => x.id === b.dataset.bloqH);
+      const d = openDialog(`${h.bloqueo ? "Horario bloqueado" : "Bloquear horario"} · ${DIAS_SEMANA[h.dia_semana]} ${horaCorta(h.hora)}`, `
+        <p class="muted" style="margin-top:0">Los clientes ven este horario con el nombre que pongas y no pueden reservarlo. Solo lo reservan los atletas con la etiqueta «Horario especial».</p>
+        <label for="bloqNombre">Nombre que verán</label>
+        <input id="bloqNombre" maxlength="60" value="${esc(h.bloqueo || "")}" placeholder="Ej: Específico de jiu-jitsu">
+        <div id="bloqMsg" aria-live="polite"></div>
+        <div class="sheet-actions">${h.bloqueo ? `<button type="button" class="btn-outline" data-bloq-quitar>Quitar bloqueo</button>` : ""}<button type="button" class="btn-primary" data-bloq-ok>${h.bloqueo ? "Guardar" : "Bloquear"}</button></div>`);
+      const guardar = async (valor, btn)=> withBusy(btn, "…", async ()=>{
+        const { error } = await sb.from("horarios").update({ bloqueo: valor }).eq("id", h.id);
+        if(error){ showError(d.el.querySelector("#bloqMsg"), error); return; }
+        d.close(); planes.horarios = null; renderCoachAjustes(main);
+      });
+      d.el.querySelector("[data-bloq-ok]").onclick = (e)=>{
+        const v = d.el.querySelector("#bloqNombre").value.trim();
+        if(!v){ showMsg(d.el.querySelector("#bloqMsg"), "error", "Escribe el nombre que verán los clientes."); return; }
+        guardar(v, e.currentTarget);
+      };
+      const q = d.el.querySelector("[data-bloq-quitar]");
+      if(q) q.onclick = (e)=> guardar(null, e.currentTarget);
+    };
   });
   main.querySelectorAll("[data-toggle-h]").forEach(b => {
     b.onclick = ()=> withBusy(b, "…", async ()=>{

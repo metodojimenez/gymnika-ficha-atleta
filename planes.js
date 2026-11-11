@@ -815,7 +815,7 @@ async function renderReservasAlumno(profile){
   }
 
   box.innerHTML = `
-    ${esTer ? "" : horarioFijoHTML(plan, hs)}
+    ${esTer ? "" : horarioFijoHTML(plan, hs.filter(h => !h.bloqueo || profile.horario_especial))}
     <div class="cal">
       <div class="cal-head">
         <button type="button" class="icon-btn" id="calPrev" aria-label="Mes anterior"${reservaUI.mes <= mesMin ? " disabled" : ""}>‹</button>
@@ -859,8 +859,11 @@ async function renderReservasAlumno(profile){
           const libres = Math.max(0, h.aforo - o.confirmadas);
           const lleno = libres === 0;
           const pct = Math.min(100, Math.round(o.confirmadas / h.aforo * 100));
+          /* Horario bloqueado (p. ej. «Específico de jiu-jitsu»): solo lo reserva quien tiene «Horario especial»; el resto solo ve el nombre */
+          const bloqueado = !!h.bloqueo && !profile.horario_especial && !mia;
           let accion;
-          if(mia) accion = `<span class="slot-tag ${mia.estado === "espera" ? "wait" : "ok"}">${mia.estado === "espera" ? "En lista de espera" : mia.estado === "asistio" ? (paraDe(profile) ? "Asistió ✓" : "Asististe ✓") : "Reservado ✓"}</span>`;
+          if(bloqueado) accion = `<span class="slot-tag off">No disponible</span>`;
+          else if(mia) accion = `<span class="slot-tag ${mia.estado === "espera" ? "wait" : "ok"}">${mia.estado === "espera" ? "En lista de espera" : mia.estado === "asistio" ? (paraDe(profile) ? "Asistió ✓" : "Asististe ✓") : "Reservado ✓"}</span>`;
           else if(pasado) accion = `<span class="slot-tag off">Ya pasó</span>`;
           else if(sinAcceso) accion = `<span class="slot-tag off">Sin acceso</span>`;
           else if(aReemplazar && lleno && aReemplazar.estado === "confirmada") accion = `<span class="slot-tag off">Lleno</span>`;
@@ -869,10 +872,10 @@ async function renderReservasAlumno(profile){
           else if(lleno && !esTer) accion = `<span class="slot-tag off">Lleno</span>`;
           else accion = `<button type="button" class="${lleno ? "btn-outline" : "btn-primary"} slot-btn" data-reservar="${esc(h.id)}">${lleno ? "Lista de espera" : "Reservar"}</button>`;
           return `
-          <li class="slot${lleno ? " full" : ""}${pasado ? " past" : ""}${mia ? " mine" : ""}">
+          <li class="slot${lleno ? " full" : ""}${pasado ? " past" : ""}${mia ? " mine" : ""}${bloqueado ? " bloqueado" : ""}">
             <div class="slot-time"><span class="num">${horaCorta(h.hora)}</span><span class="muted">${h.duracion_min} min</span></div>
             <div class="slot-cap">
-              ${aj.mostrar_aforo
+              ${bloqueado ? `<span class="cap-txt slot-bloqueo">${esc(h.bloqueo)}</span>` : aj.mostrar_aforo
                 ? `<span class="cap-txt">${lleno ? "Lleno" : plural(libres, "cupo libre", "cupos libres")}<span class="muted"> · ${o.confirmadas}/${h.aforo}</span></span>
                    <span class="cap-bar" aria-hidden="true"><span style="width:${pct}%"></span></span>`
                 : `<span class="cap-txt">${lleno ? "Lleno" : "Hay cupos"}</span>`}
@@ -911,7 +914,7 @@ async function renderReservasAlumno(profile){
   const bc = document.getElementById("btnComprarDesdeReservas");
   if(bc) bc.onclick = ()=> abrirCompra(profile);
   const bf = document.getElementById("btnHorarioFijo");
-  if(bf) bf.onclick = ()=> abrirHorarioFijo(profile, plan, hs);
+  if(bf) bf.onclick = ()=> abrirHorarioFijo(profile, plan, hs.filter(h => !h.bloqueo || profile.horario_especial));
   renderMisReservas(profile);
 }
 
@@ -1313,7 +1316,13 @@ const BATERIA = [
   { desde: 16, cls: "b4", cara: "pulgar",  titulo: "¡Excelente! Vas a cumplir tus metas", corto: "Excelente", txt: "Cuatro veces por semana: así se logra." }
 ];
 const BATERIA_TOPE = 16;
-function zonaBateria(n){ return BATERIA.filter(z => n >= z.desde).pop(); }
+/* Las zonas son proporcionales a lo que va del mes: la meta del mes (8, 12 o 16 clases) se reparte por día.
+   Ej.: 3 clases al día 5 ya van a ritmo de «Excelente»; 3 clases al día 15 están en «Puedes mejorar». */
+function ritmoMes(){
+  const d = parseFecha(todayStr());
+  return d.getDate() / new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+}
+function zonaBateria(n, ritmo = ritmoMes()){ return BATERIA.filter(z => !z.desde || (n > 0 && n >= z.desde * ritmo)).pop(); }
 async function clasesDelMes(uid){
   const hoy = todayStr();
   const [horarios, { data, error }] = await Promise.all([
@@ -1325,20 +1334,24 @@ async function clasesDelMes(uid){
   return (data || []).filter(r => fort.has(r.horario_id)).length;
 }
 function bateriaMesHTML(n){
-  const z = zonaBateria(n), i = BATERIA.indexOf(z), sig = BATERIA[i + 1];
-  const mes = MESES_LARGOS[parseFecha(todayStr()).getMonth()];
-  const celdas = Array.from({ length: BATERIA_TOPE }, (_, k) => `<i class="${k < n ? "on " + zonaBateria(k + 1).cls : ""}" style="--k:${k}"></i>`).join("");
+  const ritmo = ritmoMes();
+  const z = zonaBateria(n, ritmo), sig = BATERIA[BATERIA.indexOf(z) + 1];
+  const hoy = parseFecha(todayStr()), mes = MESES_LARGOS[hoy.getMonth()];
+  /* La batería se llena según el ritmo: llena = va a ritmo de 16 clases al mes */
+  const llenas = Math.min(BATERIA_TOPE, Math.floor(n / ritmo + 1e-9));
+  const celdas = Array.from({ length: BATERIA_TOPE }, (_, k) => `<i class="${k < llenas ? "on " + zonaBateria(k + 1, 1).cls : ""}" style="--k:${k}"></i>`).join("");
+  const faltan = sig ? Math.max(1, Math.ceil(sig.desde * ritmo - 1e-9) - n) : 0;
   return `
     <div class="bateria-mes ${z.cls}">
       <div class="bat-cara">${avatarMarianIA(z.cara)}</div>
       <div class="globo-comic bat-globo"><span class="chat-quien">MarianI.A.</span>
         <p class="bat-titulo">${esc(z.titulo)}</p>
-        <p class="bat-n"><strong class="num">${n}</strong> ${n === 1 ? "clase" : "clases"} en ${esc(mes)}</p></div>
-      <div class="bat" role="img" aria-label="Batería del mes: ${n} de ${BATERIA_TOPE} clases">
+        <p class="bat-n"><strong class="num">${n}</strong> ${n === 1 ? "clase" : "clases"} al ${hoy.getDate()} de ${esc(mes)}</p></div>
+      <div class="bat" role="img" aria-label="Batería del mes: ${esc(z.titulo)}">
         <div class="bat-cuerpo">${celdas}</div><span class="bat-polo" aria-hidden="true"></span>
       </div>
-      <div class="bat-marcas num" aria-hidden="true"><span style="left:0">0</span><span style="left:50%">8</span><span style="left:75%">12</span><span style="left:100%">16+</span></div>
-      <p class="bat-sig">${sig ? `Te ${sig.desde - n === 1 ? "falta 1 clase" : `faltan ${sig.desde - n} clases`} para «${esc(sig.corto)}».` : esc(z.txt)}</p>
+      <p class="bat-sig">${sig ? `Hoy te ${faltan === 1 ? "falta 1 clase" : `faltan ${faltan} clases`} para estar en «${esc(sig.corto)}».` : esc(z.txt)}</p>
+      <p class="bat-meta muted">Meta del mes: 8 cumples · 12 buen mes · 16 excelente</p>
     </div>`;
 }
 

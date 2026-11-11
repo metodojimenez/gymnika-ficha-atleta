@@ -34,7 +34,7 @@ const SECCIONES_COACH = {
   resumen:     { t: "Resumen",  ico: "▤", master: true },
   equipo:      { t: "Equipo",   ico: "☰", master: true },
   comunicados: { t: "Avisos",   ico: "✉" },
-  chat:        { t: "Chat",     ico: "❝", master: true },
+  chat:        { t: "MarianI.A.", ico: "❝", master: true },
   ajustes:     { t: "Ajustes",  ico: "⚙", master: true }
 };
 function seccionesPermitidas(p = state.profile){
@@ -1430,6 +1430,7 @@ function renderAthleteListInto(list){
     else if(alerta) flags.push(`<span class="flag alerta">${esc(alertaTexto(alerta))}</span>`);
     else if(accesoOkTexto(a.id)) flags.push(`<span class="flag ok">${esc(accesoOkTexto(a.id))}</span>`);
     if(a.categoria && (!areaCoach() || a.categoria === "transicion")) flags.push(`<span class="flag cat-${a.categoria}">${CATEGORIAS[a.categoria].nombre}</span>`);
+    if(a.horario_especial) flags.push(`<span class="flag especial">Horario especial</span>`);
     if(tieneLesion(a.lesiones)) flags.push(`<span class="flag warn">Lesión</span>`);
     if(a.autorizacion_medica === false) flags.push(`<span class="flag warn">Sin autorización médica</span>`);
     if(a.tutor_id) flags.push(`<span class="flag info">Menor</span>`);
