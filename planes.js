@@ -19,7 +19,9 @@ const conPara = (args, profile)=>{ const p = paraDe(profile); return p ? { ...ar
 const primerNombre = (n)=> String(n || "").trim().split(/\s+/)[0] || "";
 const DIAS_SEMANA = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
-const METODOS_PAGO = { yape: "Yape", plin: "Plin", transferencia: "Transferencia", mercadopago: "Mercado Pago" };
+const METODOS_PAGO = { yape: "Yape", plin: "Plin", transferencia: "Transferencia", mercadopago: "Mercado Pago", tarjeta: "Link de pago" };
+/* Nombre de la pasarela según el link del paquete */
+const pasarelaDe = (url)=> /mercadopago/i.test(url || "") ? "Mercado Pago" : /culqi/i.test(url || "") ? "Culqi" : "el link de pago";
 const ESTADO_RESERVA = {
   confirmada: "Confirmada", espera: "Lista de espera", cancelada: "Cancelada",
   cancelada_tarde: "Cancelada fuera de plazo", asistio: "Asistió", no_asistio: "No asistió"
@@ -593,7 +595,7 @@ async function abrirCompra(profile){
   ].join("");
   const precioPaquete = (p)=> esSusc(p) ? `${dinero(p.precio, p.moneda)}<small> /mes</small>` : dinero(p.precio, p.moneda);
   const detallePaquete = (p)=>{
-    if(esSusc(p)) return `${p.cuotas} cobros mensuales · total ${dinero(p.precio * p.cuotas, p.moneda)} · Mercado Pago`;
+    if(esSusc(p)) return p.link_pago ? "Cobro mensual automático · Mercado Pago" : `${p.cuotas} cobros mensuales · total ${dinero(p.precio * p.cuotas, p.moneda)} · Mercado Pago`;
     if(p.categoria === "terapia"){
       const porSesion = p.sesiones > 1 ? " · " + dinero(Math.round(p.precio / p.sesiones * 100) / 100, p.moneda) + " por sesión" : "";
       return plural(p.sesiones, "sesión", "sesiones") + porSesion;
@@ -616,6 +618,17 @@ async function abrirCompra(profile){
               ${ahorro >= 3 ? `<span class="pack-save">Ahorras ${ahorro}%</span>` : ""}
             </span>
           </label>`; }).join("")}
+      </div>
+      <div id="pagoLink" hidden>
+        <p class="step-title"><span class="step-n">2</span>Paga <strong id="linkMonto"></strong></p>
+        <p id="linkResumen" style="margin:0 0 10px"></p>
+        <a class="btn-primary link-pago-btn" id="btnLinkPago" href="#" target="_blank" rel="noopener">Continuar a Mercado Pago</a>
+        <p class="muted" style="margin-top:8px">Se abre en otra pestaña. Cuando termines el pago, vuelve aquí y avísanos.</p>
+        <p class="step-title"><span class="step-n">3</span>Avísanos que ya pagaste</p>
+        <label for="lkOperacion" style="margin-top:4px">N.° de operación <span class="muted">(opcional)</span></label>
+        <input id="lkOperacion" autocomplete="off" placeholder="El que te da el comprobante">
+        <button type="button" class="btn-outline" id="btnYaPague" style="margin-top:10px">Ya pagué · avisar a mi coach</button>
+        <p class="muted link-otro" id="linkOtro" style="margin-top:10px"><button type="button" class="btn-link" id="btnOtroMedio">Prefiero pagar con Yape, Plin o transferencia</button></p>
       </div>
       <div id="pagoUnico">
         <p class="step-title"><span class="step-n">2</span>Paga <strong id="montoPagar"></strong></p>
@@ -647,16 +660,50 @@ async function abrirCompra(profile){
     </form>`);
   const form = dlg.el.querySelector("#compraForm");
   const elegido = ()=> lista.find(x => x.id === (form.querySelector('input[name="paquete"]:checked') || {}).value);
+  let otroMedio = false;
   const pintar = ()=>{
     const p = elegido(); if(!p) return;
-    dlg.el.querySelector("#pagoUnico").hidden = esSusc(p);
-    dlg.el.querySelector("#pagoMP").hidden = !esSusc(p);
+    /* Con link de pago: botón directo a la pasarela y aviso «ya pagué». En pago único se puede elegir Yape/Plin en su lugar. */
+    const conLink = !!p.link_pago && !(otroMedio && !esSusc(p));
+    dlg.el.querySelector("#pagoLink").hidden = !conLink;
+    dlg.el.querySelector("#pagoUnico").hidden = esSusc(p) || conLink;
+    dlg.el.querySelector("#pagoMP").hidden = !esSusc(p) || conLink;
+    if(conLink){
+      const pas = pasarelaDe(p.link_pago);
+      dlg.el.querySelector("#linkMonto").innerHTML = esSusc(p) ? `${dinero(p.precio, p.moneda)} al mes` : dinero(p.precio, p.moneda);
+      dlg.el.querySelector("#linkResumen").textContent = esSusc(p) ? `${pas} cobra ${dinero(p.precio, p.moneda)} cada mes de forma automática, con tarjeta.` : `Pagas con tarjeta en ${pas}.`;
+      const a = dlg.el.querySelector("#btnLinkPago");
+      a.href = p.link_pago; a.textContent = "Continuar a " + pas;
+      dlg.el.querySelector("#linkOtro").hidden = esSusc(p);
+    }
     dlg.el.querySelector("#montoPagar").textContent = dinero(p.precio, p.moneda);
     dlg.el.querySelector("#notaCambio").hidden = p.moneda === "PEN";
     if(esSusc(p)) dlg.el.querySelector("#mpResumen").innerHTML = `Se cobrará <strong>${dinero(p.precio, p.moneda)} cada mes durante ${p.cuotas} meses</strong> (total ${dinero(p.precio * p.cuotas, p.moneda)}).`;
     dlg.el.querySelector("#compraMsg").innerHTML = "";
   };
-  form.querySelectorAll('input[name="paquete"]').forEach(r => { r.onchange = pintar; });
+  form.querySelectorAll('input[name="paquete"]').forEach(r => { r.onchange = ()=>{ otroMedio = false; pintar(); }; });
+  dlg.el.querySelector("#btnOtroMedio").onclick = ()=>{ otroMedio = true; pintar(); };
+  const hecho = ()=>{
+    form.innerHTML = `
+      <div class="done-box">
+        <span class="done-icon" aria-hidden="true">✓</span>
+        <h3>Recibimos tu aviso</h3>
+        <p>Tu coach confirmará el pago y te avisaremos aquí apenas esté aprobado. ${profile.categoria === "terapia" ? "Las sesiones se suman a tu saldo." : "Tu acceso se activa al aprobarse."}</p>
+        <button type="button" class="btn-primary" data-close-done>Entendido</button>
+      </div>`;
+    form.querySelector("[data-close-done]").onclick = ()=> dlg.close();
+    renderPlanAlumno(perfilReal(profile));
+  };
+  const bYa = dlg.el.querySelector("#btnYaPague");
+  bYa.onclick = ()=> withBusy(bYa, "Enviando…", async ()=>{
+    const p = elegido(); if(!p) return;
+    const { error } = await sb.from("compras").insert({
+      user_id: profile.id, paquete_id: p.id, metodo: "tarjeta", operacion: dlg.el.querySelector("#lkOperacion").value.trim() || null, comprobante_path: null,
+      categoria: profile.categoria, paquete_nombre: "-", monto: 0
+    });
+    if(error){ showError(dlg.el.querySelector("#compraMsg"), error); return; }
+    hecho();
+  });
   pintar();
   const bMP = dlg.el.querySelector("#btnIrMP");
   bMP.onclick = ()=> withBusy(bMP, "Abriendo Mercado Pago…", async ()=>{

@@ -876,16 +876,17 @@ async function renderCoachAjustes(main){
       </section>
       ${["terapia","fortalecimiento"].map(cat => `
       <section class="panel span-6"><div class="panel-head"><h2>Paquetes de ${CATEGORIAS[cat].nombre.toLowerCase()}</h2></div>
-        <div class="table-wrap"><table class="edit-table"><thead><tr><th scope="col">Nombre</th><th scope="col">${cat === "terapia" ? "Sesiones" : "Días"}</th><th scope="col">Precio ${cat === "terapia" ? "US$" : "S/"}</th><th scope="col">Activo</th><th scope="col"><span class="sr-only">Guardar</span></th></tr></thead>
+        <div class="table-wrap"><table class="edit-table"><thead><tr><th scope="col">Nombre</th><th scope="col">${cat === "terapia" ? "Sesiones" : "Días"}</th><th scope="col">Precio ${cat === "terapia" ? "US$" : "S/"}</th><th scope="col">Activo</th><th scope="col">Link de pago</th><th scope="col"><span class="sr-only">Guardar</span></th></tr></thead>
         <tbody>${paquetes.filter(p => p.categoria === cat).map(p => `
           <tr data-paq="${esc(p.id)}"><td><input class="t-in" data-f="nombre" value="${esc(p.nombre)}" aria-label="Nombre"></td>
             <td><input class="t-in num-in" type="number" min="1" data-f="${cat === "terapia" ? "sesiones" : "dias"}" value="${cat === "terapia" ? p.sesiones : p.dias}" aria-label="Cantidad"></td>
             <td><input class="t-in num-in" type="number" min="0" step="0.5" data-f="precio" value="${Number(p.precio)}" aria-label="Precio"></td>
             <td><input type="checkbox" data-f="activo" ${p.activo ? "checked" : ""} aria-label="Activo"></td>
+            <td><input class="t-in link-in" type="url" data-f="link_pago" value="${esc(p.link_pago || "")}" placeholder="https://…" aria-label="Link de pago (Mercado Pago o Culqi)"></td>
             <td class="actions"><button type="button" class="btn-outline sm" data-save-paq>Guardar</button></td></tr>`).join("")}
           <tr class="new-row" data-new-paq="${cat}"><td><input class="t-in" data-f="nombre" placeholder="Nuevo paquete" aria-label="Nombre"></td>
             <td><input class="t-in num-in" type="number" min="1" data-f="${cat === "terapia" ? "sesiones" : "dias"}" placeholder="${cat === "terapia" ? "4" : "30"}" aria-label="Cantidad"></td>
-            <td><input class="t-in num-in" type="number" min="0" step="0.5" data-f="precio" placeholder="0" aria-label="Precio"></td><td></td>
+            <td><input class="t-in num-in" type="number" min="0" step="0.5" data-f="precio" placeholder="0" aria-label="Precio"></td><td></td><td></td>
             <td class="actions"><button type="button" class="btn-outline sm" data-add-paq>Agregar</button></td></tr>
         </tbody></table></div><div class="paq-msg" aria-live="polite"></div>
       </section>`).join("")}
@@ -968,7 +969,8 @@ async function renderCoachAjustes(main){
   main.querySelectorAll("[data-save-paq]").forEach(b => {
     b.onclick = ()=> withBusy(b, "…", async ()=>{
       const tr = b.closest("tr"); const v = leerFila(tr); const msg = tr.closest("section").querySelector(".paq-msg");
-      const payload = { nombre: v.nombre.trim(), precio: Number(v.precio), activo: v.activo };
+      const payload = { nombre: v.nombre.trim(), precio: Number(v.precio), activo: v.activo, link_pago: (v.link_pago || "").trim() || null };
+      if(payload.link_pago && !/^https:\/\/\S+$/.test(payload.link_pago)){ showMsg(msg, "error", "El link de pago debe empezar con https://"); return; }
       if(v.sesiones !== undefined) payload.sesiones = parseInt(v.sesiones, 10); else payload.dias = parseInt(v.dias, 10);
       if(!payload.nombre || isNaN(payload.precio)){ showMsg(msg, "error", "Completa nombre y precio."); return; }
       const { error } = await sb.from("paquetes").update(payload).eq("id", tr.dataset.paq);

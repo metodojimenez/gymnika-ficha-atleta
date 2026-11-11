@@ -1432,3 +1432,7 @@ body:has(.instalar) .chat-fab{ display:none; }
 .especial-linea{ margin-top:12px; }
 .hour-chip.bloq{ background:#EFE7FB; color:#4B2E83; }
 .chip-bloqueo{ font-size:12px; font-weight:700; margin-left:4px; }
+
+/* Link de pago del paquete */
+.link-pago-btn{ display:flex; align-items:center; justify-content:center; text-decoration:none; text-align:center; }
+.edit-table .link-in{ min-width:170px; font-size:13px; }
