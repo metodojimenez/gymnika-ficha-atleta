@@ -1436,3 +1436,16 @@ body:has(.instalar) .chat-fab{ display:none; }
 /* Link de pago del paquete */
 .link-pago-btn{ display:flex; align-items:center; justify-content:center; text-decoration:none; text-align:center; }
 .edit-table .link-in{ min-width:170px; font-size:13px; }
+
+/* Compra: grupos de planes */
+.pack-grupo{ margin:14px 0 6px; font-size:12px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); }
+.pack-grupo:first-of-type{ margin-top:4px; }
+/* Calificar la clase */
+.calif-escala{ display:grid; grid-template-columns:repeat(5, 1fr); gap:8px; width:100%; margin-top:12px; }
+.calif-escala button{ font:800 22px var(--font-display); min-height:56px; border-radius:14px; border:2.5px solid var(--comic-ink); background:#fff; color:#2B2326; cursor:pointer; box-shadow:2px 2px 0 var(--comic-ink); }
+.calif-escala button:hover, .calif-escala button[aria-pressed="true"]{ background:var(--accent); color:#fff; }
+.calif-escala button:disabled{ opacity:.6; cursor:default; }
+.calif-escala button[aria-pressed="true"]:disabled{ opacity:1; }
+.calif-extremos{ display:flex; justify-content:space-between; width:100%; font-size:12.5px; color:var(--ink-soft); margin-top:4px; }
+.aviso-calif .aviso-cara{ width:120px; }
+.asis-nota{ font-weight:800; color:#8A5A0F; }

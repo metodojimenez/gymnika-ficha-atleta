@@ -1352,6 +1352,7 @@ function pintarEstiramientosAlumno(box, lista, uid, nota, reps){
   if(!lista.length){
     box.innerHTML = `<p class="muted">Tu coach todavía no asignó tu rutina de estiramiento diaria. Cuando lo haga, aparecerá aquí.</p>`;
     renderDisciplina(uid);
+    avisoQRAyer(uid).then(()=> pedirCalificacion(uid), ()=>{});
     return;
   }
   /* La rutina se lee; lo que se marca es una sola cosa: si la hiciste hoy */
@@ -1378,7 +1379,7 @@ function pintarEstiramientosAlumno(box, lista, uid, nota, reps){
     }); });
   };
   pintar(null);
-  avisoEstiroAyer(uid, ()=>{ if(box.isConnected){ pintar(true); renderDisciplina(uid); } }).then(()=> avisoQRAyer(uid), ()=>{});
+  avisoEstiroAyer(uid, ()=>{ if(box.isConnected){ pintar(true); renderDisciplina(uid); } }).then(()=> avisoQRAyer(uid), ()=>{}).then(()=> pedirCalificacion(uid), ()=>{});
   sb.from("bienestar_diario").select("estiro").eq("user_id", uid).eq("fecha", todayStr()).maybeSingle()
     .then(({ data })=>{ if(box.isConnected && data && data.estiro !== null && data.estiro !== undefined) pintar(data.estiro); }, ()=>{});
   renderDisciplina(uid);
@@ -1476,9 +1477,53 @@ async function avisoQRAyer(uid){
       <p>Escanéalo siempre al llegar: así se llena tu batería del mes.</p></div>
     <div class="aviso-btns"><button type="button" class="btn-primary" data-av="ok">Entendido</button></div>`;
   document.body.appendChild(dlg);
+  let fin = null;
+  const cerrar = ()=>{ if(dlg.open) dlg.close(); dlg.remove(); if(fin) fin(); };
+  dlg.addEventListener("cancel", (e)=>{ e.preventDefault(); cerrar(); });
+  dlg.querySelector("[data-av='ok']").onclick = cerrar;
+  try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
+  await new Promise(r => { fin = r; });
+}
+
+/* Al terminar su clase de fortalecimiento (hoy o ayer), al entrar al app se le pide calificarla del 1 al 5. Se pregunta una vez por clase. */
+async function pedirCalificacion(uid){
+  if(uid !== state.profile.id || esEquipo()) return;
+  if(!["fortalecimiento", "transicion"].includes(state.profile.categoria)) return;
+  const hoy = todayStr(), ayer = fechaISO(sumarDias(parseFecha(hoy), -1));
+  const [horarios, { data, error }] = await Promise.all([
+    cargarHorarios(),
+    sb.from("reservas").select("id, horario_id, inicio, fecha, calificacion").eq("user_id", uid).eq("estado", "asistio").gte("fecha", ayer).lte("fecha", hoy).order("inicio", { ascending: false })
+  ]);
+  if(error) return;
+  const h = (id)=> horarios.find(x => x.id === id) || {};
+  const visto = (id)=>{ try{ return localStorage.getItem("gymCalif:" + id) === "1"; } catch { return false; } };
+  const r = (data || []).find(x => !x.calificacion && h(x.horario_id).categoria === "fortalecimiento"
+    && Date.now() >= new Date(x.inicio).getTime() + (h(x.horario_id).duracion_min || 60) * 60000 && !visto(x.id));
+  if(!r || document.querySelector("dialog[open], .overlay")) return;
+  try{ localStorage.setItem("gymCalif:" + r.id, "1"); } catch { /* sin almacenamiento */ }
+  const dlg = document.createElement("dialog");
+  dlg.className = "aviso-estiro aviso-calif";
+  dlg.setAttribute("aria-labelledby", "avCalT");
+  dlg.innerHTML = `
+    <div class="aviso-cara">${avatarMarianIA("feliz")}</div>
+    <div class="globo-comic aviso-globo"><span class="chat-quien">MarianI.A.</span>
+      <h2 id="avCalT">¿Qué tal estuvo tu rutina?</h2>
+      <p>Tu clase ${r.fecha === hoy ? "de hoy" : "de ayer"} a las ${esc(horaDe(r.inicio))}. Califícala del 1 al 5.</p></div>
+    <div class="calif-escala" role="group" aria-label="Calificación del 1 al 5">${[1, 2, 3, 4, 5].map(n => `<button type="button" data-calif="${n}" aria-label="${n} de 5">${n}</button>`).join("")}</div>
+    <div class="calif-extremos" aria-hidden="true"><span>No me gustó mucho</span><span>Me encantó</span></div>
+    <p class="aviso-msg" aria-live="polite"></p>
+    <div class="aviso-btns"><button type="button" class="btn-link" data-av="ok">Ahora no</button></div>`;
+  document.body.appendChild(dlg);
   const cerrar = ()=>{ if(dlg.open) dlg.close(); dlg.remove(); };
   dlg.addEventListener("cancel", (e)=>{ e.preventDefault(); cerrar(); });
   dlg.querySelector("[data-av='ok']").onclick = cerrar;
+  dlg.querySelectorAll("[data-calif]").forEach(b => { b.onclick = async ()=>{
+    dlg.querySelectorAll("[data-calif]").forEach(x => { x.disabled = true; x.setAttribute("aria-pressed", String(x === b)); });
+    const { error: e2 } = await sb.rpc("calificar_clase", { p_reserva: r.id, p_nota: Number(b.dataset.calif) });
+    if(e2){ dlg.querySelectorAll("[data-calif]").forEach(x => { x.disabled = false; }); dlg.querySelector(".aviso-msg").textContent = errorES(e2); return; }
+    dlg.querySelector(".aviso-msg").textContent = "¡Gracias! Tu coach lo tendrá en cuenta.";
+    setTimeout(cerrar, 1100);
+  }; });
   try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); }
 }
 

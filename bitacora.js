@@ -763,6 +763,8 @@ async function pintarHistorial(id){
   document.getElementById("bitCuenta").textContent = lista.length ? plural(lista.length, "entrada", "entradas") : "";
   if(!lista.length){ box.innerHTML = emptyHTML("Todavía no hay entradas. Se llena desde el Mirador cuando llega, o con «Nueva entrada»."); return; }
   const puede = (b)=> b.autor_id === state.profile.id || esMaster();
+  /* Permiso especial (lo da un master): editar la bitácora que escribió otro coach */
+  const puedeEditar = (b)=> puede(b) || !!state.profile.edita_bitacoras;
   box.innerHTML = `<ol class="bit-timeline">${lista.map(b => {
     const dolor = dolorZonasHTML(b);
     const filas = BIT_CAMPOS.filter(([c]) => b[c]).map(([c, t]) => `<div class="bit-fila"><dt>${esc(t)}</dt><dd>${esc(b[c])}</dd></div>`);
@@ -776,7 +778,7 @@ async function pintarHistorial(id){
       ${b._fotos.length ? `<div class="bit-fotos">${b._fotos.map(f => f.url ? `<button type="button" class="foto-mini" data-ver-foto="${esc(f.url)}" aria-label="Ver foto"><img src="${esc(f.url)}" alt="" loading="lazy"></button>` : "").join("")}</div>` : ""}
       <div class="bit-acc">
         <label class="btn-outline sm foto-add bit-foto-add"><span aria-hidden="true">📷</span> Agregar fotos<input type="file" accept="image/*" multiple class="sr-only" data-bit-foto="${esc(b.id)}"></label>
-        ${puede(b) ? `<button type="button" class="btn-link" data-bit-editar="${esc(b.id)}">Editar</button><button type="button" class="btn-link danger" data-bit-borrar="${esc(b.id)}">Borrar</button>` : ""}
+        ${puedeEditar(b) ? `<button type="button" class="btn-link" data-bit-editar="${esc(b.id)}">Editar</button>` : ""}${puede(b) ? `<button type="button" class="btn-link danger" data-bit-borrar="${esc(b.id)}">Borrar</button>` : ""}
       </div>
       <div data-bit-foto-msg="${esc(b.id)}" aria-live="polite"></div>
     </li>`;
@@ -1231,7 +1233,7 @@ function refrescarEnVivo(tabla, payload){
 function veFortalecimiento(){ const a = areaCoach(); return !a || a === "fortalecimiento"; }
 async function cargarAsistenciaFort(){
   const horarios = (await cargarHorarios()).filter(h => h.categoria === "fortalecimiento");
-  const { data, error } = await sb.from("reservas").select("id, user_id, horario_id, inicio, estado, checkin_at, asistencia_por")
+  const { data, error } = await sb.from("reservas").select("id, user_id, horario_id, inicio, estado, checkin_at, asistencia_por, calificacion")
     .eq("fecha", todayStr()).in("horario_id", horarios.map(h => h.id)).in("estado", ["confirmada", "asistio", "no_asistio"]).order("inicio");
   if(error) throw error;
   const ids = (data || []).map(r => r.id);
@@ -1291,7 +1293,7 @@ function filaAsistenciaHTML(r){
   const a = (state.athleteList || []).find(x => x.id === r.user_id) || {};
   const escaneo = r.estado === "asistio" && (!r.asistencia_por || r.asistencia_por === r.user_id || r.asistencia_por === a.tutor_id);
   const estado = r.estado === "asistio"
-    ? `<span class="asis-estado ok">✓ Asistió</span><span class="muted">${escaneo ? "escaneó el QR" + (r.checkin_at ? " · " + esc(horaDe(r.checkin_at)) : "") : "marcado a mano"}</span>`
+    ? `<span class="asis-estado ok">✓ Asistió</span><span class="muted">${escaneo ? "escaneó el QR" + (r.checkin_at ? " · " + esc(horaDe(r.checkin_at)) : "") : "marcado a mano"}</span>${r.calificacion ? `<span class="asis-nota" title="Cómo calificó la clase">★ ${r.calificacion}/5</span>` : ""}`
     : r.estado === "no_asistio" ? `<span class="asis-estado no">No vino</span>` : `<span class="asis-estado">Sin marcar</span>`;
   const acc = r.estado === "asistio"
     ? `${r.bit ? `<span class="asis-bit-ok">✓ Bitácora</span><a class="btn-link" href="#/bitacora/${encodeURIComponent(r.user_id)}" data-ir-bitacora>Ver</a>` : `<button type="button" class="btn-outline sm" data-asis-bit="${esc(r.id)}">Bitácora</button>`}

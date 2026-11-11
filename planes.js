@@ -605,12 +605,14 @@ async function abrirCompra(profile){
   const dlg = openDialog(profile.categoria === "terapia" ? "Comprar sesiones" : "Comprar acceso", `
     <form id="compraForm" novalidate>
       <p class="step-title"><span class="step-n">1</span>Elige tu plan</p>
-      <div class="pack-grid" role="radiogroup" aria-label="Planes">
-        ${lista.map((p, i) => {
+      ${[["Pago único", lista.filter(p => !esSusc(p))], ["Suscripción · cobro mensual", lista.filter(esSusc)]].filter(g => g[1].length).map(([titulo, grupo], gi, grupos) => `
+      ${grupos.length > 1 ? `<p class="pack-grupo">${titulo}</p>` : ""}
+      <div class="pack-grid" role="radiogroup" aria-label="${titulo}">
+        ${grupo.map(p => {
           const ahorro = base && p.sesiones > 1 && base.precio * p.sesiones > p.precio ? Math.round((1 - p.precio / (base.precio * p.sesiones)) * 100) : 0;
           return `
           <label class="pack">
-            <input type="radio" name="paquete" value="${esc(p.id)}" ${i === 0 ? "checked" : ""}>
+            <input type="radio" name="paquete" value="${esc(p.id)}" ${p === lista[0] ? "checked" : ""}>
             <span class="pack-body">
               <span class="pack-name">${esc(p.nombre)}</span>
               <span class="pack-price num">${precioPaquete(p)}</span>
@@ -618,7 +620,7 @@ async function abrirCompra(profile){
               ${ahorro >= 3 ? `<span class="pack-save">Ahorras ${ahorro}%</span>` : ""}
             </span>
           </label>`; }).join("")}
-      </div>
+      </div>`).join("")}
       <div id="pagoLink" hidden>
         <p class="step-title"><span class="step-n">2</span>Paga <strong id="linkMonto"></strong></p>
         <p id="linkResumen" style="margin:0 0 10px"></p>
@@ -687,8 +689,8 @@ async function abrirCompra(profile){
     form.innerHTML = `
       <div class="done-box">
         <span class="done-icon" aria-hidden="true">✓</span>
-        <h3>Recibimos tu aviso</h3>
-        <p>Tu coach confirmará el pago y te avisaremos aquí apenas esté aprobado. ${profile.categoria === "terapia" ? "Las sesiones se suman a tu saldo." : "Tu acceso se activa al aprobarse."}</p>
+        <h3>Estamos procesando tu pago</h3>
+        <p>${profile.categoria === "terapia" ? "En breve podrás ver tus tokens." : "En breve podrás ver tu acceso activo."} Te avisaremos aquí apenas esté listo.</p>
         <button type="button" class="btn-primary" data-close-done>Entendido</button>
       </div>`;
     form.querySelector("[data-close-done]").onclick = ()=> dlg.close();
@@ -747,8 +749,8 @@ async function abrirCompra(profile){
       form.innerHTML = `
         <div class="done-box">
           <span class="done-icon" aria-hidden="true">✓</span>
-          <h3>Recibimos tu comprobante</h3>
-          <p>Tu coach lo revisará y te avisaremos aquí apenas esté aprobado. ${profile.categoria === "terapia" ? "Las sesiones se suman a tu saldo." : "Tu acceso se activa al aprobarse."}</p>
+          <h3>Estamos procesando tu pago</h3>
+          <p>${profile.categoria === "terapia" ? "En breve podrás ver tus tokens." : "En breve podrás ver tu acceso activo."} Te avisaremos aquí apenas esté listo.</p>
           <button type="button" class="btn-primary" data-close-done>Entendido</button>
         </div>`;
       form.querySelector("[data-close-done]").onclick = ()=> dlg.close();
