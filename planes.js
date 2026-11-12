@@ -4,7 +4,7 @@
 
 const CATEGORIAS = {
   terapia: { nombre: "Terapia", desc: "Sesiones de terapia con reserva de horario. Compras sesiones y cada una vale 1 token." },
-  fortalecimiento: { nombre: "Fortalecimiento", desc: "Entrenamiento con reserva de horario y acceso mensual." },
+  fortalecimiento: { nombre: "Fortalecimiento", registro: "Entrenamiento físico", desc: "Entrenamiento con reserva de horario y acceso mensual." },
   /* Paso de la terapia de vuelta al deporte: hace las dos. El acceso de fortalecimiento lo habilita un master coach */
   transicion: { nombre: "Transición", desc: "Estás pasando de la terapia a volver al deporte: haces las dos, con reserva de horario en terapia y en fortalecimiento. Tu acceso a fortalecimiento se coordina en el centro." }
 };
@@ -111,10 +111,10 @@ function categoriaPickerHTML(prefix, actual){
   return `
     <fieldset class="cat-picker" id="${prefix}cat">
       <legend>¿A qué vienes a Gymnika?<span class="req" aria-hidden="true">*</span></legend>
-      ${Object.entries(CATEGORIAS).filter(([, c]) => !c.soloMaster).map(([k, c]) => `
+      ${["terapia", "fortalecimiento", "transicion"].map(k => [k, CATEGORIAS[k]]).filter(([, c]) => c && !c.soloMaster).map(([k, c]) => `
         <label class="cat-option">
           <input type="radio" name="${prefix}categoria" value="${k}" ${actual === k ? "checked" : ""}>
-          <span><strong>${c.nombre}</strong><span>${esc(c.desc)}</span></span>
+          <span><strong>${c.registro || c.nombre}</strong><span>${esc(c.desc)}</span></span>
         </label>`).join("")}
     </fieldset>`;
 }
@@ -921,13 +921,13 @@ async function renderReservasAlumno(profile){
           const bloqueado = !!h.bloqueo && !profile.horario_especial && !mia;
           let accion;
           if(bloqueado) accion = `<span class="slot-tag off">No disponible</span>`;
+          else if(mia && mia.estado === "espera" && mia.oferta_at && !pasado && !paraDe(profile)) accion = `<button type="button" class="btn-primary slot-btn" data-oferta="${esc(mia.id)}">Se abrió un cupo · Tomarlo</button>`;
           else if(mia) accion = `<span class="slot-tag ${mia.estado === "espera" ? "wait" : "ok"}">${mia.estado === "espera" ? "En lista de espera" : mia.estado === "asistio" ? (paraDe(profile) ? "Asistió ✓" : "Asististe ✓") : "Reservado ✓"}</span>`;
           else if(pasado) accion = `<span class="slot-tag off">Ya pasó</span>`;
           else if(sinAcceso) accion = `<span class="slot-tag off">Sin acceso</span>`;
           else if(aReemplazar && lleno && aReemplazar.estado === "confirmada") accion = `<span class="slot-tag off">Lleno</span>`;
           else if(aReemplazar) accion = `<button type="button" class="btn-outline slot-btn" data-reservar="${esc(h.id)}">Cambiar a esta hora</button>`;
           else if(yaTieneDia) accion = `<span class="slot-tag off">${paraDe(profile) ? "Ya tiene otro" : "Ya tienes otro"}</span>`;
-          else if(lleno && !esTer) accion = `<span class="slot-tag off">Lleno</span>`;
           else accion = `<button type="button" class="${lleno ? "btn-outline" : "btn-primary"} slot-btn" data-reservar="${esc(h.id)}">${lleno ? "Lista de espera" : "Reservar"}</button>`;
           return `
           <li class="slot${lleno ? " full" : ""}${pasado ? " past" : ""}${mia ? " mine" : ""}${bloqueado ? " bloqueado" : ""}">
@@ -943,6 +943,7 @@ async function renderReservasAlumno(profile){
           </li>`; }).join("")}
       </ul>`;
     diaBox.querySelectorAll("[data-comprar]").forEach(b => { b.onclick = ()=> abrirCompra(profile); });
+    diaBox.querySelectorAll("[data-oferta]").forEach(b => { b.onclick = ()=> revisarOfertasEspera(profile); });
     diaBox.querySelectorAll("[data-reservar]").forEach(b => {
       b.onclick = ()=>{
         const h = slots.find(x => x.id === b.dataset.reservar);
@@ -1076,11 +1077,12 @@ function confirmarReserva(profile, h, fecha, o, aj, saldo, reemplaza){
     }).join("")}</div>` : "";
   const reglas = esTer
     ? `${lleno
-        ? `<p>Este horario está lleno. Si se libera un cupo, la reserva se confirma sola y se usa 1 sesión ${propio ? "de tu saldo. Te avisaremos en el inbox." : "de su saldo."}</p>`
+        ? `<p>Este horario está lleno. ${propio ? "Entras" : "Entra"} a la lista de espera en orden de llegada. Si se abre un cupo, ${propio ? "te preguntaremos si lo quieres" : "se le preguntará si lo quiere"}; recién al aceptarlo se usa 1 sesión.</p>`
         : pasaSesion ? `<p>No se usa otra sesión: la de las ${reemplaza.hora} pasa a este horario.</p>`
         : aCredito ? `<p>Se usará <strong>1 sesión a crédito</strong>: ${propio ? "quedarás debiendo" : "quedará debiendo"} ${1 - saldo} ${1 - saldo === 1 ? "sesión" : "sesiones"} hasta regularizar el pago.</p>`
         : `<p>Se usará <strong>1 sesión</strong> de ${propio ? "tu" : "su"} saldo (${propio ? "te" : "le"} quedarán ${saldo - 1}).</p>`}
        <p class="muted">${master ? "Si el centro la cancela, la sesión se le devuelve." : `Puedes cancelar sin costo hasta el <strong>${fmtFechaHora(limite.toISOString())}</strong>. Después de eso, o si no asiste, la sesión se pierde.`}</p>`
+    : lleno ? `<p>Este horario está lleno. ${propio ? "Entras" : "Entra"} a la lista de espera en orden de llegada. Si se abre un cupo, ${propio ? "te preguntaremos si lo quieres tomar" : "se le preguntará si lo quiere tomar"}.</p>`
     : `<p>El cupo queda guardado. Al llegar, ${propio ? "escanea" : "se escanea"} el QR de recepción desde la app.</p>
        <p class="muted">Si no puede venir, conviene cancelar antes de la hora para liberar el cupo.</p>`;
   /* El master puede agendar la misma hora varias semanas seguidas (para que nadie pierda su horario de siempre) */
@@ -1141,9 +1143,51 @@ function confirmarReserva(profile, h, fecha, o, aj, saldo, reemplaza){
       return;
     }
     showMsg(document.getElementById("reservarMsg"), "ok", res && res.estado === "espera"
-      ? `En lista de espera (puesto ${res.posicion}).${propio ? " Te avisaremos si se libera un cupo." : ""}`
+      ? `En lista de espera (puesto ${res.posicion}).${propio ? " Si se abre un cupo, te preguntaremos si lo quieres." : ""}`
       : `${master ? "Agendado" : "Reserva confirmada"}: ${fmtFechaHora(ini.toISOString())}${res && res.lugar ? " · lugar " + res.lugar : ""}.`);
   });
+}
+
+/* Lista de espera: si se abrió un cupo para esta persona (o para un hijo), se le pregunta si lo toma.
+   Sí: queda reservado (en terapia se usa 1 sesión). No: sale de la lista y se le pregunta al siguiente. */
+async function revisarOfertasEspera(profile){
+  if(document.getElementById("ofertaMsg") || !state.profile || esEquipo()) return;
+  const ids = [state.profile.id, ...(state.hijos || []).map(h => h.id)];
+  const { data, error } = await sb.from("reservas").select("id, user_id, horario_id, fecha, inicio, estado, oferta_at")
+    .in("user_id", ids).eq("estado", "espera").order("inicio");
+  const r = error ? null : (data || []).find(x => x.oferta_at && new Date(x.inicio) > new Date());
+  if(!r) return;
+  if(document.querySelector("dialog[open], .overlay")){ setTimeout(()=> revisarOfertasEspera(profile), 2000); return; }
+  const horarios = await cargarHorarios();
+  const h = horarios.find(x => x.id === r.horario_id) || {};
+  const esTer = h.categoria === "terapia";
+  const propio = r.user_id === state.profile.id;
+  const de = propio ? null : (state.hijos || []).find(x => x.id === r.user_id);
+  const d = openDialog("Se abrió el horario que esperabas", `
+    <div class="confirm-slot">
+      <span class="cs-day">${esc(fechaLarga(r.fecha))}</span>
+      <span class="cs-time num">${horaCorta(h.hora || "")}</span>
+      <span class="muted">${esTer ? "Terapia" : "Fortalecimiento"}${de ? " · " + esc(de.nombre || "") : ""}</span>
+    </div>
+    <p><strong>¿Quieres tomarlo?</strong> ${esTer ? "Si dices que sí, queda reservado y se usa 1 sesión." : "Si dices que sí, queda reservado."} Si dices que no, se le ofrece al siguiente de la lista.</p>
+    <div id="ofertaMsg" aria-live="polite"></div>
+    <div class="sheet-actions"><button type="button" class="btn-outline" data-of="no">No, gracias</button><button type="button" class="btn-primary" data-of="si">Sí, lo tomo</button></div>`);
+  const responder = (acepta, btn)=> withBusy(btn, acepta ? "Reservando…" : "Avisando…", async ()=>{
+    const { data: res, error: e2 } = await sb.rpc("responder_espera", { p_reserva: r.id, p_acepta: acepta });
+    if(e2){ showError(d.el.querySelector("#ofertaMsg"), e2); return; }
+    const x = typeof res === "string" ? JSON.parse(res) : (res || {});
+    d.close();
+    const perfil = reservaUI.perfil || profile || state.profile;
+    if(document.getElementById("reservarCard") || document.getElementById("planCard")){ try{ await refrescarReservas(perfil); } catch(err){ console.error(err); } }
+    const txt = x.estado === "confirmada" ? `¡Listo! Tu horario del ${fmtFechaHora(r.inicio)} quedó reservado.${x.categoria === "terapia" ? (x.a_credito ? " Se usó 1 sesión a crédito." : " Se usó 1 sesión de tu saldo.") : ""}`
+      : x.estado === "ocupado" ? "El cupo se acaba de ocupar. Sigues en la lista de espera."
+      : x.estado === "pasado" ? "Ese horario ya empezó."
+      : "Listo, saliste de la lista de espera. Se le ofrecerá al siguiente.";
+    openDialog(x.estado === "confirmada" ? "Horario reservado" : "Lista de espera", `<p style="margin-top:0">${esc(txt)}</p>`);
+    setTimeout(()=> revisarOfertasEspera(profile), 1500);
+  });
+  d.el.querySelector('[data-of="si"]').onclick = (e)=> responder(true, e.currentTarget);
+  d.el.querySelector('[data-of="no"]').onclick = (e)=> responder(false, e.currentTarget);
 }
 
 async function refrescarReservas(profile){
@@ -1176,7 +1220,7 @@ function renderMisReservas(profile){
   const estadoVisible = (r)=> (r.estado === "confirmada" && new Date(new Date(r.inicio).getTime() + durDe(r) * 60000) < ahora) ? "no_asistio" : r.estado;
   const regla = (r)=>{
     const empezo = new Date(r.inicio) <= ahora;
-    if(r.estado === "espera") return "Si se libera un cupo, se confirma sola.";
+    if(r.estado === "espera") return r.oferta_at ? "Se abrió un cupo: responde si lo quieres tomar." : "Si se abre un cupo, se pregunta si lo quiere tomar (en orden de llegada).";
     if(master) return r.origen === "master" ? "Agendada por un master. Si la cancelas, se le avisa." : "Si la cancelas, se le avisa" + (esTer ? " y la sesión se le devuelve." : ".");
     if(empezo) return propio ? "Registra tu asistencia con el botón Escanear QR." : "Al llegar, escanea el QR desde tu cuenta: se registra su asistencia.";
     if(!esTer) return propio ? "Si no puedes venir, cancela para liberar tu cupo." : "Si no puede venir, cancela para liberar el cupo.";

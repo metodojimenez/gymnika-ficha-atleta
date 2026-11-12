@@ -578,7 +578,7 @@ async function abrirHoraCoach(h, iso, horarios, main){
     <h3 class="hc-tit">${pasado ? "Registrar a quienes vinieron" : "Agregar personas"}</h3>
     <p class="muted hc-ayuda">${pasado
       ? `Esta hora ya ${inicioLocal(iso, h.hora).getTime() + (h.duracion_min || 60) * 60000 < Date.now() ? "pasó" : "empezó"}: quedan como «asistió».${ter ? " Cada una usa 1 sesión de su saldo (o de su crédito)." : ""} Si alguien ya tiene otro horario ese día, ábrelo y usa «Mover a otra hora».`
-      : `${ter ? "Cada reserva usa 1 sesión de su saldo (o de su crédito). Si ya no hay cupo, queda en lista de espera." : "Necesitan acceso vigente ese día. Si se llena, los demás no entran."} Cada persona recibe un aviso.`}</p>
+      : `${ter ? "Cada reserva usa 1 sesión de su saldo (o de su crédito). Si ya no hay cupo, queda en lista de espera." : "Necesitan acceso vigente ese día. Si se llena, los demás quedan en lista de espera."} Cada persona recibe un aviso.`}</p>
     <label class="sr-only" for="hcQ">Buscar por nombre</label>
     <input type="search" id="hcQ" placeholder="Buscar por nombre" autocomplete="off">
     <ul class="hc-lista" id="hcLista"></ul>

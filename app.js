@@ -987,6 +987,8 @@ function avisarNuevas(items){
   inbox.vistos = inbox.vistos || new Set();
   const nuevas = items.filter(n => !inbox.vistos.has(claveAviso(n)));
   nuevas.forEach(n => inbox.vistos.add(claveAviso(n)));
+  /* Alumno: se abrió un cupo en un horario donde está en lista de espera */
+  if(!primeraVez && !esEquipo() && nuevas.some(n => n.tipo === "espera_oferta" && !n.leida)) revisarOfertasEspera(state.profile);
   if(primeraVez || !esEquipo()) return;
   const sinLeer = nuevas.filter(n => !n.leida).reverse();
   /* Llegadas con QR: ventana con los que asistieron y un mensaje del coach para cada uno (todo el equipo del área) */

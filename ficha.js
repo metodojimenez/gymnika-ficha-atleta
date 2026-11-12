@@ -244,6 +244,7 @@ async function renderAthleteDetail(profile, isCoach, container){
     if(token === state.renderToken) pintarCarnet(profile, state.plan);
     await renderReservasAlumno(profile);
     if(hay("familiaCard")) renderFamilia();
+    if(token === state.renderToken) revisarOfertasEspera(profile);
   }
 }
 
