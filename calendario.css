@@ -996,6 +996,10 @@ body.mirador-activo .rt-ficha{ bottom:76px; }
 .mir-hora-lista{ list-style:none; margin:0; padding:0; display:grid; gap:8px; }
 .mir-hora-fila{ padding:10px 12px; border:1px solid var(--line); border-left:4px solid var(--warn, #C77D2E); border-radius:12px; background:var(--surface); display:grid; gap:6px; }
 .mir-hora-fila.hecha{ border-left-color:var(--ok); }
+.mir-hora-fila.falto{ border-left-color:var(--danger, #B3261E); background:var(--paper); }
+.mir-hora-fila.porvenir{ border-left-color:var(--line-strong); }
+.mir-hora-estado{ margin:0; font-size:14px; font-weight:700; color:var(--ink-soft); }
+.mir-hora-fila.falto .mir-hora-estado{ color:var(--danger, #B3261E); }
 .mir-hora-cab{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; }
 .mir-hora-cab .muted{ font-size:13px; }
 .mir-hora-ok{ margin:0; color:var(--ok); font-weight:700; font-size:14px; }

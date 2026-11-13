@@ -541,6 +541,8 @@ function abrirMirador(irA){
   }
   sincronizarTarjetas(dlg);
   pintarHorasMirador(dlg);
+  /* Las horas del día (con todos sus asistentes) se cargan al abrir para que aparezcan sus pestañas */
+  cargarHorasTurno().then(hs => { miradorUI.horas = hs; if(dlg.open) pintarHorasMirador(dlg); }, (err)=> console.error(err));
   if(!dlg.open){ try{ dlg.showModal(); } catch { dlg.setAttribute("open", ""); } }
   pintarTurno();
   if(!irA && !miradorUI.pend.length && veFortalecimiento() && miradorUI.vista === "pend") verAsistenciaFort(dlg);
@@ -903,34 +905,40 @@ function abrirEntradaBitacora(a, previa){
   });
 }
 
-/* ---------- Mirador por horas: volver a las horas anteriores del turno ---------- */
+/* ---------- Mirador por horas: todos los que tenían esa hora hoy ----------
+   Nadie sale del Mirador del día: cada hora lista a todos sus asistentes con su estado
+   (bitácora guardada, pendiente, no vino, por llegar), para poder contar después. */
 async function cargarHorasTurno(){
-  const t = miradorUI.turno;
-  if(!t) return [];
-  const [horarios, { data, error }] = await Promise.all([
+  if(!miradorUI.turno) return [];
+  const hoy = todayStr();
+  const [horarios, { data, error }, { data: bits, error: e2 }] = await Promise.all([
     cargarHorarios(),
-    sb.from("reservas").select("id, user_id, inicio, checkin_at, horario_id").eq("fecha", todayStr()).eq("estado", "asistio").order("inicio")
+    sb.from("reservas").select("id, user_id, inicio, checkin_at, horario_id, estado").eq("fecha", hoy).in("estado", ["confirmada", "asistio", "no_asistio"]).order("inicio"),
+    sb.from("bitacora").select("id, reserva_id, atleta_id, autor_nombre, dolor_inicio, dolor_salida, zonas, como_llego, que_hizo, que_ocurrio, estiramientos, pendiente, fecha, created_at").eq("fecha", hoy)
   ]);
   if(error) throw error;
-  const h = (id)=> horarios.find(x => x.id === id) || {};
-  const desde = new Date(t.inicio).getTime();
-  const rs = (data || []).filter(r => r.checkin_at && new Date(r.inicio).getTime() + (h(r.horario_id).duracion_min || 60) * 60000 >= desde);
-  const ids = rs.map(r => r.id);
-  const { data: bits, error: e2 } = ids.length
-    ? await sb.from("bitacora").select("id, reserva_id, atleta_id, autor_nombre, dolor_inicio, dolor_salida, zonas, como_llego, que_hizo, que_ocurrio, estiramientos, pendiente, fecha").in("reserva_id", ids)
-    : { data: [], error: null };
   if(e2) throw e2;
-  return rs.map(r => ({ ...r, categoria: h(r.horario_id).categoria, bit: (bits || []).find(b => b.reserva_id === r.id) || null }));
+  const h = (id)=> horarios.find(x => x.id === id) || {};
+  const ahora = Date.now();
+  const filas = (data || []).map(r => {
+    const bit = (bits || []).find(b => b.reserva_id === r.id) || null;
+    const fin = new Date(r.inicio).getTime() + (h(r.horario_id).duracion_min || 60) * 60000;
+    const vino = r.estado === "asistio" || !!bit;
+    const estado = vino ? (bit ? "guardada" : "pendiente") : (r.estado === "no_asistio" || fin < ahora) ? "falto" : new Date(r.inicio).getTime() <= ahora ? "espera" : "porvenir";
+    return { ...r, categoria: h(r.horario_id).categoria, bit, estadoMir: estado };
+  });
+  /* Bitácoras de hoy guardadas sin reserva (agregados a mano): cuentan en la hora en que se guardaron */
+  const sueltas = (bits || []).filter(b => !b.reserva_id).map(b => ({ id: "bit-" + b.id, user_id: b.atleta_id, inicio: b.created_at, checkin_at: null, sinReserva: true,
+    categoria: ((state.athleteList || []).find(x => x.id === b.atleta_id) || {}).categoria, bit: b, estadoMir: "guardada" }));
+  return filas.concat(sueltas).sort((x, y) => new Date(x.inicio) - new Date(y.inicio));
 }
-/* Horas del turno: desde la hora en que empezó (o la primera sesión que alcanzó) hasta ahora */
+/* Horas con gente hoy, más las del turno (desde que empezó hasta ahora) */
 function horasDelTurno(){
   const t = miradorUI.turno;
   if(!t) return [];
-  const ahora = new Date().getHours();
-  const desde = Math.min(new Date(t.inicio).getHours(), ...((miradorUI.horas || []).map(r => new Date(r.inicio).getHours())));
-  const hs = [];
-  for(let x = Math.max(0, desde); x <= ahora; x++) hs.push(x);
-  return hs;
+  const hs = new Set((miradorUI.horas || []).map(r => new Date(r.inicio).getHours()));
+  for(let x = new Date(t.inicio).getHours(), fin = new Date().getHours(); x <= fin; x++) hs.add(x);
+  return [...hs].sort((x, y) => x - y);
 }
 function pintarHorasMirador(dlg){
   const box = dlg.querySelector(".mir-horas");
@@ -962,12 +970,14 @@ async function verHoraMirador(dlg, vista){
   if(miradorUI.vista !== vista) return;
   pintarHorasMirador(dlg);
   const lista = miradorUI.horas.filter(r => new Date(r.inicio).getHours() === vista);
-  const hechas = lista.filter(r => r.bit).length;
+  const n = (e)=> lista.filter(r => r.estadoMir === e).length;
+  const resumen = [[n("guardada"), "con bitácora guardada"], [n("pendiente"), n("pendiente") === 1 ? "pendiente" : "pendientes"], [n("falto"), n("falto") === 1 ? "no vino" : "no vinieron"],
+    [n("espera") + n("porvenir"), "por llegar"]].filter(x => x[0]).map(x => `${x[0]} ${x[1]}`).join(" · ");
   dlg.querySelector("#mirTitulo").textContent = `${vista}:00 · ${lista.length ? plural(lista.length, "persona", "personas") : "nadie"}`;
   caja.innerHTML = lista.length ? `
-    <p class="mir-hora-res muted">${hechas === lista.length ? "Todas con bitácora." : `${hechas} de ${lista.length} con bitácora.`}</p>
+    <p class="mir-hora-res muted">${esc(resumen)}</p>
     <ul class="mir-hora-lista">${lista.map(filaHoraHTML).join("")}</ul>`
-    : `<div class="mir-vacio"><p class="empty-title">Nadie en esta hora</p><p class="muted">No hubo sesiones con QR a las ${vista}:00 en tu turno.</p></div>`;
+    : `<div class="mir-vacio"><p class="empty-title">Nadie en esta hora</p><p class="muted">No hay reservas a las ${vista}:00 de hoy.</p></div>`;
 }
 function filaHoraHTML(r){
   const a = (state.athleteList || []).find(x => x.id === r.user_id) || {};
@@ -975,16 +985,22 @@ function filaHoraHTML(r){
   const linea = (t, v)=> v ? `<p><strong>${t}</strong> ${esc(v)}</p>` : "";
   const dolor = b ? zonasDe(b).filter(z => hayValor(z.inicio) || hayValor(z.salida)).map(z =>
     `<span class="mir-ult-dolor">${esc(z.zona || "Dolor")} ${hayValor(z.inicio) ? z.inicio : "–"} → ${hayValor(z.salida) ? z.salida : "–"}</span>`).join("") : "";
+  const e = r.estadoMir || (b ? "guardada" : "pendiente");
+  if(e === "falto" || e === "espera" || e === "porvenir") return `<li class="mir-hora-fila ${e === "falto" ? "falto" : "porvenir"}">
+    <div class="mir-hora-cab"><strong>${esc(a.nombre || "Alumno")}</strong>
+      ${r.categoria && CATEGORIAS[r.categoria] ? `<span class="badge soft">${esc(CATEGORIAS[r.categoria].nombre)}</span>` : ""}</div>
+    <p class="mir-hora-estado">${e === "falto" ? "✕ No vino" : e === "espera" ? "Aún no llega" : "Por llegar"}</p>
+  </li>`;
   return `<li class="mir-hora-fila${b ? " hecha" : ""}">
     <div class="mir-hora-cab"><strong>${esc(a.nombre || "Alumno")}</strong>
       ${r.categoria && CATEGORIAS[r.categoria] ? `<span class="badge soft">${esc(CATEGORIAS[r.categoria].nombre)}</span>` : ""}
-      <span class="muted">Llegó ${esc(horaDe(r.checkin_at))}</span></div>
-    ${b ? `<p class="mir-hora-ok">✓ Bitácora${b.autor_nombre ? " de " + esc(primerNombre(b.autor_nombre)) : ""}</p>
+      <span class="muted">${r.sinReserva ? "Sin reserva" : r.checkin_at ? "Llegó " + esc(horaDe(r.checkin_at)) : "Sin registro de llegada"}</span></div>
+    ${b ? `<p class="mir-hora-ok">✓ Bitácora guardada${b.autor_nombre ? " de " + esc(primerNombre(b.autor_nombre)) : ""}</p>
       <details class="mir-ult"><summary>Ver lo que se escribió</summary>
         ${dolor ? `<p class="mir-ult-meta">${dolor}</p>` : ""}
         ${linea("Llegó:", b.como_llego)}${linea("Hizo:", b.que_hizo)}${linea("Ocurrió:", b.que_ocurrio)}${linea("Pendiente:", b.pendiente)}
         <a class="btn-link" href="#/bitacora/${encodeURIComponent(r.user_id)}" data-ir-bitacora>Abrir su bitácora</a></details>`
-      : `<div class="mir-hora-pend"><span>Sin bitácora</span><button type="button" class="btn-primary sm" ${r.categoria === "fortalecimiento" ? `data-asis-bit="${esc(r.id)}"` : `data-mir-completar="${esc(r.id)}"`}>Completar ahora</button></div>`}
+      : `<div class="mir-hora-pend"><span>Pendiente · sin bitácora</span><button type="button" class="btn-primary sm" ${r.categoria === "fortalecimiento" ? `data-asis-bit="${esc(r.id)}"` : `data-mir-completar="${esc(r.id)}"`}>Completar ahora</button></div>`}
   </li>`;
 }
 async function completarDesdeHora(dlg, reservaId){
