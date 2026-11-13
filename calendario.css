@@ -1613,3 +1613,16 @@ body:has(.instalar) .chat-fab{ display:none; }
 .mc-ver{ display:inline-block; margin:6px 2px 0; font-size:13.5px; }
 .mini-carnet.p1 .mc-top, .mini-carnet.p2 .mc-top, .mini-carnet.p3 .mc-top{ padding-right:48px; }
 .mir-nav .mir-todos{ flex:none; width:auto; margin:0 0 0 10px; }
+
+/* Comprar: elegir moneda (dólares o soles) y aviso de vencimiento de la promoción */
+.pack-alt{ font-size:13.5px; font-weight:700; color:var(--ink-soft); }
+.moneda-sel{ margin:14px 0 2px; }
+.moneda-lbl{ display:block; margin-bottom:6px; font-size:12px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); }
+.moneda-sel .seg{ display:flex; }
+.moneda-sel .seg label{ position:relative; display:flex; flex:1 1 140px; margin:0; }
+.moneda-sel .seg input{ position:absolute; z-index:1; opacity:0; inset:0; margin:0; cursor:pointer; }
+.moneda-sel .seg span{ flex:1; min-height:44px; padding:6px 12px; border-radius:8px; font-weight:700; color:var(--ink-soft); display:grid; place-items:center; text-align:center; }
+.moneda-sel .seg input:checked + span{ background:var(--accent); color:#fff; box-shadow:0 1px 4px rgba(7,63,69,.25); }
+.moneda-sel .seg input:focus-visible + span{ outline:3px solid var(--accent); outline-offset:2px; }
+.moneda-sel .plan-alert{ margin-top:10px; }
+.moneda-sel .seg[hidden], .moneda-sel .moneda-lbl[hidden], .moneda-sel .plan-alert[hidden]{ display:none; }

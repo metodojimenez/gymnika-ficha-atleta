@@ -603,11 +603,13 @@ async function abrirCompra(profile){
     aj.plin_numero ? `<li><strong>Plin:</strong> <span class="num">${esc(aj.plin_numero)}</span></li>` : ""
   ].join("");
   const precioPaquete = (p)=> esSusc(p) ? `${dinero(p.precio, p.moneda)}<small> /mes</small>` : dinero(p.precio, p.moneda);
+  /* Paquetes con precio también en soles: quien compra elige la moneda (cada una con su propio link de pago) */
+  const tieneSoles = (p)=> !!p && !esSusc(p) && p.moneda !== "PEN" && p.precio_pen != null && Number(p.precio_pen) > 0;
   const detallePaquete = (p)=>{
     if(esSusc(p)) return p.link_pago ? "Cobro mensual automático · Mercado Pago" : `${p.cuotas} cobros mensuales · total ${dinero(p.precio * p.cuotas, p.moneda)} · Mercado Pago`;
     if(p.categoria === "terapia"){
       const porSesion = p.sesiones > 1 ? " · " + dinero(Math.round(p.precio / p.sesiones * 100) / 100, p.moneda) + " por sesión" : "";
-      return plural(p.sesiones, "sesión", "sesiones") + porSesion;
+      return plural(p.sesiones, "sesión", "sesiones") + (p.vigencia_dias ? ` · úsalas en ${p.vigencia_dias} días` : porSesion);
     }
     return plural(p.dias, "día", "días") + " de acceso · pago único";
   };
@@ -625,11 +627,20 @@ async function abrirCompra(profile){
             <span class="pack-body">
               <span class="pack-name">${esc(p.nombre)}</span>
               <span class="pack-price num">${precioPaquete(p)}</span>
+              ${tieneSoles(p) ? `<span class="pack-alt num">o ${dinero(p.precio_pen, "PEN")}</span>` : ""}
               <span class="pack-sub">${detallePaquete(p)}</span>
               ${ahorro >= 3 ? `<span class="pack-save">Ahorras ${ahorro}%</span>` : ""}
             </span>
           </label>`; }).join("")}
       </div>`).join("")}
+      <div id="monedaSel" class="moneda-sel" hidden>
+        <span class="moneda-lbl" id="monedaLbl">Paga en</span>
+        <div class="seg" role="radiogroup" aria-labelledby="monedaLbl">
+          <label><input type="radio" name="moneda" value="USD" checked><span>Dólares <b class="num" id="monUSD"></b></span></label>
+          <label><input type="radio" name="moneda" value="PEN"><span>Soles <b class="num" id="monPEN"></b></span></label>
+        </div>
+        <p class="plan-alert" id="vigenciaNota" hidden></p>
+      </div>
       <div id="pagoLink" hidden>
         <p class="step-title"><span class="step-n">2</span>Paga <strong id="linkMonto"></strong></p>
         <p id="linkResumen" style="margin:0 0 10px"></p>
@@ -672,27 +683,37 @@ async function abrirCompra(profile){
   const form = dlg.el.querySelector("#compraForm");
   const elegido = ()=> lista.find(x => x.id === (form.querySelector('input[name="paquete"]:checked') || {}).value);
   let otroMedio = false;
+  const enSoles = (p)=> tieneSoles(p) && (form.querySelector('input[name="moneda"]:checked') || {}).value === "PEN";
   const pintar = ()=>{
     const p = elegido(); if(!p) return;
+    const soles = enSoles(p);
+    const moneda = soles ? "PEN" : p.moneda, precio = soles ? p.precio_pen : p.precio, link = soles ? p.link_pago_pen : p.link_pago;
+    const sel = dlg.el.querySelector("#monedaSel"), nota = dlg.el.querySelector("#vigenciaNota");
+    sel.hidden = !tieneSoles(p) && !p.vigencia_dias;
+    sel.querySelector(".seg").hidden = sel.querySelector(".moneda-lbl").hidden = !tieneSoles(p);
+    if(tieneSoles(p)){ sel.querySelector("#monUSD").textContent = dinero(p.precio, p.moneda); sel.querySelector("#monPEN").textContent = dinero(p.precio_pen, "PEN"); }
+    nota.hidden = !p.vigencia_dias;
+    if(p.vigencia_dias) nota.innerHTML = `<strong>Promoción con vencimiento:</strong> tienes ${p.vigencia_dias} días desde que se aprueba tu pago para usar tus ${plural(p.sesiones, "sesión", "sesiones")}. Las que no uses en ese plazo se pierden.`;
     /* Con link de pago: botón directo a la pasarela y aviso «ya pagué». En pago único se puede elegir Yape/Plin en su lugar. */
-    const conLink = !!p.link_pago && !(otroMedio && !esSusc(p));
+    const conLink = !!link && !(otroMedio && !esSusc(p));
     dlg.el.querySelector("#pagoLink").hidden = !conLink;
     dlg.el.querySelector("#pagoUnico").hidden = esSusc(p) || conLink;
     dlg.el.querySelector("#pagoMP").hidden = !esSusc(p) || conLink;
     if(conLink){
-      const pas = pasarelaDe(p.link_pago);
-      dlg.el.querySelector("#linkMonto").innerHTML = esSusc(p) ? `${dinero(p.precio, p.moneda)} al mes` : dinero(p.precio, p.moneda);
+      const pas = pasarelaDe(link);
+      dlg.el.querySelector("#linkMonto").innerHTML = esSusc(p) ? `${dinero(p.precio, p.moneda)} al mes` : dinero(precio, moneda);
       dlg.el.querySelector("#linkResumen").textContent = esSusc(p) ? `${pas} cobra ${dinero(p.precio, p.moneda)} cada mes de forma automática, con tarjeta.` : `Pagas con tarjeta en ${pas}.`;
       const a = dlg.el.querySelector("#btnLinkPago");
-      a.href = p.link_pago; a.textContent = "Continuar a " + pas;
+      a.href = link; a.textContent = "Continuar a " + pas;
       dlg.el.querySelector("#linkOtro").hidden = esSusc(p);
     }
-    dlg.el.querySelector("#montoPagar").textContent = dinero(p.precio, p.moneda);
-    dlg.el.querySelector("#notaCambio").hidden = p.moneda === "PEN";
+    dlg.el.querySelector("#montoPagar").textContent = dinero(precio, moneda);
+    dlg.el.querySelector("#notaCambio").hidden = moneda === "PEN";
     if(esSusc(p)) dlg.el.querySelector("#mpResumen").innerHTML = `Se cobrará <strong>${dinero(p.precio, p.moneda)} cada mes durante ${p.cuotas} meses</strong> (total ${dinero(p.precio * p.cuotas, p.moneda)}).`;
     dlg.el.querySelector("#compraMsg").innerHTML = "";
   };
   form.querySelectorAll('input[name="paquete"]').forEach(r => { r.onchange = ()=>{ otroMedio = false; pintar(); }; });
+  form.querySelectorAll('input[name="moneda"]').forEach(r => { r.onchange = ()=>{ otroMedio = false; pintar(); }; });
   dlg.el.querySelector("#btnOtroMedio").onclick = ()=>{ otroMedio = true; pintar(); };
   const hecho = ()=>{
     form.innerHTML = `
@@ -710,7 +731,7 @@ async function abrirCompra(profile){
     const p = elegido(); if(!p) return;
     const { error } = await sb.from("compras").insert({
       user_id: profile.id, paquete_id: p.id, metodo: "tarjeta", operacion: dlg.el.querySelector("#lkOperacion").value.trim() || null, comprobante_path: null,
-      categoria: profile.categoria, paquete_nombre: "-", monto: 0
+      categoria: profile.categoria, paquete_nombre: "-", monto: 0, ...(enSoles(p) ? { moneda: "PEN" } : {})
     });
     if(error){ showError(dlg.el.querySelector("#compraMsg"), error); return; }
     hecho();
@@ -752,7 +773,7 @@ async function abrirCompra(profile){
       }
       const { error } = await sb.from("compras").insert({
         user_id: profile.id, paquete_id: paqueteId, metodo, operacion: operacion || null, comprobante_path: path,
-        categoria: profile.categoria, paquete_nombre: "-", monto: 0
+        categoria: profile.categoria, paquete_nombre: "-", monto: 0, ...(enSoles(elegido()) ? { moneda: "PEN" } : {})
       });
       if(error){ showError(msg, error); return; }
       form.innerHTML = `
